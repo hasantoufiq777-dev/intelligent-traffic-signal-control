@@ -19,7 +19,7 @@ from sim.navigation.graph import EdgeGraph
 from sim.runner import run_simulation
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-GRID_NET_PATH = PROJECT_ROOT / "sim" / "sumo" / "grid2x2.net.xml"
+GRID_NET_PATH = PROJECT_ROOT / "sim" / "sumo" / "xml" / "networks" / "grid2x2.net.xml"
 
 
 @pytest.fixture(scope="module")

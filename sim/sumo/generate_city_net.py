@@ -47,7 +47,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
-OUT_NET = HERE / "grid2x2_city.net.xml"
+OUT_NET = HERE / "xml" / "networks" / "grid2x2_city.net.xml"
 
 GRID_JUNCTIONS = ("J0", "J1", "J2", "J3")
 NO_HEAVY = "passenger motorcycle emergency"

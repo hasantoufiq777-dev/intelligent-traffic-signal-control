@@ -67,5 +67,5 @@ def generate_grid_net(output_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    out = Path(__file__).resolve().parent / "grid2x2.net.xml"
+    out = Path(__file__).resolve().parent / "xml" / "networks" / "grid2x2.net.xml"
     generate_grid_net(out)

@@ -25,8 +25,8 @@ from sim.tests.test_playback import Script
 from sim.vehicles import CATALOG, VehicleTypeFactory, driven_type_id, is_driven_type, type_category
 
 ROOT = Path(__file__).resolve().parents[2]
-CITY_NET = ROOT / "sim" / "sumo" / "grid2x2_city.net.xml"
-GRID_NET = ROOT / "sim" / "sumo" / "grid2x2.net.xml"
+CITY_NET = ROOT / "sim" / "sumo" / "xml" / "networks" / "grid2x2_city.net.xml"
+GRID_NET = ROOT / "sim" / "sumo" / "xml" / "networks" / "grid2x2.net.xml"
 # Local sub-roads: 1 narrow lane, 30 km/h, no trucks or buses
 LOCAL = {"kakb", "kbka", "kckd", "kdkc", "kekf", "kfke"}
 

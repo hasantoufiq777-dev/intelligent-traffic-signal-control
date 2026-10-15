@@ -156,7 +156,7 @@ def main() -> None:
     parser.add_argument(
         "--net",
         type=str,
-        default="sim/sumo/grid2x2.net.xml",
+        default="sim/sumo/xml/networks/grid2x2.net.xml",
         help="Path to grid net.xml",
     )
     parser.add_argument(
