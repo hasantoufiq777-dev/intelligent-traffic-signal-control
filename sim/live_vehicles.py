@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from sim.car_following import LOOKAHEAD_M, follow_advice
+from sim.eco_selection import compare_car
+from sim.eco_speed import curves
 from sim.vanet.network import resolve_lane_direction
 from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
 from sim.vehicles import CATALOG, VehicleTypeFactory, is_driven_type, type_category
@@ -101,6 +103,9 @@ class LiveVehicleTracker:
         self.odo_m: Dict[str, float] = {}
         self.stops: Dict[str, int] = {}
         self.moving: Dict[str, bool] = {}
+        self.moving_s: Dict[str, float] = {}  # seconds above MOVING_SPEED (average speed for the eco score)
+        self.idle_s: Dict[str, float] = {}  # seconds stopped
+        self._eco_done: List[Dict[str, Any]] = []  # finished cars not yet sent in an eco_cars message
         self.depart_t: Dict[str, float] = {}
         self.od: Dict[str, Tuple[str, str]] = {}  # origin and destination edge
         self.finished: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
@@ -135,6 +140,7 @@ class LiveVehicleTracker:
             if vid not in alive:
                 if t is not None and vid in self.depart_t:
                     origin, dest = self.od.get(vid, ("", ""))
+                    self._eco_done.append(self._eco_row(vid, float(t) - self.depart_t[vid], True))
                     self.finished[vid] = {
                         "vtype": self.vtype.get(vid, "car"), "origin": origin, "destination": dest,
                         "travel_s": float(t) - self.depart_t[vid], "dist_m": self.odo_m.get(vid, 0.0),
@@ -143,7 +149,8 @@ class LiveVehicleTracker:
                     }
                     while len(self.finished) > MAX_FINISHED:
                         self.finished.popitem(last=False)
-                for d in (self.co2_mg, self.fuel_mg, self.odo_m, self.stops, self.moving, self.depart_t, self.od):
+                for d in (self.co2_mg, self.fuel_mg, self.odo_m, self.stops, self.moving, self.moving_s, self.idle_s,
+                          self.depart_t, self.od):
                     d.pop(vid, None)
         for vid in vehicle_ids:
             if vid.startswith("incblk_"):
@@ -166,10 +173,55 @@ class LiveVehicleTracker:
                     self.od[vid] = ("", "")
                 self._type(vid)
             if speed >= MOVING_SPEED:
+                self.moving_s[vid] = self.moving_s.get(vid, 0.0) + 1.0
+            elif speed < STOP_SPEED:
+                self.idle_s[vid] = self.idle_s.get(vid, 0.0) + 1.0
+            if speed >= MOVING_SPEED:
                 self.moving[vid] = True
             elif speed < STOP_SPEED and self.moving.get(vid):
                 self.moving[vid] = False
                 self.stops[vid] = self.stops.get(vid, 0) + 1
+
+    # One car's row in the per-car Eco % table: measured values against its HBEFA4 reference.
+    def _eco_row(self, vid: str, travel_s: float, finished: bool) -> Dict[str, Any]:
+        """One car's measured fuel and CO2 against its HBEFA4 reference (sim/eco_selection.py)."""
+        vtype = self._type(vid)
+        kind = type_category(vtype)
+        row: Dict[str, Any] = {
+            "id": vid, "kind": kind, "finished": finished, "travel_s": int(travel_s),
+            "connected": is_vehicle_equipped(vid, vtype=vtype, penetration=self.penetration, seed=self.seed),
+            "eco_car": bool(self.eco_mgr is not None and vid in self.eco_mgr.ever_eco),
+            "emission_class": (curves().get(kind) or curves()["car"])["emission_class"],
+            "dist_m": round(self.odo_m.get(vid, 0.0), 0), "stops": self.stops.get(vid, 0),
+            "idle_s": int(self.idle_s.get(vid, 0.0)),
+            "eco_reason": self._eco_reason(vid, vtype),
+        }
+        cmp = compare_car(kind, {"dist_m": self.odo_m.get(vid, 0.0), "moving_s": self.moving_s.get(vid, 0.0),
+                                 "fuel_mg": self.fuel_mg.get(vid, 0.0), "co2_mg": self.co2_mg.get(vid, 0.0),
+                                 "stops": self.stops.get(vid, 0), "idle_s": self.idle_s.get(vid, 0.0)})
+        if cmp is not None:
+            row.update({k: cmp[k] for k in ("avg_kmh", "best_kmh", "fuel_l_100km", "model_fuel_l_100km", "co2_g_km",
+                                            "model_co2_g_km", "excess_pct", "eco_pct", "rating")})
+        return row
+
+    # Why this car is an eco car, for its detail card; None for a regular car.
+    def _eco_reason(self, vid: str, vtype: str) -> Optional[str]:
+        mgr = self.eco_mgr
+        if mgr is None or vid not in mgr.ever_eco:
+            return None
+        if vtype == "eco_car":
+            return "eco car type (always follows signal advice)"
+        selector = getattr(mgr, "selector", None)
+        return (selector.reasons.get(vid) if selector is not None else None) or "chosen at random (eco fraction)"
+
+    # Message for the Eco driving page: all cars on the road and the cars that just finished.
+    def build_eco_cars(self, vehicle_ids: List[str], run_id: str, t: float) -> Dict[str, Any]:
+        """Every car on the road, plus the cars that finished since the last message."""
+        rows = [self._eco_row(v, float(t) - self.depart_t[v], False) for v in vehicle_ids
+                if not v.startswith("incblk_") and v in self.depart_t]
+        rows += self._eco_done
+        self._eco_done = []
+        return {"type": "eco_cars", "run_id": run_id, "t": int(t), "rows": rows}
 
     def build(self, vehicle_ids: List[str], run_id: str, t: float) -> Dict[str, Any]:
         rows: List[List[Any]] = []

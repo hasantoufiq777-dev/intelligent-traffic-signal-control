@@ -374,14 +374,17 @@ class EcoDrivingManager:
         return vid in self.ever_eco
 
     # ------------------------------------------------------------------ data-driven selection
+    # Cars that may become eco cars: not ambulances, driven cars or incident blockers.
     def _eligible(self, vid: str) -> bool:
         vtype = self._type(vid)
         return not (vtype in ("emergency", "incident_blocker") or str(vtype).startswith("driven")
                     or vid.startswith("incblk_"))
 
+    # True when the car has a VANET radio, so it can receive signal timing.
     def _equipped(self, vid: str) -> bool:
         return is_vehicle_equipped(vid, vtype=self._type(vid), penetration=self.penetration, seed=self.seed)
 
+    # Compare every eligible car on the road with its HBEFA4 reference.
     def compare_all(self, ids: List[str]) -> Dict[str, Dict[str, Any]]:
         """Each eligible car's measured fuel, CO2 and stops against the model (sim/eco_selection.py)."""
         from sim.eco_selection import category_of, compare_car
@@ -397,6 +400,7 @@ class EcoDrivingManager:
                 out[vid] = c
         return out
 
+    # Data-driven choice: fill the eco-car budget with the connected cars wasting the most fuel.
     def _select_by_data(self, sim_time: float, ids: List[str]) -> None:
         connected = [v for v in ids if self._eligible(v) and self._equipped(v)]
         budget = int(round(self.eco_fraction * len(connected)))
@@ -406,6 +410,7 @@ class EcoDrivingManager:
             self.ever_eco.add(vid)
             self.chosen_at[vid] = dict(self._live_acc.get(vid, {}))
 
+    # Build the Driving page's table of cars against the model, most wasteful first.
     def comparison_block(self, limit: int = 15) -> Dict[str, Any]:
         """Cars on the road against the model, for the dashboard: the most wasteful first, eco cars kept."""
         ids = list(self._active)

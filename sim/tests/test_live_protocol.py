@@ -23,13 +23,16 @@ def validate_schema_v2(line_data: Dict[str, Any], expected_run_id: str) -> None:
     assert line_data["run_id"] == expected_run_id
 
     msg_type = line_data["type"]
-    assert msg_type in ("status", "state", "event", "result", "network", "vehicles")
+    assert msg_type in ("status", "state", "event", "result", "network", "vehicles", "eco_cars")
 
     if msg_type == "network":
         assert line_data["junctions"] and line_data["edges"] and len(line_data["bounds"]) == 4
         for e in line_data["edges"]:
             assert {"id", "from", "to", "lanes", "shape"} <= set(e)
 
+    elif msg_type == "eco_cars":
+        assert isinstance(line_data["t"], int) and isinstance(line_data["rows"], list)
+        assert all({"id", "kind", "finished", "connected", "eco_car"} <= set(r) for r in line_data["rows"])
     elif msg_type == "vehicles":
         fields = line_data["fields"]
         assert fields[:6] == ["id", "x", "y", "angle", "speed", "flags"]
