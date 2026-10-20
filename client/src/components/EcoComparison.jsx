@@ -13,6 +13,7 @@ const STATUS = {
 };
 const KIND = { car: 'Car', eco_car: 'Eco car type', motorcycle: 'Motorcycle', bus: 'Bus', truck: 'Truck' };
 
+// Format a signed percentage, or a dash when there is no value.
 function pct(v) {
   if (!isNum(v)) return '–';
   return `${v > 0 ? '+' : ''}${fmt(v, 0)} %`;
@@ -23,8 +24,10 @@ const EVAL_ROWS = [
   ['stops_per_vehicle', 'Stops per vehicle', 2], ['avg_waiting_time', 'Average waiting time (s)', 1],
   ['eco_advised_vehicles', 'Eco cars that got advice', 0],
 ];
+// Readable column name for a selection result, for example 'data@0.6' -> 'By data, 60 %'.
 const EVAL_NAME = (n) => (n === 'none' ? 'No eco cars' : n.replace(/^(\w+)@(.*)$/, (_, m, f) => `${m === 'data' ? 'By data' : 'At random'}, ${Math.round(Number(f) * 100)} %`));
 
+// Whole-network result on the same traffic: eco cars by data, at random, or none.
 /** Same traffic, whole network: eco cars chosen by data vs at random vs none. */
 function SelectionResults() {
   const [d, setD] = useState(undefined);
@@ -59,6 +62,7 @@ function SelectionResults() {
   );
 }
 
+// Driving page card: cars against the SUMO model, and why each eco car was chosen.
 export default function EcoComparison({ eco, onFollow }) {
   const c = eco?.comparison;
   if (!c) return null;
