@@ -1,0 +1,1112 @@
+<?xml version="1.0" ?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <vType id="car" accel="2.6" decel="4.5" sigma="0.5" length="5.0" minGap="2.5" maxSpeed="15.0" guiShape="passenger"/>
+    <vType id="emergency" vClass="emergency" accel="3.5" decel="6.0" sigma="0.2" length="6.5" minGap="2.0" maxSpeed="25.0" speedFactor="1.3" color="255,0,0" guiShape="emergency"/>
+    <vehicle id="S_0" type="car" depart="0.42">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_0" type="car" depart="6.29">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_1" type="car" depart="7.12">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_0" type="car" depart="10.73">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_1" type="car" depart="10.92">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_1" type="car" depart="11.46">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_2" type="car" depart="13.44">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_2" type="car" depart="15.13">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_3" type="car" depart="16.38">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_2" type="car" depart="18.04">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_4" type="car" depart="25.42">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_3" type="car" depart="33.13">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_5" type="car" depart="35.82">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_4" type="car" depart="38.64">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_3" type="car" depart="42.45">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_4" type="car" depart="42.84">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_6" type="car" depart="44.37">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_5" type="car" depart="46.28">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_6" type="car" depart="48.59">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_0" type="car" depart="50.37">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_7" type="car" depart="50.67">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_8" type="car" depart="51.96">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_5" type="car" depart="53.35">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_9" type="car" depart="56.58">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_1" type="car" depart="56.68">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_7" type="car" depart="57.15">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_8" type="car" depart="59.06">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_9" type="car" depart="64.14">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_2" type="car" depart="64.39">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_10" type="car" depart="70.59">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_11" type="car" depart="71.87">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_3" type="car" depart="72.38">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_4" type="car" depart="79.65">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_5" type="car" depart="82.11">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_10" type="car" depart="83.08">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_6" type="car" depart="83.53">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_7" type="car" depart="84.49">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_6" type="car" depart="86.70">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_11" type="car" depart="92.06">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_8" type="car" depart="94.72">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_12" type="car" depart="96.21">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_9" type="car" depart="97.60">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_13" type="car" depart="98.57">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_14" type="car" depart="99.72">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_10" type="car" depart="100.83">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_15" type="car" depart="101.95">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_7" type="car" depart="104.39">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_11" type="car" depart="111.50">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_12" type="car" depart="112.37">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_16" type="car" depart="114.33">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_13" type="car" depart="115.66">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_17" type="car" depart="116.55">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_14" type="car" depart="117.24">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="amb1" type="emergency" depart="120.00">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_15" type="car" depart="120.61">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_18" type="car" depart="127.83">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_8" type="car" depart="145.24">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_16" type="car" depart="145.39">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_9" type="car" depart="146.25">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_17" type="car" depart="148.59">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_18" type="car" depart="149.07">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_12" type="car" depart="149.88">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_19" type="car" depart="150.11">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_10" type="car" depart="153.07">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_20" type="car" depart="159.28">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_19" type="car" depart="161.03">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_21" type="car" depart="163.82">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_20" type="car" depart="172.07">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_22" type="car" depart="173.14">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_23" type="car" depart="174.87">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_24" type="car" depart="175.48">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_11" type="car" depart="175.71">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_21" type="car" depart="180.08">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_25" type="car" depart="180.13">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_13" type="car" depart="181.37">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_12" type="car" depart="182.41">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_26" type="car" depart="185.02">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_22" type="car" depart="186.15">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_13" type="car" depart="187.56">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_23" type="car" depart="191.44">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_14" type="car" depart="192.50">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_24" type="car" depart="201.70">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_15" type="car" depart="202.28">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_16" type="car" depart="202.58">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_14" type="car" depart="206.09">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_15" type="car" depart="206.39">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_17" type="car" depart="208.64">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_27" type="car" depart="209.37">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_25" type="car" depart="209.81">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_26" type="car" depart="211.30">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_27" type="car" depart="212.55">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_28" type="car" depart="214.35">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_28" type="car" depart="218.72">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_29" type="car" depart="223.62">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_30" type="car" depart="227.23">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_31" type="car" depart="227.45">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_32" type="car" depart="227.86">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_18" type="car" depart="236.23">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_19" type="car" depart="237.40">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_33" type="car" depart="238.39">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_34" type="car" depart="238.91">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_29" type="car" depart="239.71">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_30" type="car" depart="241.87">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_31" type="car" depart="244.55">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_16" type="car" depart="247.12">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_32" type="car" depart="256.99">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_33" type="car" depart="264.93">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_20" type="car" depart="268.95">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_35" type="car" depart="274.17">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_36" type="car" depart="275.00">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_17" type="car" depart="287.08">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_37" type="car" depart="288.96">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_38" type="car" depart="289.04">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_34" type="car" depart="290.41">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_18" type="car" depart="291.06">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_35" type="car" depart="293.11">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_21" type="car" depart="294.40">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_19" type="car" depart="295.04">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_36" type="car" depart="300.65">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_37" type="car" depart="302.03">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_20" type="car" depart="302.12">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_22" type="car" depart="309.38">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_21" type="car" depart="311.87">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_38" type="car" depart="315.74">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_39" type="car" depart="322.49">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_40" type="car" depart="323.03">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_39" type="car" depart="323.24">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_40" type="car" depart="328.38">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_22" type="car" depart="332.18">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_23" type="car" depart="335.98">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_41" type="car" depart="339.24">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_42" type="car" depart="341.68">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_43" type="car" depart="344.35">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_44" type="car" depart="349.54">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_23" type="car" depart="350.39">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_41" type="car" depart="351.02">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_24" type="car" depart="355.05">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_45" type="car" depart="359.03">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_25" type="car" depart="361.67">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_24" type="car" depart="363.33">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_42" type="car" depart="363.79">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_25" type="car" depart="366.74">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_26" type="car" depart="368.13">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_46" type="car" depart="371.30">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_26" type="car" depart="376.43">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_47" type="car" depart="376.83">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_48" type="car" depart="377.08">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_27" type="car" depart="384.51">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_27" type="car" depart="384.95">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_43" type="car" depart="387.49">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_28" type="car" depart="390.54">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_49" type="car" depart="392.01">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_28" type="car" depart="393.94">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_44" type="car" depart="401.67">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_45" type="car" depart="402.81">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_29" type="car" depart="405.96">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_46" type="car" depart="410.20">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_47" type="car" depart="412.61">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_50" type="car" depart="414.34">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_29" type="car" depart="418.25">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_48" type="car" depart="419.47">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_49" type="car" depart="423.21">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_30" type="car" depart="424.77">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_30" type="car" depart="428.26">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_31" type="car" depart="429.06">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_32" type="car" depart="431.45">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_31" type="car" depart="434.11">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_51" type="car" depart="441.30">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_50" type="car" depart="442.98">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_52" type="car" depart="444.07">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_51" type="car" depart="444.63">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_53" type="car" depart="457.76">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_32" type="car" depart="463.58">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_33" type="car" depart="465.20">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_52" type="car" depart="468.92">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_54" type="car" depart="473.70">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_53" type="car" depart="478.55">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_55" type="car" depart="486.40">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_56" type="car" depart="487.81">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_57" type="car" depart="490.31">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_54" type="car" depart="493.27">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_55" type="car" depart="496.22">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_34" type="car" depart="497.42">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_35" type="car" depart="499.65">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_36" type="car" depart="500.41">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_33" type="car" depart="505.99">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_58" type="car" depart="510.77">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_34" type="car" depart="514.80">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_59" type="car" depart="518.26">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_35" type="car" depart="519.40">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_60" type="car" depart="522.19">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_61" type="car" depart="525.17">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_37" type="car" depart="525.20">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_38" type="car" depart="526.00">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_36" type="car" depart="526.06">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_62" type="car" depart="527.81">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_63" type="car" depart="529.72">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_64" type="car" depart="529.79">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_65" type="car" depart="530.54">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_66" type="car" depart="532.74">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_39" type="car" depart="533.15">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_56" type="car" depart="533.91">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_67" type="car" depart="534.44">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_37" type="car" depart="535.47">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_57" type="car" depart="537.63">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_58" type="car" depart="541.18">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_40" type="car" depart="541.27">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_59" type="car" depart="544.77">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_68" type="car" depart="548.45">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_69" type="car" depart="552.27">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_41" type="car" depart="555.19">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_70" type="car" depart="555.46">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_71" type="car" depart="556.77">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_38" type="car" depart="560.11">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_42" type="car" depart="564.47">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_39" type="car" depart="565.16">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_43" type="car" depart="566.40">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_44" type="car" depart="567.25">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_45" type="car" depart="568.06">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_46" type="car" depart="569.39">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_47" type="car" depart="572.36">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_60" type="car" depart="572.92">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_48" type="car" depart="577.75">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_49" type="car" depart="580.81">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_50" type="car" depart="584.01">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_40" type="car" depart="591.86">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_61" type="car" depart="596.57">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_51" type="car" depart="598.98">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_41" type="car" depart="599.88">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_72" type="car" depart="601.02">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_62" type="car" depart="601.25">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_63" type="car" depart="604.42">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_42" type="car" depart="607.65">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_73" type="car" depart="610.80">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_64" type="car" depart="611.94">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_74" type="car" depart="613.58">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_43" type="car" depart="613.85">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_65" type="car" depart="619.48">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_44" type="car" depart="627.17">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_75" type="car" depart="629.38">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_76" type="car" depart="635.68">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_52" type="car" depart="636.19">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_66" type="car" depart="639.04">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_53" type="car" depart="664.99">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_45" type="car" depart="666.91">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_54" type="car" depart="669.51">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_55" type="car" depart="676.93">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_56" type="car" depart="678.15">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_77" type="car" depart="678.37">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_78" type="car" depart="682.90">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_57" type="car" depart="683.41">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_67" type="car" depart="683.70">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_46" type="car" depart="686.62">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_58" type="car" depart="689.24">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_68" type="car" depart="696.10">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_59" type="car" depart="697.35">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_79" type="car" depart="697.89">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_80" type="car" depart="698.93">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_47" type="car" depart="699.87">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_48" type="car" depart="703.41">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_69" type="car" depart="706.29">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_81" type="car" depart="714.07">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_82" type="car" depart="715.18">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_49" type="car" depart="716.01">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_83" type="car" depart="716.29">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_70" type="car" depart="725.97">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_71" type="car" depart="726.82">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_50" type="car" depart="727.72">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_60" type="car" depart="730.79">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_72" type="car" depart="736.04">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_84" type="car" depart="736.98">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_61" type="car" depart="744.19">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_73" type="car" depart="747.31">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_74" type="car" depart="748.95">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_62" type="car" depart="754.96">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_63" type="car" depart="755.36">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_64" type="car" depart="758.62">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_75" type="car" depart="759.75">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_51" type="car" depart="760.77">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_52" type="car" depart="764.92">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_85" type="car" depart="766.74">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_76" type="car" depart="771.87">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_86" type="car" depart="775.36">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_53" type="car" depart="776.63">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_87" type="car" depart="779.42">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_54" type="car" depart="779.64">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_55" type="car" depart="780.03">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_88" type="car" depart="793.48">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_56" type="car" depart="795.67">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_89" type="car" depart="796.15">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_57" type="car" depart="796.19">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_77" type="car" depart="797.22">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_65" type="car" depart="799.25">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_78" type="car" depart="800.87">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_90" type="car" depart="809.81">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_58" type="car" depart="811.34">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_59" type="car" depart="813.89">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_79" type="car" depart="821.01">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_60" type="car" depart="829.08">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_66" type="car" depart="829.10">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_91" type="car" depart="834.77">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_80" type="car" depart="836.93">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_81" type="car" depart="839.71">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_67" type="car" depart="841.25">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_68" type="car" depart="842.04">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_82" type="car" depart="844.13">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_92" type="car" depart="851.25">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_61" type="car" depart="852.67">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_62" type="car" depart="858.59">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_63" type="car" depart="860.70">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_83" type="car" depart="861.31">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_69" type="car" depart="864.72">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_70" type="car" depart="865.93">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_71" type="car" depart="871.87">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_93" type="car" depart="875.30">
+        <route edges="S2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_94" type="car" depart="878.14">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_84" type="car" depart="881.14">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_64" type="car" depart="881.61">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_72" type="car" depart="884.79">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_95" type="car" depart="885.19">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_73" type="car" depart="886.36">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_65" type="car" depart="886.43">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_74" type="car" depart="888.68">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_66" type="car" depart="888.82">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_85" type="car" depart="888.85">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_75" type="car" depart="889.95">
+        <route edges="E2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_96" type="car" depart="890.63">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_97" type="car" depart="893.91">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_86" type="car" depart="897.84">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_67" type="car" depart="900.45">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_76" type="car" depart="901.89">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_68" type="car" depart="902.53">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_77" type="car" depart="903.61">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_69" type="car" depart="903.93">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_98" type="car" depart="910.05">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_99" type="car" depart="915.09">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_70" type="car" depart="916.56">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_87" type="car" depart="917.35">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="S_100" type="car" depart="917.73">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_71" type="car" depart="918.10">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_78" type="car" depart="920.29">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_72" type="car" depart="921.03">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_101" type="car" depart="921.30">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_88" type="car" depart="921.40">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_79" type="car" depart="922.81">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_73" type="car" depart="926.27">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_89" type="car" depart="928.61">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_90" type="car" depart="933.24">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_80" type="car" depart="938.73">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_102" type="car" depart="941.30">
+        <route edges="S2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_91" type="car" depart="951.28">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="W_74" type="car" depart="954.94">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="W_75" type="car" depart="955.91">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="N_92" type="car" depart="956.08">
+        <route edges="N2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_103" type="car" depart="959.85">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="N_93" type="car" depart="960.46">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_81" type="car" depart="962.30">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="W_76" type="car" depart="962.73">
+        <route edges="W2J0 J02E"/>
+    </vehicle>
+    <vehicle id="S_104" type="car" depart="964.91">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="E_82" type="car" depart="964.98">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="N_94" type="car" depart="969.13">
+        <route edges="N2J0 J02E"/>
+    </vehicle>
+    <vehicle id="E_83" type="car" depart="974.06">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="E_84" type="car" depart="980.87">
+        <route edges="E2J0 J02W"/>
+    </vehicle>
+    <vehicle id="S_105" type="car" depart="983.86">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_77" type="car" depart="989.40">
+        <route edges="W2J0 J02N"/>
+    </vehicle>
+    <vehicle id="W_78" type="car" depart="989.72">
+        <route edges="W2J0 J02S"/>
+    </vehicle>
+    <vehicle id="N_95" type="car" depart="990.05">
+        <route edges="N2J0 J02S"/>
+    </vehicle>
+    <vehicle id="E_85" type="car" depart="993.72">
+        <route edges="E2J0 J02N"/>
+    </vehicle>
+    <vehicle id="S_106" type="car" depart="994.14">
+        <route edges="S2J0 J02N"/>
+    </vehicle>
+</routes>

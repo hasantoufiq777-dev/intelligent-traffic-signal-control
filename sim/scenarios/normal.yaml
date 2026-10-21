@@ -1,0 +1,24 @@
+name: normal
+network: single
+simulation:
+  duration: 1000
+  step_length: 1.0
+
+traffic:
+  seed: 1
+  rates: # vehicles per hour per direction
+    N: 360
+    S: 360
+    E: 300
+    W: 300
+  turn_ratios:
+    left: 0.15
+    straight: 0.70
+    right: 0.15
+
+emergency:
+  enabled: false
+  vehicles: []
+
+incident:
+  enabled: false

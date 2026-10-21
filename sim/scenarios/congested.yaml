@@ -1,0 +1,24 @@
+name: congested
+network: single
+simulation:
+  duration: 1000
+  step_length: 1.0
+
+traffic:
+  seed: 1
+  rates: # vehicles per hour per direction (2x normal demand)
+    N: 720
+    S: 720
+    E: 600
+    W: 600
+  turn_ratios:
+    left: 0.15
+    straight: 0.70
+    right: 0.15
+
+emergency:
+  enabled: false
+  vehicles: []
+
+incident:
+  enabled: false

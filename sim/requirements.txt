@@ -1,0 +1,8 @@
+pyyaml>=6.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+pytest>=7.4.0
+traci>=1.18.0
+sumolib>=1.18.0

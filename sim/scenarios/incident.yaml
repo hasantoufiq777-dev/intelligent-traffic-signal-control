@@ -1,0 +1,34 @@
+name: incident
+network: single
+simulation:
+  duration: 1000
+  step_length: 1.0
+
+traffic:
+  seed: 1
+  rates:
+    N: 360
+    S: 360
+    E: 300
+    W: 300
+  turn_ratios:
+    left: 0.15
+    straight: 0.70
+    right: 0.15
+
+emergency:
+  enabled: true
+  vehicles:
+    - id: amb1
+      depart: 180.0
+      from_edge: S2J0
+      to_edge: J02N
+      approach_direction: S
+
+incident:
+  enabled: true
+  type: lane_closure # or stop
+  edge: N2J0
+  lane: 0
+  start_time: 150.0
+  duration: 180.0
