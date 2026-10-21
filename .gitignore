@@ -54,6 +54,7 @@ sumo-launchd.log
 # Simulation logs & experiment raw runs
 logs/
 results/raw/
+results/*.csv
 *.log
 
 # Editor & OS files

@@ -1,0 +1,29 @@
+# Intelligent Traffic Signal Control System - Global Configuration
+
+simulation:
+  step_length: 1.0
+  max_steps: 1000
+  yellow_time: 3
+  all_red_time: 2
+  metrics_dir: "results"
+
+controllers:
+  fixed:
+    green_ns: 30
+    green_ew: 30
+    yellow_time: 3
+    all_red_time: 2
+
+  adaptive:
+    decision_interval: 5
+    min_green: 10
+    max_green: 50
+    queue_threshold: 5
+    starvation_limit: 60
+    yellow_time: 3
+    all_red_time: 2
+
+  preemption:
+    eta_threshold: 18.0
+    clearance_time: 5.0
+    recovery_time: 10.0
