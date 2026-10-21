@@ -82,6 +82,47 @@ class BaseController:
             return self.sumo_api.trafficlight.getRedYellowGreenState(self.tls_id)
         return ""
 
+    def get_phase_name(self) -> str:
+        """Return human-readable phase name for live reporting."""
+        if self.transition_state == "ALL_RED":
+            return "ALL_RED"
+        if self.transition_state == "YELLOW":
+            return "NS_YELLOW" if self.current_phase == self.PHASE_NS_YELLOW else "EW_YELLOW"
+
+        names = {
+            self.PHASE_NS_GREEN: "NS_GREEN",
+            self.PHASE_NS_YELLOW: "NS_YELLOW",
+            self.PHASE_EW_GREEN: "EW_GREEN",
+            self.PHASE_EW_YELLOW: "EW_YELLOW",
+        }
+        return names.get(self.current_phase, f"PHASE_{self.current_phase}")
+
+    def get_approach_signals(self) -> Dict[str, str]:
+        """Return dominant signal state ('G', 'y', 'r') per approach direction."""
+        signals = {"N": "r", "S": "r", "E": "r", "W": "r"}
+        state = self.get_phase_state()
+        if not state:
+            return signals
+
+        # Link index ranges: N: 0..3, E: 4..7, S: 8..11, W: 12..15
+        directions = {
+            "N": range(0, min(4, len(state))),
+            "E": range(4, min(8, len(state))),
+            "S": range(8, min(12, len(state))),
+            "W": range(12, min(16, len(state))),
+        }
+
+        for d, indices in directions.items():
+            chars = [state[i] for i in indices if i < len(state)]
+            if any(c in ("G", "g") for c in chars):
+                signals[d] = "G"
+            elif any(c == "y" for c in chars):
+                signals[d] = "y"
+            else:
+                signals[d] = "r"
+
+        return signals
+
     def get_queue_lengths(self) -> Dict[str, int]:
         """Return number of halting vehicles per approach direction (N, S, E, W)."""
         queues = {"N": 0, "S": 0, "E": 0, "W": 0}

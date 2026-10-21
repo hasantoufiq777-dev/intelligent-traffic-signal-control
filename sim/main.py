@@ -49,17 +49,29 @@ def main() -> None:
             with open(params_path, "r", encoding="utf-8") as f:
                 param_overrides = yaml.safe_load(f)
         else:
-            logger.error("Params file not found: %s", args.params)
+            err_msg = f"Params file not found: {args.params}"
+            logger.error(err_msg)
+            print(
+                json.dumps({
+                    "type": "status",
+                    "run_id": args.run_id,
+                    "status": "error",
+                    "message": err_msg,
+                }),
+                flush=True,
+            )
             sys.exit(1)
 
     try:
         logger.info(
-            "Starting simulation run %s: scenario=%s, controller=%s, seed=%d",
+            "Starting simulation run %s: scenario=%s, controller=%s, seed=%d, live=%s",
             args.run_id,
             args.scenario,
             args.controller,
             args.seed,
+            args.live,
         )
+
         result = run_simulation(
             scenario=args.scenario,
             controller=args.controller,
@@ -67,15 +79,27 @@ def main() -> None:
             params=param_overrides,
             gui=args.gui,
             run_id=args.run_id,
+            live=args.live,
             max_steps=args.max_steps,
         )
 
-        # Output result strictly as JSON to stdout
-        print(json.dumps(result), flush=True)
+        # In non-live mode, output result at the end as JSON on stdout
+        if not args.live:
+            print(json.dumps(result), flush=True)
+
         sys.exit(0)
 
     except Exception as e:
-        logger.exception("Simulation run failed: %s", e)
+        logger.exception("Simulation execution failed: %s", e)
+        print(
+            json.dumps({
+                "type": "status",
+                "run_id": args.run_id,
+                "status": "error",
+                "message": str(e),
+            }),
+            flush=True,
+        )
         sys.exit(1)
 
 

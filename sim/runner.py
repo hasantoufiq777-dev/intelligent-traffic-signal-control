@@ -1,16 +1,18 @@
 """Simulation runner module.
 
 Executes SUMO simulations with the selected controller, scenario, and random seed.
-Provides a unified wrapper for traci / libsumo.
+Provides a unified wrapper for traci / libsumo and streams live JSON protocol lines.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
+import signal
 import sys
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -24,13 +26,18 @@ from sim.scenarios.generate_routes import generate_routes, load_scenario_config
 
 logger = logging.getLogger(__name__)
 
+# Global flag for graceful termination
+_STOP_REQUESTED = False
+
+
+def _handle_signal(signum: int, frame: Any) -> None:
+    global _STOP_REQUESTED
+    _STOP_REQUESTED = True
+    logger.warning("Received signal %d; requesting clean simulation termination.", signum)
+
 
 def get_sumo_backend(gui: bool = False) -> Tuple[Any, bool]:
-    """Retrieve TraCI or libsumo backend behind a unified wrapper.
-
-    Returns:
-        (backend_module, is_libsumo_boolean)
-    """
+    """Retrieve TraCI or libsumo backend behind a unified wrapper."""
     sumo_home = os.environ.get("SUMO_HOME")
     if sumo_home:
         tools_path = os.path.join(sumo_home, "tools")
@@ -60,7 +67,6 @@ def create_controller(
     if ctrl_lower == "fixed":
         return FixedTimeController(tls_id, params=params, sumo_api=sumo_api)
     elif ctrl_lower in ("adaptive", "adaptive_ev", "adaptive_ev_tuned"):
-        # For modules where adaptive/preemption are implemented
         try:
             from sim.controllers.adaptive import AdaptiveController
             if ctrl_lower == "adaptive":
@@ -78,13 +84,20 @@ def create_controller(
     raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
 
 
+def emit_json_line(data: Dict[str, Any]) -> None:
+    """Emit a single line of JSON to stdout and flush immediately."""
+    print(json.dumps(data), flush=True)
+
+
 def run_simulation(
     scenario: str,
     controller: str,
     seed: int = 1,
     params: Optional[Dict[str, Any]] = None,
     gui: bool = False,
-    run_id: str = "run_default",
+    run_id: str = "r1",
+    live: bool = False,
+    emit_interval: int = 1,
     max_steps: Optional[int] = None,
     metrics_csv_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
@@ -97,12 +110,24 @@ def run_simulation(
         params: Optional controller/simulation parameter overrides.
         gui: If True, launch sumo-gui via TraCI; else headless.
         run_id: Identifier for the simulation run.
+        live: If True, stream live state, status, and event lines on stdout.
+        emit_interval: Interval in sim seconds between live state emissions.
         max_steps: Maximum simulation seconds.
         metrics_csv_path: Custom path for per-step CSV log.
 
     Returns:
         Dictionary matching PROJECT_CONTEXT.md results shape.
     """
+    global _STOP_REQUESTED
+    _STOP_REQUESTED = False
+
+    # Register OS signals for graceful shutdown
+    try:
+        signal.signal(signal.SIGINT, _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
+    except (ValueError, AttributeError):
+        pass  # In certain multi-threaded or Windows edge cases
+
     project_root = Path(__file__).resolve().parent.parent
 
     # 1. Load config
@@ -170,12 +195,19 @@ def run_simulation(
 
     controllers_map: Dict[str, Any] = {}
     t = 0.0
+    arrived_count = 0
+    was_interrupted = False
+
+    if live:
+        emit_json_line({
+            "type": "status",
+            "run_id": run_id,
+            "status": "started",
+            "message": f"Simulation started for scenario '{scenario}' with controller '{controller}'",
+        })
 
     try:
-        if is_libsumo:
-            sumo_api.start(sumo_cmd)
-        else:
-            sumo_api.start(sumo_cmd)
+        sumo_api.start(sumo_cmd)
 
         tls_ids = list(sumo_api.trafficlight.getIDList())
         for tid in tls_ids:
@@ -186,25 +218,66 @@ def run_simulation(
                 sumo_api=sumo_api,
             )
 
-        # Simulation loop
         while t < sim_duration:
+            if _STOP_REQUESTED:
+                was_interrupted = True
+                break
+
             t += 1.0
 
             # Step controllers
             for ctrl in controllers_map.values():
                 ctrl.step(t)
 
-            # Log metrics for each TLS
-            active_vehs = sumo_api.vehicle.getIDList()
+            active_vehs = list(sumo_api.vehicle.getIDList())
             n_vehicles = len(active_vehs)
-            ev_present = any(
-                sumo_api.vehicle.getTypeID(v) == "emergency" or "amb" in v.lower()
-                for v in active_vehs
-            )
 
+            # Detect emergency vehicles and extract ETA
+            ev_list: List[Dict[str, Any]] = []
+            ev_present = False
+
+            for vid in active_vehs:
+                vtype = sumo_api.vehicle.getTypeID(vid)
+                if vtype == "emergency" or "amb" in vid.lower():
+                    ev_present = True
+                    speed = float(sumo_api.vehicle.getSpeed(vid))
+                    target_tls = "J0"
+                    dist = 0.0
+
+                    try:
+                        tls_ahead = sumo_api.vehicle.getNextTLS(vid)
+                        if tls_ahead:
+                            target_tls = tls_ahead[0][0]
+                            dist = float(tls_ahead[0][2])
+                        else:
+                            pos = sumo_api.vehicle.getPosition(vid)
+                            dist = (pos[0] ** 2 + pos[1] ** 2) ** 0.5
+                    except Exception:
+                        pass
+
+                    eta = round(dist / max(speed, 0.1), 1)
+                    ev_list.append({
+                        "id": vid,
+                        "tls": target_tls,
+                        "eta": eta,
+                        "dist": round(dist, 1),
+                        "speed": round(speed, 1),
+                    })
+
+            # Check newly arrived vehicles
+            try:
+                arrived_count += sumo_api.simulation.getArrivedNumber()
+            except Exception:
+                pass
+
+            # Step metrics logging and live state payload
+            tls_state_dict: Dict[str, Any] = {}
             for tid, ctrl in controllers_map.items():
                 queues = ctrl.get_queue_lengths()
                 current_phase = ctrl.get_current_phase()
+                phase_name = getattr(ctrl, "get_phase_name", lambda: f"PHASE_{current_phase}")()
+                approach_signals = getattr(ctrl, "get_approach_signals", lambda: {"N": "r", "S": "r", "E": "r", "W": "r"})()
+
                 logger_step.log_step(
                     sim_time=t,
                     tls_id=tid,
@@ -216,6 +289,33 @@ def run_simulation(
                     n_vehicles=n_vehicles,
                     ev_present=ev_present,
                 )
+
+                tls_state_dict[tid] = {
+                    "phase": phase_name,
+                    "queues": queues,
+                    "signal": approach_signals,
+                }
+
+            # Emit live state if requested
+            if live and (int(t) % emit_interval == 0):
+                # Calculate active wait time
+                active_waits = [sumo_api.vehicle.getWaitingTime(v) for v in active_vehs]
+                avg_wait = round(float(sum(active_waits) / len(active_waits)), 1) if active_waits else 0.0
+                hours = max(t / 3600.0, 1e-4)
+                throughput_rate = round(arrived_count / hours, 1)
+
+                emit_json_line({
+                    "type": "state",
+                    "run_id": run_id,
+                    "t": int(t),
+                    "tls": tls_state_dict,
+                    "ev": ev_list,
+                    "metrics": {
+                        "avg_wait": avg_wait,
+                        "n_vehicles": n_vehicles,
+                        "throughput": throughput_rate,
+                    },
+                })
 
             sumo_api.simulationStep()
 
@@ -230,28 +330,25 @@ def run_simulation(
         except Exception:
             pass
 
-        # Clean up temporary routes file
         if routes_path.exists():
             try:
                 routes_path.unlink()
             except Exception:
                 pass
 
-    # 5. Parse tripinfo metrics
     metrics = parse_tripinfo(
         xml_path=tripinfo_path,
         sim_duration=t,
         max_queue=logger_step.max_queue,
     )
 
-    # Clean up tripinfo file
     if tripinfo_path.exists():
         try:
             tripinfo_path.unlink()
         except Exception:
             pass
 
-    return {
+    result_payload = {
         "avg_waiting_time": metrics["avg_waiting_time"],
         "avg_time_loss": metrics["avg_time_loss"],
         "avg_travel_time": metrics["avg_travel_time"],
@@ -262,3 +359,29 @@ def run_simulation(
         "controller": controller,
         "scenario": scenario,
     }
+
+    if live:
+        if was_interrupted:
+            emit_json_line({
+                "type": "status",
+                "run_id": run_id,
+                "status": "stopped",
+                "message": "Simulation interrupted by signal",
+            })
+        else:
+            emit_json_line({
+                "type": "status",
+                "run_id": run_id,
+                "status": "finished",
+                "message": "Simulation completed successfully",
+            })
+        emit_json_line({
+            "type": "result",
+            "run_id": run_id,
+            "metrics": result_payload,
+            "seed": seed,
+            "controller": controller,
+            "scenario": scenario,
+        })
+
+    return result_payload
