@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import yaml
 from sim.analytics.metrics import StepMetricsLogger, parse_tripinfo
+from sim.sumo_connect import start_sumo
 from sim.controllers.factory import create_controller  # noqa: F401  (Factory; re-exported for callers)
 from sim.scenarios.generate_routes import CITY_NETWORK, generate_routes, load_scenario_config, scale_demand
 from sim.sensing import OracleStateProvider, StateProvider
@@ -146,6 +147,8 @@ def run_simulation(
     step_delay: float = 0.0,
     eco_fraction: float = 0.0,
     eco_select: str = "random",
+    eco_commit: Optional[float] = None,
+    eco_routing: Optional[bool] = None,
     ev_routing: bool = False,
     driver: bool = False,
     driver_commands: Optional[Any] = None,
@@ -187,6 +190,8 @@ def run_simulation(
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
         elif controller == "dynamic_vanet":
             ctrl_section = base_config.get("controllers", {}).get("dynamic", {})
+        elif controller == "level_vanet":
+            ctrl_section = base_config.get("controllers", {}).get("level", {})
         elif controller in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {}).copy()
             ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
@@ -250,7 +255,8 @@ def run_simulation(
     # The process id keeps parallel runs that share a run_id (for example the default "r1") from
     # overwriting each other's route and tripinfo files.
     file_tag = f"{run_id}_{os.getpid()}"
-    routes_path = project_root / "sim" / "sumo" / f"routes_{file_tag}.rou.xml"
+    routes_path = project_root / "sim" / "sumo" / "xml" / "generated" / f"routes_{file_tag}.rou.xml"
+    routes_path.parent.mkdir(parents=True, exist_ok=True)
     # demand: multiply every traffic flow of the scenario (1 = the scenario as defined)
     generate_routes(scale_demand(scenario_cfg, float(demand)), routes_path, override_seed=seed, network_override=network)
 
@@ -258,7 +264,8 @@ def run_simulation(
     results_dir = Path(output_dir) if output_dir is not None else project_root / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    tripinfo_path = results_dir / f"tripinfo_{file_tag}.xml"
+    tripinfo_path = results_dir / "tripinfo" / f"tripinfo_{file_tag}.xml"
+    tripinfo_path.parent.mkdir(parents=True, exist_ok=True)
     if metrics_csv_path is None:
         metrics_csv_path = results_dir / f"metrics_{scenario_name}_{controller}_s{seed}.csv"
 
@@ -270,13 +277,13 @@ def run_simulation(
 
     sumo_binary = sumolib.checkBinary("sumo-gui" if gui else "sumo")
     if network == "grid2x2":
-        net_path = project_root / "sim" / "sumo" / "grid2x2.net.xml"
+        net_path = project_root / "sim" / "sumo" / "xml" / "networks" / "grid2x2.net.xml"
     elif network == ZONE_NETWORK:
-        net_path = project_root / "sim" / "sumo" / "grid2x2_zone.net.xml"
+        net_path = project_root / "sim" / "sumo" / "xml" / "networks" / "grid2x2_zone.net.xml"
     elif network == CITY_NETWORK:
-        net_path = project_root / "sim" / "sumo" / "grid2x2_city.net.xml"
+        net_path = project_root / "sim" / "sumo" / "xml" / "networks" / "grid2x2_city.net.xml"
     else:
-        net_path = project_root / "sim" / "sumo" / "net.xml"
+        net_path = project_root / "sim" / "sumo" / "xml" / "networks" / "net.xml"
 
     sumo_cmd = [
         sumo_binary,
@@ -305,13 +312,13 @@ def run_simulation(
         "warn",
     ]
 
-    decorations_file = project_root / "sim" / "sumo" / "decorations.add.xml"
+    decorations_file = project_root / "sim" / "sumo" / "xml" / "gui" / "decorations.add.xml"
     if network == "single" and decorations_file.exists():
         sumo_cmd.extend(["-a", str(decorations_file)])
 
     settings_name = ("gui-settings-grid.cfg.xml" if network in ("grid2x2", ZONE_NETWORK, CITY_NETWORK)
                      else "gui-settings.cfg.xml")
-    gui_settings_file = project_root / "sim" / "sumo" / settings_name
+    gui_settings_file = project_root / "sim" / "sumo" / "xml" / "gui" / settings_name
     if gui:
         if gui_settings_file.exists():
             sumo_cmd.extend(["--gui-settings-file", str(gui_settings_file)])
@@ -322,7 +329,7 @@ def run_simulation(
     t = 0.0
     arrived_count = 0
     was_interrupted = False
-    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned", "dynamic_vanet"))
+    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned", "dynamic_vanet", "level_vanet"))
     vanet_net: Optional[Any] = None
     vtype_cache: Dict[str, str] = {}
     ev_crossings: set = set()  # (ev id, signalised junction) pairs the EV drove through
@@ -341,7 +348,7 @@ def run_simulation(
         })
 
     try:
-        sumo_api.start(sumo_cmd)
+        start_sumo(sumo_api, sumo_cmd, is_libsumo)  # TraCI over 127.0.0.1 (sim/sumo_connect.py)
         # Junction signals only; the accident-zone signals belong to the zone controller
         tls_ids = [t for t in sumo_api.trafficlight.getIDList() if t not in ZONE_TLS]
 
@@ -355,6 +362,16 @@ def run_simulation(
 
         # Eco-driving: by share of equipped cars (eco_fraction), or the city's eco-car category
         eco_on = float(eco_fraction or 0.0) > 0.0 or network == CITY_NETWORK
+        # Eco options (all off by default): config < params["eco"] < explicit run options
+        eco_settings = dict(base_config.get("eco", {}) or {})
+        if params and isinstance(params.get("eco"), dict):
+            eco_settings.update(params["eco"])
+        if eco_commit is not None:
+            eco_settings["commit_green_s"] = float(eco_commit)
+        if eco_routing is not None:
+            eco_settings["routing"] = bool(eco_routing)
+        if eco_on:  # only runs with eco cars lock their greens; other runs behave exactly as before
+            ctrl_params["commit_green_s"] = float(eco_settings.get("commit_green_s", 0.0) or 0.0)
         if is_vanet_controller or incident_detection_on or eco_on:
             from sim.vanet.network import VanetNetwork
             from sim.vanet.sensing_vanet import VanetStateProvider
@@ -448,6 +465,9 @@ def run_simulation(
             speed_smoothing_s=float(nav_cfg.get("speed_smoothing_s", 0.0)),
         )
 
+        if eco_on and bool(eco_settings.get("routing", False)):
+            navigator.enable_eco_routing(float(eco_settings.get("stop_probability", 0.7)))
+
         # Emergency-vehicle route choice (off = ambulances keep their scenario route)
         ev_router: Optional[Any] = None
         if ev_routing:
@@ -483,6 +503,9 @@ def run_simulation(
                 track_live_emissions=live,
                 eco_select=eco_select,
             )
+
+        if eco_mgr is not None:
+            navigator.eco_check = eco_mgr.is_eco
 
         # Live map data: road geometry once, then per-vehicle rows every emitted second
         vehicle_tracker: Optional[Any] = None
@@ -822,6 +845,8 @@ def run_simulation(
                 emit_json_line(state_msg)
                 if vehicle_tracker is not None:
                     emit_json_line(vehicle_tracker.build(active_vehs, run_id, t))
+                    if int(t) % 2 == 0:  # every car against its HBEFA4 reference (Driving page)
+                        emit_json_line(vehicle_tracker.build_eco_cars(active_vehs, run_id, t))
                 if driver_mgr is not None:
                     drv_msg = driver_mgr.build_message(run_id, t)
                     if drv_msg is not None:
@@ -967,8 +992,10 @@ def run_simulation(
     # Eco-driving and emission fields (eco-specific ones stay null when eco-driving is off)
     result_payload["eco_fraction"] = float(eco_fraction or 0.0)
     result_payload["eco_select"] = eco_select
+    result_payload["eco_reroutes"] = navigator.eco_reroutes
     for key in ("co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
                 "stops_per_vehicle_eco", "stops_per_vehicle_non", "travel_time_eco", "travel_time_non",
+                "idle_s_per_vehicle_eco", "idle_s_per_vehicle_non",
                 "eco_advised_vehicles", "eco_advice_share_slow", "eco_advice_share_stop", "spat_pdr"):
         result_payload[key] = None
     result_payload.update({k: v for k, v in emission_metrics.items() if not k.startswith("n_trips_")})

@@ -135,6 +135,8 @@ def main() -> None:
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
     parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
     parser.add_argument("--eco-select", type=str, default="data", choices=["data", "random"], help="How eco cars are chosen")
+    parser.add_argument("--eco-commit", type=float, default=0.0, help="Ignored in mock")
+    parser.add_argument("--eco-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
     parser.add_argument("--ev-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
     parser.add_argument("--demand", type=float, default=1.0, help="Traffic demand factor (scales the mock's cars)")
     parser.add_argument("--driver", action="store_true", help="One-driver mode: drive commands as JSON lines on stdin")
