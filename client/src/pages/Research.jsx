@@ -7,6 +7,7 @@ import ChartTooltip from '../components/ChartTooltip.jsx';
 import { SERIES } from '../components/LiveCharts.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
 import { IMPORTANT_EVENTS, SYSTEM_EVENTS } from '../lib/events.js';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import { fmt, fmtP, isNum } from '../lib/format.js';
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '–');
@@ -114,7 +115,7 @@ function GaTarget({ target, data }) {
 
 export function GaPage() {
   const { data, error } = useFetch(() => api.ga());
-  const [target, setTarget] = useState('signals');
+  const [target, setTarget] = usePersistentState('ga-target', 'signals');
   if (error) return <div className="notice error" role="alert">{error.message}</div>;
   if (!data) return <div className="notice" role="status">Loading…</div>;
   const available = ['signals', 'aco'].filter((t) => data[t]);
@@ -184,9 +185,9 @@ const HIGHER_BETTER = new Set(['throughput_veh_per_hr', 'pdr']);
 const describeRun = (r) => `${r.scenario} · ${r.controller}${r.nav && r.nav !== 'none' ? ` · nav ${r.nav}` : ''} · seed ${r.seed}`;
 
 export function Runs() {
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = usePersistentState('runs-offset', 0);
   const { data, error } = useFetch(() => api.runs(PAGE, offset), [offset]);
-  const [picked, setPicked] = useState([]);
+  const [picked, setPicked] = usePersistentState('runs-picked', []);
   const [details, setDetails] = useState({});
   const [loadError, setLoadError] = useState(null);
 
@@ -296,8 +297,8 @@ const SEVERITY = { incident_start: 'bad', alert_lost: 'bad', zone_activated: 'wa
 
 export function EventsPage() {
   const live = useLive();
-  const [group, setGroup] = useState('all');
-  const [importantOnly, setImportantOnly] = useState(false);
+  const [group, setGroup] = usePersistentState('events-group', 'all');
+  const [importantOnly, setImportantOnly] = usePersistentState('events-important', false);
   const list = useMemo(() => live.events
     .filter((e) => (group === 'all' || EVENT_GROUPS[group].includes(e.kind)) && (!importantOnly || IMPORTANT_EVENTS.has(e.kind)))
     .slice().reverse(), [live.events, group, importantOnly]);

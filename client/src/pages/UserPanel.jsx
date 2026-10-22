@@ -5,7 +5,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import DrivePanel from '../components/DrivePanel.jsx';
-import EcoSummary from '../components/EcoSummary.jsx';
+import EcoOverview from '../components/EcoOverview.jsx';
 import EventLog from '../components/EventLog.jsx';
 import JunctionPanel from '../components/JunctionPanel.jsx';
 import MyCarPanel from '../components/MyCarPanel.jsx';
@@ -15,12 +15,13 @@ import TrafficMap from '../components/TrafficMap.jsx';
 import RouteExplorer from '../components/RouteExplorer.jsx';
 import ZonePanel from '../components/ZonePanel.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import { FLAG } from '../lib/vehicles.js';
 
 const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end', 'ev_reroute',
   'reroute', 'driver_start', 'driver_end', 'zone_activated', 'zone_guided', 'zone_ev_priority', 'zone_deactivated']);
 const ORDER = ['J2', 'J3', 'J0', 'J1']; // as on the map: J2 J3 north, J0 J1 south
-const TABS = [['overview', 'Overview'], ['junction', 'Junction'], ['vehicle', 'Vehicle'], ['routes', 'Routes'], ['eco', 'Eco-driving']];
+const TABS = [['overview', 'Overview'], ['junction', 'Junction'], ['vehicle', 'Vehicle'], ['routes', 'Routes']];
 // three.js is loaded only when the driver perspective is opened
 const DriverView3D = lazy(() => import('../components/DriverView3D.jsx'));
 const VIEW_KEY = 'itsc-view';
@@ -39,10 +40,13 @@ export default function UserPanel() {
   const [params] = useSearchParams();
   const wanted = params.get('follow'); // demo links: ?follow=eco | ?follow=ambulance | ?follow=<vehicle id>
   const { followId, follow } = live;
-  const [tab, setTab] = useState('overview');
-  const [junction, setJunction] = useState(null);
-  const [routes, setRoutes] = useState(null); // route explorer answer
-  const [routeSel, setRouteSel] = useState(0);
+  const [tab, setTab] = usePersistentState('live-tab', 'overview');
+  const [junction, setJunction] = usePersistentState('live-junction', null);
+  const runId = live.nowPlaying?.current?.run_id ?? null;
+  const [routeStore, setRouteStore] = usePersistentState('live-routes', null); // route explorer answer, for one run
+  const routes = routeStore?.runId === runId ? routeStore.data : null;
+  const setRoutes = (data) => setRouteStore(data ? { runId, data } : null);
+  const [routeSel, setRouteSel] = usePersistentState('live-route-selected', 0);
   const [view, setViewState] = useState(() => {
     try {
       return localStorage.getItem(VIEW_KEY) === 'driver' ? 'driver' : 'map';
@@ -139,6 +143,7 @@ export default function UserPanel() {
           <div className="stack" role="tabpanel" id="side-tabpanel" aria-labelledby={`tab-${tab}`}>
             {tab === 'overview' && (
               <>
+                <EcoOverview eco={latest?.eco} onFollow={selectCar} />
                 <ZonePanel zone={latest?.zone} />
                 <IncidentList incidents={latest?.incidents} zone={latest?.zone} />
                 <AmbulanceList ev={latest?.ev} routes={latest?.ev_routes} onFollow={selectCar} />
@@ -162,7 +167,6 @@ export default function UserPanel() {
               <RouteExplorer live={live} result={routes} onResult={(r) => { setRoutes(r); if (r) setView('map'); }}
                 selected={routeSel} onSelect={setRouteSel} />
             )}
-            {tab === 'eco' && <EcoSummary eco={latest?.eco} />}
           </div>
         </div>
       </div>

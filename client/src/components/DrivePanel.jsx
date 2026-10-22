@@ -8,6 +8,7 @@ import { fmt, isNum, seconds } from '../lib/format.js';
 import { normalise } from '../lib/following.js';
 import { roadChoices } from '../lib/roads.js';
 import { CATEGORY_LABEL } from '../lib/vehicles.js';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import FollowingCard from './FollowingCard.jsx';
 
 const DRIVABLE = ['car', 'eco_car', 'motorcycle', 'bus', 'truck'];
@@ -175,13 +176,13 @@ export default function DrivePanel({ live }) {
   // Vehicle categories this network has (the research networks: cars only)
   const kinds = useMemo(() => DRIVABLE.filter((k) => network?.vehicle_types?.some((t) => t.id === k))
     .filter((k) => k === 'car' || network?.edges?.some((e) => e.type && e.type !== 'grid')), [network]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [ease, setEase] = useState(30);
-  const [kind, setKind] = useState('car');
+  const [from, setFrom] = usePersistentState('drive-from', '');
+  const [to, setTo] = usePersistentState('drive-to', '');
+  const [ease, setEase] = usePersistentState('drive-ease', 30);
+  const [kind, setKind] = usePersistentState('drive-kind', 'car');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = usePersistentState('drive-open', false);
   const lastInput = useRef(Date.now());
   const [, tick] = useState(0);
 

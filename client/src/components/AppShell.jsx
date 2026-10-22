@@ -95,7 +95,8 @@ export function navGroups({ isAdmin, canControl }) {
       { to: '/navigation', icon: 'route', label: 'Navigation' },
       { to: '/incidents', icon: 'alert', label: 'Incidents' },
       { to: '/work-zone', icon: 'cone', label: 'Work zone' },
-      { to: '/glosa', icon: 'leaf', label: 'Driving' },
+      { to: '/eco', icon: 'leaf', label: 'Eco driving' },
+      { to: '/glosa', icon: 'car', label: 'Driving' },
       { to: '/events', icon: 'bell', label: 'Events' },
     ] },
     // hidden: not in the sidebar, but the page still opens from a link (and keeps its title)
@@ -132,6 +133,46 @@ export default function AppShell({ children }) {
     || (location.pathname === '/account' ? { label: 'Account' } : null);
 
   useEffect(() => { setDrawer(false); }, [location.pathname]); // navigating closes the mobile drawer
+
+  // Each page returns to where it was scrolled. Saving starts once the position is restored, because
+  // the browser moves the scroll position while the new page is still loading.
+  useEffect(() => {
+    if (location.hash) return undefined;
+    const key = `itsc-scroll:${location.pathname}`;
+    let target = 0;
+    try {
+      target = Number(sessionStorage.getItem(key)) || 0;
+    } catch {
+      /* start at the top */
+    }
+    let saving = false;
+    let frames = 0;
+    let raf = 0;
+    const restore = () => {
+      const fits = document.documentElement.scrollHeight - window.innerHeight >= target;
+      if (fits || frames > 90) {
+        window.scrollTo(0, Math.min(target, document.documentElement.scrollHeight - window.innerHeight));
+        saving = true;
+        return;
+      }
+      frames += 1;
+      raf = requestAnimationFrame(restore);
+    };
+    const save = () => {
+      if (!saving) return;
+      try {
+        sessionStorage.setItem(key, String(Math.round(window.scrollY)));
+      } catch {
+        /* convenience only */
+      }
+    };
+    raf = requestAnimationFrame(restore);
+    window.addEventListener('scroll', save, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', save);
+    };
+  }, [location.pathname, location.hash]);
   useEffect(() => {
     if (!drawer) return undefined;
     const esc = (e) => { if (e.key === 'Escape') setDrawer(false); };
