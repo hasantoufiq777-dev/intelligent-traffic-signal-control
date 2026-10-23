@@ -3,16 +3,16 @@ import { z } from 'zod';
 
 export const OPTIONS = {
   scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone', 'city'],
-  // dynamic_vanet is the default mode: congestion-aware phase choice and green length over the VANET
-  controllers: ['dynamic_vanet', 'dynamic', 'fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
+  // level_vanet is the default mode: the longest queue goes down to the next one, then they repeat
+  controllers: ['level_vanet', 'level', 'dynamic_vanet', 'dynamic', 'fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
   ev_routing: ['on', 'off'],
   // How eco cars are chosen: the most wasteful against the SUMO fuel-curve model, or at random
   eco_select: ['data', 'random'],
   networks: ['single', 'grid2x2', 'grid2x2_zone', 'grid2x2_city'],
-  defaults: { scenario: 'normal', controller: 'dynamic_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
-    eco_fraction: 0.0, eco_select: 'data', ev_routing: 'off', demand: 1.0 },
+  defaults: { scenario: 'congested', controller: 'level_vanet', nav: 'none', relay: 'off', ev_routing: 'off', network: 'grid2x2',
+    seed: 1, penetration: 1, loss: 0.0, eco_fraction: 0.0, eco_select: 'data', eco_commit: 0, eco_routing: 'off', demand: 1.0 },
   // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
   demand: { min: 0.25, max: 2.0, step: 0.25 },
 };
@@ -52,6 +52,8 @@ export const RunEntrySchema = z
     relay: z.enum(OPTIONS.relay).default('off'),
     eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
     eco_select: z.enum(OPTIONS.eco_select).default('data'),
+    eco_commit: z.coerce.number().min(0).max(15).default(0), // s: lock a green's end ahead (eco runs)
+    eco_routing: z.enum(OPTIONS.ev_routing).default('off'), // eco cars take the lowest-fuel route
     ev_routing: z.enum(OPTIONS.ev_routing).default('off'), // ambulances pick their route on the TMC map
     demand: z.coerce.number().min(0.25).max(2).default(1.0), // traffic demand factor (number of cars)
     network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
@@ -65,7 +67,7 @@ export const RunEntrySchema = z
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 
-const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback', 'routes']) }).passthrough();
+const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback', 'routes', 'eco_cars']) }).passthrough();
 
 /** Road ids a driver may pick (normal edges: no ":" internal junction lanes). */
 const EdgeIdSchema = z.string().min(1).max(64).regex(/^[\w.#-]+$/);
@@ -144,6 +146,8 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--relay', entry.relay,
     '--eco-fraction', String(entry.eco_fraction ?? 0),
     '--eco-select', entry.eco_select ?? 'data',
+    '--eco-commit', String(entry.eco_commit ?? 0),
+    '--eco-routing', entry.eco_routing ?? 'off',
     '--ev-routing', entry.ev_routing ?? 'off',
     '--live',
     '--driver', // read commands on stdin: one-driver mode and playback (pause, resume, speed)
