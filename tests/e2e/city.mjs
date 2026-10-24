@@ -29,10 +29,10 @@ await page.getByLabel('Password').fill(password);
 await page.getByRole('button', { name: 'Sign in' }).click();
 await page.locator('main').waitFor({ timeout: 30_000 });
 
-await step('Run control defaults to 50 % penetration and starts the city scenario', async () => {
+await step('Run control defaults to full penetration and starts the city scenario', async () => {
   await page.goto(`${url}/admin`);
   const pen = page.getByLabel(/^penetration/);
-  if ((await pen.inputValue()) !== '0.5') throw new Error(`penetration default ${await pen.inputValue()}`);
+  if ((await pen.inputValue()) !== '1') throw new Error(`penetration default ${await pen.inputValue()}`);
   await page.getByLabel(/^scenario/).selectOption('city');
   await page.getByLabel(/^controller/).selectOption('adaptive_vanet');
   await page.getByLabel(/^nav/).selectOption('astar');

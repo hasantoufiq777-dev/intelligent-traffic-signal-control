@@ -172,7 +172,7 @@ effects exist.
 **How it works:** each of the four junctions has its own controller instance. Routes cross one to
 three junctions. `route_alternatives.py` checks that alternative routes really exist.
 
-**Files:** `sim/sumo/grid2x2.net.xml`, `sim/sumo/generate_grid.py`,
+**Files:** `sim/sumo/xml/networks/grid2x2.net.xml`, `sim/sumo/generate_grid.py`,
 `sim/scenarios/route_alternatives.py`
 
 **In the app:** the live map, which shows the grid by default.
@@ -511,7 +511,7 @@ preemptions.
 - **Routing.** Routes, navigation and ambulance routing all count the expected wait at the zone.
 
 **Files:** `sim/controllers/zone.py`, `sim/scenarios/accident_zone.py`,
-`sim/sumo/grid2x2_zone.net.xml`
+`sim/sumo/xml/networks/grid2x2_zone.net.xml`
 
 **In the app:** *Work zone* page; the map shows the shared lane, its direction arrows and the zone
 signals.
