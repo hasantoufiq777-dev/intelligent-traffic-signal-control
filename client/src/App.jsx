@@ -23,6 +23,7 @@ const Navigation = modulePage('Navigation');
 const Incidents = modulePage('Incidents');
 const WorkZone = modulePage('WorkZone');
 const Glosa = modulePage('Glosa');
+const EcoDriving = modulePage('EcoDriving');
 const GaPage = researchPage('GaPage');
 const Runs = researchPage('Runs');
 const EventsPage = researchPage('EventsPage');
@@ -47,6 +48,7 @@ function SignedIn() {
             <Route path="/navigation" element={<Navigation />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/work-zone" element={<WorkZone />} />
+            <Route path="/eco" element={<EcoDriving />} />
             <Route path="/glosa" element={<Glosa />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/results" element={<Results />} />

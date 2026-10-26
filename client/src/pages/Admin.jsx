@@ -4,6 +4,8 @@ import { roadChoices } from '../lib/roads.js';
 import NowPlaying from '../components/NowPlaying.jsx';
 import { useAuth } from '../hooks/useAuth.js';
 import { useLive } from '../hooks/useLiveSocket.js';
+import { usePersistentState } from '../hooks/usePersistentState.js';
+import { restoreRunForm } from '../lib/runForm.js';
 
 const REASON = { finished: 'arrived', released: 'handed back', idle: 'idle', left: 'driver left', admin: 'admin',
   time_limit: 'time limit', run_ended: 'run ended', error: 'error' };
@@ -67,8 +69,8 @@ const AMB_KINDS = new Set(['ambulance_dispatched', 'ambulance_arrived', 'ambulan
 /** Send an ambulance into the running simulation at any moment; it gets priority at every junction. */
 function AmbulanceDispatch({ live, canSend, controller }) {
   const choices = useMemo(() => roadChoices(live.network), [live.network]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = usePersistentState('ambulance-from', '');
+  const [to, setTo] = usePersistentState('ambulance-to', '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const runId = live.nowPlaying?.current?.run_id;
@@ -128,15 +130,15 @@ export default function Admin() {
   const live = useLive();
   const { user, isAdmin } = useAuth();
   const [options, setOptions] = useState(null);
-  const [form, setForm] = useState(null);
+  const [form, setForm] = usePersistentState('run-control', null); // kept when moving between pages
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.options()
-      .then((o) => { setOptions(o); setForm({ ...o.defaults }); })
+      .then((o) => { setOptions(o); setForm((saved) => restoreRunForm(saved, o)); })
       .catch((e) => setMsg({ error: true, text: e.message }));
-  }, []);
+  }, [setForm]);
 
   const set = (k) => (e) => setForm((f) => {
     const next = { ...f, [k]: e.target.value };
@@ -157,6 +159,7 @@ export default function Admin() {
         penetration: Number(form.penetration),
         loss: Number(form.loss),
         eco_fraction: Number(form.eco_fraction),
+        eco_commit: Number(form.eco_commit ?? 0),
         demand: Number(form.demand ?? 1),
       };
       if (!body.network) delete body.network;
@@ -254,6 +257,8 @@ export default function Admin() {
               {num('loss', { min: 0, max: 1, step: 0.05 })}
               {num('eco_fraction', { min: 0, max: 1, step: 0.1 })}
               {sel('eco_select', options.eco_select || ['data', 'random'])}
+              {num('eco_commit', { min: 0, max: 15, step: 1, title: 'Eco runs with dynamic or level signals: announce a light change this many seconds ahead (0 = off, 8 = recommended test)' })}
+              {sel('eco_routing', ['off', 'on'])}
               {num('demand', { min: 0.25, max: 2, step: 0.25, title: 'Traffic demand: every flow of the scenario multiplied by this (1 = as defined)' })}
             </div>
             <div className="row">

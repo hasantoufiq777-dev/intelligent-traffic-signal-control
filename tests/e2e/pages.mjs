@@ -34,6 +34,7 @@ const PAGES = [
   ['Navigation', '/navigation', 'How a route is chosen'],
   ['Incidents', '/incidents', 'Incident timeline'],
   ['Work zone', '/work-zone', 'Evaluated results'],
+  ['Eco driving', '/eco', 'Eco score of each car'],
   ['Driving', '/glosa', 'Signal phase and timing (SPaT)'],
   ['Events', '/events', 'important only'],
   ['GA optimisation', '/ga', 'Check on held-out seeds'],

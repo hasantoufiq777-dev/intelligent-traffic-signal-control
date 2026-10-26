@@ -107,7 +107,7 @@ VANET-adaptive, ambulance, ambulance around a road closure, eco-driving, A\*, AC
 ```bash
 .venv/Scripts/python.exe sim/main.py --scenario emergency --network grid2x2 --controller adaptive_ev_vanet --eco-fraction 0.6 --gui
 ```
-SUMO-GUI draws roads 1.6× and cars 1.3× wider than real so they are easy to see (`sim/sumo/gui-settings*.cfg.xml`).
+SUMO-GUI draws roads 1.6× and cars 1.3× wider than real so they are easy to see (`sim/sumo/xml/gui/gui-settings*.cfg.xml`).
 The simulation always uses real sizes.
 
 ## 3. Command line (one simulation)
@@ -119,7 +119,8 @@ python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev
                    [--eco-fraction 0.6] [--ev-routing on|off] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
 ```
 - **Controllers:**
-  - `dynamic_vanet` (default) and `dynamic`: congestion-aware control, green 5–45 s from the measured queue, density, waiting time, arrivals and downstream space ([sim/controllers/dynamic.py](sim/controllers/dynamic.py));
+  - `level_vanet` (default) and `level`: the road with the most cars gets the green until it is down to the second-longest queue, level roads repeat (facing roads together), and the cars left are freed ([sim/controllers/leveling.py](sim/controllers/leveling.py));
+  - `dynamic_vanet` and `dynamic`: congestion-aware control, green 5–45 s from the measured queue, density, waiting time, arrivals and downstream space ([sim/controllers/dynamic.py](sim/controllers/dynamic.py));
   - `fixed`, `adaptive` (true queues), `adaptive_vanet` (VANET queues);
   - `adaptive_ev` (+ preemption from true EV positions), `adaptive_ev_vanet` (+ preemption over V2I/V2V);
   - `adaptive_ev_vanet_tuned` (GA-tuned).
@@ -195,7 +196,8 @@ PROJECT_CONTEXT.md   project rules, interfaces and protocol
 package.json         root scripts (setup, dev, test, experiments)
 scripts/             setup.mjs, py.mjs
 sim/                 SUMO + Python simulation
-  sumo/              networks (net.xml single junction, grid2x2.net.xml, grid2x2_zone.net.xml from generate_zone_net.py), GUI settings
+  sumo/              network generators and sim.sumocfg
+    xml/             all SUMO XML: networks/, routes/, gui/, generated/ (see sim/sumo/xml/README.md)
   sensing.py         StateProvider (oracle) interface
   vanet/             channel, messages, nodes (RSU/TMC), network, alerts, glosa (eco-driving), sensing_vanet
   navigation/        graph, astar, aco, navigator

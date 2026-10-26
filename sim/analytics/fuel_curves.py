@@ -60,8 +60,10 @@ def measure() -> Dict[str, Any]:
             t.set("maxSpeed", "40")
         ET.SubElement(root, "route", id="r", edges="road")
         rou.write_text(ET.tostring(root, encoding="unicode"), encoding="utf-8")
-        traci.start([sumolib.checkBinary("sumo"), "-n", str(net), "-r", str(rou), "--step-length", "1",
-                     "--no-step-log", "true", "--device.emissions.probability", "1"])
+        from sim.sumo_connect import start_sumo
+
+        start_sumo(traci, [sumolib.checkBinary("sumo"), "-n", str(net), "-r", str(rou), "--step-length", "1",
+                           "--no-step-log", "true", "--device.emissions.probability", "1"])
         out: Dict[str, Any] = {}
         n = 0
         try:

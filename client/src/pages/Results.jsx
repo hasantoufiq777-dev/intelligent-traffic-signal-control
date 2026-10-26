@@ -5,6 +5,7 @@ import {
 import { api } from '../api.js';
 import ChartTooltip from '../components/ChartTooltip.jsx';
 import { SERIES } from '../components/LiveCharts.jsx';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import { fmt, fmtP, fmtPct } from '../lib/format.js';
 
 const TABS = [
@@ -210,7 +211,7 @@ export function suiteCsv(name, suite) {
 export default function Results() {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState('signals');
+  const [tab, setTab] = usePersistentState('results-tab', 'signals');
 
   useEffect(() => {
     api.summary().then(setSummary).catch((e) => setError(e));

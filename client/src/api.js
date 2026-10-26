@@ -72,6 +72,7 @@ export const api = {
   options: () => request('/api/options'),
   liveStatus: () => request('/api/live/status'),
   playlist: () => request('/api/live/playlist'),
+  ecoCars: () => request('/api/live/eco-cars', { quiet: true }),
   summary: () => request('/api/experiments/summary'),
   ga: () => request('/api/experiments/ga'),
   dynamicComparison: () => request('/api/experiments/dynamic', { quiet: true }),

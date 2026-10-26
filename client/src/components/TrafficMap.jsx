@@ -4,6 +4,7 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CATEGORY_LABEL, categoryOf, continuousAngle, FLAG, fieldIndex, has, KIND_LABEL, sizeOf, vehicleKind } from '../lib/vehicles.js';
 import { CarBody, CarIcon } from './CarShape.jsx';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import Icon from './Icon.jsx';
 
 const PAD = 8;
@@ -87,8 +88,7 @@ function offsetPts(points, off) {
 }
 
 /** Direction an edge arrives from at its end junction (SUMO coordinates: y grows north). */
-const GROUP_SHORT = { NS: 'N–S', EW: 'E–W' };
-const IN_GROUP = { N: 'NS', S: 'NS', E: 'EW', W: 'EW' };
+const GROUP_SHORT = { NS: 'N+S', EW: 'E+W', N: 'North', S: 'South', E: 'East', W: 'West' };
 
 /** Roads of a junction ranked by the dynamic controller's priority score: approach -> rank (1 = highest). */
 function priorityRanks(dyn) {
@@ -103,7 +103,7 @@ function junctionCaption(dyn) {
   if (!dyn.serving) return `${dyn.transition === 'ALL_RED' ? 'All red' : 'Yellow'}${dyn.next ? ` → ${GROUP_SHORT[dyn.next]} next` : ''}`;
   const g = GROUP_SHORT[dyn.serving];
   if (dyn.remaining_s > 0) return `${g} green · ${dyn.remaining_s} s left`;
-  return `${g} green · held (no one waiting on red)`;
+  return dyn.mode === 'level' ? `${g} green · clearing` : `${g} green · held (no one waiting on red)`;
 }
 
 function approachOf(shape) {
@@ -367,13 +367,14 @@ function buildGeometry(network) {
 
 /** Zoom and pan state: scale k and offset (x, y) in map units, kept inside the map. */
 function useView(geo) {
-  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const [view, setView] = usePersistentState('map-view', { k: 1, x: 0, y: 0 });
   const maxZoom = geo?.isCity ? CITY_MAX_ZOOM : MAX_ZOOM;
   const clamp = useCallback((v) => {
     if (!geo) return v;
     const k = Math.min(maxZoom, Math.max(1, v.k));
     return { k, x: Math.min(0, Math.max(geo.width * (1 - k), v.x)), y: Math.min(0, Math.max(geo.height * (1 - k), v.y)) };
   }, [geo]);
+  useEffect(() => { setView((v) => clamp(v)); }, [clamp, setView]); // a saved view must fit this map
   const zoomAt = useCallback((factor, cx, cy) => setView((v) => {
     const k = Math.min(maxZoom, Math.max(1, v.k * factor));
     const f = k / v.k;
@@ -710,13 +711,13 @@ function TrafficMapInner({
               const dyn = st?.dynamic;
               const road = dyn?.roads?.[h.approach];
               const rank = road ? priorityRanks(dyn)[h.approach] : null;
-              const served = road && dyn.serving === IN_GROUP[h.approach];
+              const served = Boolean(road && dyn.serving?.includes(h.approach));
               return (
                 <g key={h.id}>
                   {layers.priority && road && (
                     <g transform={`translate(${h.prio[0]},${h.prio[1]})`} className={`prio-pill${served ? ' served' : ''}${road.down_status === 'blocked' || road.down_status === 'closed' ? ' blocked' : ''}`}>
                       <rect x={-17} y={-7.5} width={34} height={15} rx={7.5} />
-                      <text y={3.4} textAnchor="middle" className="map-label prio">#{rank} · {Number(road.score ?? 0).toFixed(1)}</text>
+                      <text y={3.4} textAnchor="middle" className="map-label prio">#{rank} · {dyn.mode === 'level' ? `${Math.round(road.waiting ?? 0)}` : Number(road.score ?? 0).toFixed(1)}</text>
                       <title>{`${h.tls}, road from the ${APPROACH_WORD[h.approach]}: priority #${rank} of ${Object.keys(dyn.roads).length}, score ${road.score} `
                         + `(${road.waiting} waiting, average wait ${road.mean_wait_s} s, ${road.flow_vpm} arriving per minute, road ahead ${road.down_status}). `
                         + `${served ? 'Has the green now.' : 'Waiting for green.'}`}</title>
@@ -797,7 +798,7 @@ function TrafficMapInner({
 
       {layers.priority && geo.junctions.some((j) => tlsState?.[j.id]?.dynamic) && (
         <div className="signal-decisions" aria-live="polite" aria-label="Signal decisions">
-          <div className="small muted">Signal decisions (dynamic control: the road with the higher score gets the next green)</div>
+          <div className="small muted">Signal decisions (the road with the most cars goes first, down to the next queue)</div>
           <ul>
             {geo.junctions.filter((j) => tlsState?.[j.id]?.dynamic).map((j) => {
               const dyn = tlsState[j.id].dynamic;
@@ -838,8 +839,8 @@ function TrafficMapInner({
           <span><svg width="20" height="14"><rect x="1" y="1" width="18" height="12" rx="6" fill="var(--surface-1)" stroke="var(--border-strong)" /><text x="10" y="10.5" textAnchor="middle" fontSize="9" fill="var(--text-primary)">5</text></svg>Vehicles waiting</span>
           {Object.values(tlsState || {}).some((s) => s?.dynamic) && (
             <>
-              <span><svg width="36" height="16" className="prio-pill served"><rect x="1" y="1" width="34" height="14" rx="7" /><text x="18" y="11" textAnchor="middle" fontSize="8" className="map-label prio">#1 · 9.5</text></svg>Road with the green: its priority rank and score</span>
-              <span><svg width="36" height="16" className="prio-pill"><rect x="1" y="1" width="34" height="14" rx="7" /><text x="18" y="11" textAnchor="middle" fontSize="8" className="map-label prio">#3 · 2.0</text></svg>Waiting road: higher score gets the next green (queue, wait, arrivals, room ahead)</span>
+              <span><svg width="36" height="16" className="prio-pill served"><rect x="1" y="1" width="34" height="14" rx="7" /><text x="18" y="11" textAnchor="middle" fontSize="8" className="map-label prio">#1 · 9.5</text></svg>Road with the green: its rank and cars waiting (or score)</span>
+              <span><svg width="36" height="16" className="prio-pill"><rect x="1" y="1" width="34" height="14" rx="7" /><text x="18" y="11" textAnchor="middle" fontSize="8" className="map-label prio">#3 · 2.0</text></svg>Waiting road: the highest rank gets the next green</span>
             </>
           )}
           <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--sig-yellow)" fillOpacity="0.5" /></svg>Congested road</span>

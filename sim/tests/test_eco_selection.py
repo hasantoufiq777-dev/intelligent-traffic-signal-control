@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sim.eco_selection import EcoSelector, best_speed_kmh, compare_car, model_reference
+from sim.eco_selection import EcoSelector, best_speed_kmh, compare_car, eco_rating, model_reference
 from sim.eco_speed import fuel_per_m
 
 
@@ -52,3 +52,19 @@ def test_selector_picks_the_most_wasteful_within_budget():
 def test_selector_runs_every_interval():
     sel = EcoSelector({"select_interval_s": 5})
     assert sel.due(1.0) and not sel.due(3.0) and sel.due(6.0)
+
+
+def test_eco_score_is_how_close_the_car_is_to_hbefa4():
+    assert compare_car("car", acc(fuel_factor=1.0))["eco_pct"] == pytest.approx(100.0, abs=0.1)
+    wasteful = compare_car("car", acc(fuel_factor=2.0))
+    assert wasteful["eco_pct"] == pytest.approx(50.0, abs=0.1) and wasteful["rating"] == "wasteful"
+    assert compare_car("car", acc(fuel_factor=0.8))["eco_pct"] == 100.0  # capped
+    assert compare_car("car", acc(dist=80.0, moving=6.0))["eco_pct"] is None  # too short to judge
+    assert [eco_rating(v) for v in (85, 70, 55, 54.9, None)] == ["eco", "good", "fair", "wasteful", None]
+
+
+def test_diesel_litres_use_the_diesel_density():
+    v = 1000.0 / 72.0
+    fuel = fuel_per_m("bus", v) * 1000.0
+    c = compare_car("bus", {"dist_m": 1000.0, "moving_s": 72.0, "fuel_mg": fuel, "co2_mg": 1.0})
+    assert c["fuel_l_100km"] == pytest.approx(fuel / 835.0 / 10.0, abs=0.01)

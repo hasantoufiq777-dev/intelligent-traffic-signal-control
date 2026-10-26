@@ -3,6 +3,7 @@
 // fastest and the shortest, and draws them on the map (the selected one on top).
 import { useMemo, useState } from 'react';
 import { fmt, isNum } from '../lib/format.js';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import { ROUTE_COLORS } from './TrafficMap.jsx';
 
 const VCLASSES = [['passenger', 'Car'], ['motorcycle', 'Motorcycle'], ['bus', 'Bus'], ['truck', 'Truck'],
@@ -21,9 +22,9 @@ export default function RouteExplorer({ live, result, onResult, selected, onSele
     if (ids.has('gEJ1') && ids.has('kcgS0')) return ['gEJ1', 'kcgS0'];
     return [roads[0]?.id ?? '', roads[roads.length - 1]?.id ?? ''];
   }, [roads]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [vclass, setVclass] = useState('passenger');
+  const [from, setFrom] = usePersistentState('routes-from', '');
+  const [to, setTo] = usePersistentState('routes-to', '');
+  const [vclass, setVclass] = usePersistentState('routes-class', 'passenger');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const a = from || defaults[0];

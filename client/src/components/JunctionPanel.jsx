@@ -7,11 +7,14 @@ const DIRS = ['N', 'E', 'S', 'W'];
 const FROM = { N: 'North', S: 'South', E: 'East', W: 'West' };
 const SIG_WORD = { G: 'Green', y: 'Yellow', r: 'Red' };
 const PHASE_TEXT = {
+  N_GREEN: 'North green', S_GREEN: 'South green', E_GREEN: 'East green', W_GREEN: 'West green',
+  N_YELLOW: 'North yellow', S_YELLOW: 'South yellow', E_YELLOW: 'East yellow', W_YELLOW: 'West yellow',
   NS_GREEN: 'North–south green', EW_GREEN: 'East–west green', NS_YELLOW: 'North–south yellow', EW_YELLOW: 'East–west yellow',
   ALL_RED: 'All red (clearing the junction)', EV_GREEN: 'Green for the ambulance only', EV_TRANSITION: 'Switching for the ambulance',
   EV_RECOVERY: 'Returning to normal control',
 };
 const CONTROLLER_TEXT = {
+  level: 'Queue levelling, exact queues', level_vanet: 'Queue levelling, queues over VANET',
   dynamic: 'Dynamic congestion-aware, exact measures', dynamic_vanet: 'Dynamic congestion-aware, measures over VANET',
   fixed: 'Fixed-time (30 s per direction)', adaptive: 'Adaptive, exact queues', adaptive_vanet: 'Adaptive, queues over VANET',
   adaptive_ev: 'Adaptive + ambulance preemption (exact)', adaptive_ev_vanet: 'Adaptive + preemption over VANET',

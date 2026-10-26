@@ -2,6 +2,7 @@
 // gateway says (/api/auth/me) and keeps the CSRF token for the API client. Role checks here decide
 // what to show; the gateway enforces them.
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { clearPersistentState } from './usePersistentState.js';
 import { api, setCsrfToken, setSessionLostHandler } from '../api.js';
 
 const AuthContext = createContext(null);
@@ -34,6 +35,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => apply(await api.login(email, password)), [apply]);
   const register = useCallback(async (email, name, password) => apply(await api.register(email, name, password)), [apply]);
   const logout = useCallback(async () => {
+    clearPersistentState();
     try {
       await api.logout();
     } finally {
