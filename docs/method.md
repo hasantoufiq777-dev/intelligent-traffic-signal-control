@@ -194,3 +194,35 @@ sequenceDiagram
     Controller->>Controller: Phase State: EV_GREEN -> RECOVERY (Discharge Starved Queues)
 ```
 
+---
+
+## 6. Vehicular Navigation: A* and Ant Colony Optimization (Module 9)
+
+Module 9 implements dynamic route navigation over the SUMO edge-connectivity graph (`sim/navigation/graph.py`), where dynamic edge costs are derived from TMC traffic speed maps built by the VANET layer:
+$$\text{Cost}(e) = \frac{\text{length}(e)}{\max(\text{speed}(e), v_{\min})}$$
+
+### 6.1 Equivalence of A* with Zero Heuristic to Dijkstra
+In $A^*$ search, the priority evaluation function is:
+$$f(n) = g(n) + h(n)$$
+where $g(n)$ is the accumulated cost from the start node and $h(n)$ is the heuristic estimate to the goal.
+When $h(n) = 0$ for all nodes $n \in \mathcal{V}$:
+$$f(n) = g(n) + 0 = g(n)$$
+The evaluation function degenerates strictly to the accumulated path cost. Consequently, the priority queue orders nodes purely by their current shortest distance from the origin, which is the exact definition of Dijkstra's algorithm. In `sim/navigation/astar.py`, setting `heuristic="zero"` reproduces Dijkstra with mathematical precision, expanding all equidistant frontier nodes. Setting `heuristic="euclid"` provides an admissible, consistent heuristic:
+$$h(u) = \frac{\text{dist}(u, \text{goal})}{v_{\max}}$$
+Since $v(e) \le v_{\max}$, $h(u) \le \text{true remaining travel time}$, directing the frontier toward the target and reducing node expansions without sacrificing optimality.
+
+### 6.2 Mitigating the "Herding" Phenomenon with Ant Colony Optimization (ACO)
+Deterministic shortest-path algorithms (like $A^*$ or Dijkstra) suffer from the **traffic herding phenomenon**: when an edge experiences a minor delay, every navigating vehicle simultaneously switches to the single next-best alternative corridor. This abruptly shifts congestion to the alternative road, triggering severe oscillations.
+
+Ant Colony Optimization (`sim/navigation/aco.py`) solves this by returning the top-$K$ distinct paths with **selection probabilities**:
+$$P(\text{Path}_i) = \frac{\frac{1}{\text{Cost}(\text{Path}_i)}}{\sum_{j=1}^K \frac{1}{\text{Cost}(\text{Path}_j)}}$$
+Each navigating vehicle samples among the candidate paths according to $P(\text{Path}_i)$. Instead of 100% of vehicles stampeding onto the single best detour, traffic naturally splits across the alternative corridors in proportion to their travel time efficiency, stabilizing network-wide edge load variance ($\text{CV}_{\text{load}}$).
+
+### 6.3 Topology Constraints of a 2x2 Grid Network
+On a 2x2 signalized grid network:
+- Pure diagonal origin-destination movements (e.g. `bottom0J0` to `top1J3`) offer exactly two primary orthogonal paths of equal length:
+  1. Route A: `bottom0J0 -> J0J1 -> J1J3 -> J3top1` (via East first)
+  2. Route B: `bottom0J0 -> J0J2 -> J2J3 -> J3top1` (via North first)
+- Straight-through movements along an avenue (e.g. `bottom0J0` to `top0J2`) have only one direct route. Any detour incurs two extra turning penalties and crosses perpendicular signal phases.
+- Thus, the benefits of dynamic navigation are concentrated primarily on diagonal high-volume OD flows, while the total number of feasible topological alternatives remains naturally constrained compared to large-scale city grids.
+

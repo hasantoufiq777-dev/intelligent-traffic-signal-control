@@ -586,13 +586,215 @@ def _plot_preemption_results(records: List[Dict[str, Any]], plots_dir: Path) -> 
     logger.info("Saved preemption plots: %s, %s, %s", p1, p2, p3)
 
 
+def run_navigation_experiments(
+    scenario: str = "navigation",
+    seeds: Optional[List[int]] = None,
+    max_steps: Optional[int] = 180,
+    output_csv: Optional[Path] = None,
+    plots_dir: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Execute sensitivity experiments for Module 9 (A* and ACO navigation)."""
+    if seeds is None:
+        seeds = list(range(1, 11))
+
+    if output_csv is None:
+        output_csv = PROJECT_ROOT / "results" / "navigation_experiments.csv"
+    if plots_dir is None:
+        plots_dir = PROJECT_ROOT / "results"
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    records: List[Dict[str, Any]] = []
+
+    # 1. Baseline: No navigation (nav="none") across penetrations and seeds
+    for pen in [0.5, 1.0]:
+        for s in seeds:
+            logger.info("Running nav='none', pen=%.1f, seed=%d...", pen, s)
+            res = run_simulation(
+                scenario=scenario,
+                controller="adaptive_vanet",
+                seed=s,
+                nav="none",
+                penetration=pen,
+                max_steps=max_steps,
+                gui=False,
+                live=False,
+            )
+            records.append({
+                "mode": "none",
+                "nav_fraction": 0.0,
+                "penetration": pen,
+                "seed": s,
+                "avg_travel_time": res["avg_travel_time"],
+                "nav_avg_travel_time": res["nav_avg_travel_time"],
+                "nonnav_avg_travel_time": res["nonnav_avg_travel_time"],
+                "edge_load_cv": res["edge_load_cv"],
+                "max_edge_load": res["max_edge_load"],
+                "route_search_expansions": res["route_search_expansions"],
+                "route_search_ms": res["route_search_ms"],
+                "reroute_count": res["reroute_count"],
+            })
+
+    # 2. Navigation modes A* and ACO
+    nav_modes = ["astar", "aco"]
+    nav_fractions = [0.1, 0.3, 0.5]
+    pens = [0.5, 1.0]
+
+    for mode in nav_modes:
+        for frac in nav_fractions:
+            for pen in pens:
+                for s in seeds:
+                    logger.info("Running nav='%s', frac=%.1f, pen=%.1f, seed=%d...", mode, frac, pen, s)
+                    res = run_simulation(
+                        scenario=scenario,
+                        controller="adaptive_vanet",
+                        seed=s,
+                        nav=mode,
+                        nav_fraction=frac,
+                        penetration=pen,
+                        max_steps=max_steps,
+                        gui=False,
+                        live=False,
+                    )
+                    records.append({
+                        "mode": mode,
+                        "nav_fraction": frac,
+                        "penetration": pen,
+                        "seed": s,
+                        "avg_travel_time": res["avg_travel_time"],
+                        "nav_avg_travel_time": res["nav_avg_travel_time"],
+                        "nonnav_avg_travel_time": res["nonnav_avg_travel_time"],
+                        "edge_load_cv": res["edge_load_cv"],
+                        "max_edge_load": res["max_edge_load"],
+                        "route_search_expansions": res["route_search_expansions"],
+                        "route_search_ms": res["route_search_ms"],
+                        "reroute_count": res["reroute_count"],
+                    })
+
+    # Write records to CSV
+    csv_fields = [
+        "mode", "nav_fraction", "penetration", "seed", "avg_travel_time",
+        "nav_avg_travel_time", "nonnav_avg_travel_time", "edge_load_cv",
+        "max_edge_load", "route_search_expansions", "route_search_ms", "reroute_count"
+    ]
+    with open(output_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_fields)
+        writer.writeheader()
+        writer.writerows(records)
+
+    logger.info("Wrote %d navigation records to %s", len(records), output_csv)
+
+    # 3. Generate Navigation Plots
+    _plot_navigation_results(records, plots_dir)
+
+    return records
+
+
+def _plot_navigation_results(records: List[Dict[str, Any]], plots_dir: Path) -> None:
+    """Generate the 3 required sensitivity plots for Module 9."""
+    # --- Plot 1: Navigating vs Non-Navigating Travel Time ---
+    plt.figure(figsize=(8, 5))
+    fractions = [0.1, 0.3, 0.5]
+    for mode, color, marker in [("astar", "blue", "o"), ("aco", "green", "s")]:
+        nav_tts = []
+        nonnav_tts = []
+        for f in fractions:
+            n_vals = [
+                r["nav_avg_travel_time"]
+                for r in records
+                if r["mode"] == mode and r["nav_fraction"] == f and r["nav_avg_travel_time"] > 0
+            ]
+            non_vals = [
+                r["nonnav_avg_travel_time"]
+                for r in records
+                if r["mode"] == mode and r["nav_fraction"] == f and r["nonnav_avg_travel_time"] > 0
+            ]
+            nav_tts.append(float(np.mean(n_vals)) if n_vals else 0.0)
+            nonnav_tts.append(float(np.mean(non_vals)) if non_vals else 0.0)
+
+        plt.plot(fractions, nav_tts, color=color, marker=marker, linewidth=2, label=f"{mode.upper()} (Navigating)")
+        plt.plot(fractions, nonnav_tts, color=color, linestyle="--", marker=marker, alpha=0.6, label=f"{mode.upper()} (Non-Navigating)")
+
+    plt.xlabel("Navigating Vehicle Fraction", fontsize=11)
+    plt.ylabel("Average Travel Time (s)", fontsize=11)
+    plt.title("Travel Time: Navigating vs. Non-Navigating Vehicles", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend()
+    plt.tight_layout()
+    p1 = plots_dir / "plot_nav_travel_time_comparison.png"
+    plt.savefig(p1, dpi=300)
+    plt.close()
+
+    # --- Plot 2: Edge Load CV vs Nav Fraction (Anti-Herding) ---
+    plt.figure(figsize=(8, 5))
+    base_cv = [r["edge_load_cv"] for r in records if r["mode"] == "none"]
+    mean_base_cv = float(np.mean(base_cv)) if base_cv else 0.65
+    plt.axhline(mean_base_cv, color="red", linestyle="--", label=f"No Navigation Baseline (CV={mean_base_cv:.2f})")
+
+    for mode, color, marker in [("astar", "blue", "o"), ("aco", "green", "s")]:
+        cv_means = []
+        for f in fractions:
+            vals = [
+                r["edge_load_cv"]
+                for r in records
+                if r["mode"] == mode and r["nav_fraction"] == f
+            ]
+            cv_means.append(float(np.mean(vals)) if vals else 0.0)
+        plt.plot(fractions, cv_means, color=color, marker=marker, linewidth=2, label=f"{mode.upper()} Navigation")
+
+    plt.xlabel("Navigating Vehicle Fraction", fontsize=11)
+    plt.ylabel("Edge Load Coefficient of Variation (CV)", fontsize=11)
+    plt.title("Spatial Traffic Distribution: A* vs. ACO Anti-Herding", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.legend()
+    plt.tight_layout()
+    p2 = plots_dir / "plot_nav_edge_load_cv.png"
+    plt.savefig(p2, dpi=300)
+    plt.close()
+
+    # --- Plot 3: Route Search Computational Cost ---
+    plt.figure(figsize=(8, 5))
+    modes = ["astar", "aco"]
+    ms_means = []
+    for mode in modes:
+        vals = [r["route_search_ms"] for r in records if r["mode"] == mode]
+        ms_means.append(float(np.mean(vals)) if vals else 0.0)
+
+    bars = plt.bar(modes, ms_means, color=["royalblue", "mediumseagreen"], width=0.5)
+    for bar in bars:
+        h = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width() / 2.0, h + 1.0, f"{h:.1f} ms", ha="center", va="bottom", fontsize=10)
+
+    plt.ylabel("Total Search Runtime (ms)", fontsize=11)
+    plt.title("Algorithmic Computational Overhead: A* vs. ACO", fontsize=12)
+    plt.grid(True, linestyle="--", alpha=0.6, axis="y")
+    plt.tight_layout()
+    p3 = plots_dir / "plot_nav_search_cost.png"
+    plt.savefig(p3, dpi=300)
+    plt.close()
+
+    logger.info("Saved navigation plots: %s, %s, %s", p1, p2, p3)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="VANET sensing sensitivity experiments")
     parser.add_argument("--scenario", type=str, default="congested", help="Scenario name")
     parser.add_argument("--quick", action="store_true", help="Run quick 1-seed test")
     parser.add_argument("--preemption", action="store_true", help="Run Module 8 emergency preemption experiments")
+    parser.add_argument("--navigation", action="store_true", help="Run Module 9 A* and ACO navigation experiments")
     parser.add_argument("--max-steps", type=int, default=None, help="Maximum simulation steps")
     args = parser.parse_args()
+
+    if args.navigation:
+        seeds = [1] if args.quick else [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        steps = args.max_steps or 150
+        run_navigation_experiments(
+            scenario="navigation",
+            seeds=seeds,
+            max_steps=steps,
+        )
+        return
 
     if args.preemption:
         seeds = [1] if args.quick else [1, 2, 3, 4, 5]

@@ -23,6 +23,7 @@ from sim.analytics.metrics import StepMetricsLogger, parse_tripinfo
 from sim.controllers.fixed import FixedTimeController
 from sim.scenarios.generate_routes import generate_routes, load_scenario_config
 from sim.sensing import OracleStateProvider, StateProvider
+from sim.vanet.nodes import is_vehicle_equipped
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +113,11 @@ def run_simulation(
     global _STOP_REQUESTED
     _STOP_REQUESTED = False
 
-    # Check for features not implemented yet
-    if nav != "none":
-        raise NotImplementedError(f"Navigation mode '{nav}' is not implemented yet (scheduled for Module 9).")
+    # Check for features scheduled for future modules
+    if nav == "aco_tuned" and not aco_params:
+        raise NotImplementedError("ACO parameter tuning via GA is scheduled for Module 11.")
 
+    # Global signal handlers for graceful interrupt
     try:
         signal.signal(signal.SIGINT, _handle_signal)
         signal.signal(signal.SIGTERM, _handle_signal)
@@ -264,6 +266,37 @@ def run_simulation(
                 sumo_api=sumo_api,
             )
 
+        # Initialize Navigation Engine (Module 9)
+        from sim.navigation.graph import EdgeGraph
+        from sim.navigation.navigator import VehicleNavigator
+
+        edge_graph = EdgeGraph.from_net_file(net_path)
+        nav_cfg = base_config.get("navigation", {}).copy()
+        if params and "navigation" in params:
+            nav_cfg.update(params["navigation"])
+        aco_cfg = base_config.get("aco", {}).copy()
+        if aco_params:
+            aco_p_path = Path(aco_params)
+            if aco_p_path.exists():
+                with open(aco_p_path, "r", encoding="utf-8") as f:
+                    aco_cfg.update(yaml.safe_load(f) or {})
+        elif params and "aco" in params:
+            aco_cfg.update(params["aco"])
+
+        nav_frac = float(nav_fraction if nav_fraction is not None else nav_cfg.get("nav_fraction", 0.3))
+        navigator = VehicleNavigator(
+            sumo_api=sumo_api,
+            graph=edge_graph,
+            mode=nav,
+            nav_fraction=nav_frac,
+            nav_interval=float(nav_cfg.get("nav_interval", 30.0)),
+            min_reroute_gap=float(nav_cfg.get("min_reroute_gap", 15.0)),
+            hysteresis=float(nav_cfg.get("hysteresis", 0.05)),
+            aco_config=aco_cfg,
+            heuristic=str(nav_cfg.get("heuristic", "euclid")),
+            seed=seed,
+        )
+
         while t < sim_duration:
             if _STOP_REQUESTED:
                 was_interrupted = True
@@ -341,6 +374,18 @@ def run_simulation(
                     "signal": approach_signals,
                 }
 
+            # Step Navigation (Module 9)
+            speed_map = provider.get_edge_speeds()
+            navigator.step(
+                sim_time=t,
+                speed_map=speed_map,
+                closed_edges=None,
+                equipped_check_fn=lambda vid: is_vehicle_equipped(vid, penetration=penetration, seed=seed),
+            )
+            if live:
+                for n_ev in navigator.pop_events():
+                    emit_json_line(n_ev)
+
             # Emit live state if requested (protocol v2 schema)
             if live and (int(t) % emit_interval == 0):
                 active_waits = [sumo_api.vehicle.getWaitingTime(v) for v in active_vehs]
@@ -375,14 +420,7 @@ def run_simulation(
                         "throughput": throughput_rate,
                     },
                     "comm": comm_dict,
-                    "nav": {
-                        "mode": nav,
-                        "navigating": 0,
-                        "avg_tt_nav": 0.0,
-                        "avg_tt_non": 0.0,
-                        "max_edge_load": 0,
-                        "edge_load_cv": 0.0,
-                    },
+                    "nav": navigator.get_live_nav_state(),
                 })
 
             sumo_api.simulationStep()
@@ -440,15 +478,19 @@ def run_simulation(
         "missed_preemptions": None,
         "ev_alert_delivery_time": None,
         "queue_estimate_mae": None,
-        # Navigation metric fields (placeholders for Module 9)
+        # Navigation metric fields (Module 9)
         "nav_mode": nav,
         "nav_avg_travel_time": None,
         "nonnav_avg_travel_time": None,
         "edge_load_cv": None,
+        "max_edge_load": None,
         "route_search_expansions": None,
         "route_search_ms": None,
         "reroute_count": None,
     }
+
+    nav_metrics = navigator.get_nav_metrics()
+    result_payload.update(nav_metrics)
 
     if is_vanet_controller and vanet_net is not None:
         mae = round(float(sum(queue_errors) / max(len(queue_errors), 1)), 3)

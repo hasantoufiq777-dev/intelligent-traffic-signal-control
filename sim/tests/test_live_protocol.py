@@ -128,13 +128,13 @@ def test_real_sim_live_protocol_v2() -> None:
 
 
 def test_cli_flags_not_implemented() -> None:
-    """Verify that unbuilt features like --nav astar raise clean NotImplementedError."""
+    """Verify that unbuilt features like --nav aco_tuned raise clean NotImplementedError."""
     proc = run_cli_subprocess([
         "sim/main.py",
         "--run-id", "test_flags",
         "--scenario", "normal",
         "--controller", "fixed",
-        "--nav", "astar",
+        "--nav", "aco_tuned",
     ])
     assert proc.returncode != 0
     lines = [line.strip() for line in proc.stdout.strip().splitlines() if line.strip()]
