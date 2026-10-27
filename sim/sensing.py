@@ -85,16 +85,20 @@ class OracleStateProvider(StateProvider):
         else:
             # Fallback to geometric shape if available
             try:
-                shape = self.sumo_api.lane.getShape(lane_id)
-                if len(shape) >= 2:
-                    p1 = shape[0]
-                    p2 = shape[-1]
-                    dx = p1[0] - p2[0]
-                    dy = p1[1] - p2[1]
-                    if abs(dy) >= abs(dx):
-                        direction = "N" if dy > 0 else "S"
+                target_lane = lane_id if "_" in lane_id else f"{lane_id}_0"
+                if not target_lane.startswith(":"):
+                    shape = self.sumo_api.lane.getShape(target_lane)
+                    if len(shape) >= 2:
+                        p1 = shape[0]
+                        p2 = shape[-1]
+                        dx = p1[0] - p2[0]
+                        dy = p1[1] - p2[1]
+                        if abs(dy) >= abs(dx):
+                            direction = "N" if dy > 0 else "S"
+                        else:
+                            direction = "E" if dx > 0 else "W"
                     else:
-                        direction = "E" if dx > 0 else "W"
+                        direction = "N"
                 else:
                     direction = "N"
             except Exception:
@@ -146,7 +150,7 @@ class OracleStateProvider(StateProvider):
 
         return wait_times
 
-    def get_ev_info(self, tls_id: str) -> List[Dict[str, Any]]:
+    def get_ev_info(self, tls_id: str, lookahead: int = 2) -> List[Dict[str, Any]]:
         ev_list: List[Dict[str, Any]] = []
         if not self.sumo_api:
             return ev_list
@@ -159,26 +163,61 @@ class OracleStateProvider(StateProvider):
         for vid in active_vehs:
             try:
                 vtype = self.sumo_api.vehicle.getTypeID(vid)
-                if vtype == "emergency" or "amb" in vid.lower():
+                if vtype == "emergency" or "amb" in vid.lower() or "ev" in vid.lower():
                     speed = float(self.sumo_api.vehicle.getSpeed(vid))
                     dist = 0.0
                     target_tls = tls_id
+                    approach = "N"
 
                     tls_ahead = self.sumo_api.vehicle.getNextTLS(vid)
+                    matched_entry = None
                     if tls_ahead:
+                        for entry in tls_ahead[:lookahead]:
+                            if entry[0] == tls_id:
+                                matched_entry = entry
+                                break
+
+                    lane_id = str(self.sumo_api.vehicle.getLaneID(vid))
+                    if matched_entry:
+                        target_tls = matched_entry[0]
+                        dist = float(matched_entry[2])
+                        if not lane_id.startswith(":"):
+                            approach = self._resolve_lane_direction(lane_id, tls_id)
+                        else:
+                            dist = 0.0
+                            route = list(self.sumo_api.vehicle.getRoute(vid))
+                            for r_edge in route:
+                                if tls_id in r_edge:
+                                    approach = self._resolve_lane_direction(r_edge, tls_id)
+                                    break
+                    elif tls_ahead:
                         target_tls = tls_ahead[0][0]
                         dist = float(tls_ahead[0][2])
+                        if not lane_id.startswith(":"):
+                            approach = self._resolve_lane_direction(lane_id, target_tls)
+                        else:
+                            dist = 0.0
                     else:
                         pos = self.sumo_api.vehicle.getPosition(vid)
-                        dist = math.hypot(pos[0], pos[1])
+                        try:
+                            tls_pos = self.sumo_api.junction.getPosition(tls_id)
+                            dist = math.hypot(pos[0] - tls_pos[0], pos[1] - tls_pos[1])
+                        except Exception:
+                            dist = math.hypot(pos[0], pos[1])
+                        if not lane_id.startswith(":"):
+                            approach = self._resolve_lane_direction(lane_id, tls_id)
 
-                    eta = round(dist / max(speed, 0.1), 1)
+                    # For queued/halting EV, use cruising speed to avoid infinite ETA in stopped queue
+                    calc_speed = 15.0 if speed < 1.0 and dist <= 150.0 else max(speed, 0.1)
+                    eta = round(dist / calc_speed, 1)
+
                     ev_list.append({
                         "id": vid,
                         "tls": target_tls,
                         "eta": eta,
                         "dist": round(dist, 1),
                         "speed": round(speed, 1),
+                        "approach": approach,
                         "alert_age": 0.0,
                     })
             except Exception:

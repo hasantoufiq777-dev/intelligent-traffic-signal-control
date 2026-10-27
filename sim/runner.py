@@ -137,8 +137,15 @@ def run_simulation(
             base_config = yaml.safe_load(f) or {}
 
     ctrl_section = base_config.get("controllers", {}).get(controller)
-    if ctrl_section is None and controller == "adaptive_vanet":
-        ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
+    if ctrl_section is None:
+        if controller == "adaptive_vanet":
+            ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
+        elif controller in ("adaptive_ev", "adaptive_ev_tuned"):
+            ctrl_section = base_config.get("controllers", {}).get("adaptive", {}).copy()
+            ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
+    elif controller in ("adaptive_ev", "adaptive_ev_tuned"):
+        ctrl_section = dict(ctrl_section)
+        ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
 
     ctrl_params = dict(ctrl_section or {})
     if params:
@@ -152,6 +159,7 @@ def run_simulation(
         raise FileNotFoundError(f"Scenario file not found: {scenario}")
 
     scenario_cfg = load_scenario_config(scenario_path)
+    scenario_name = scenario_path.stem
     sim_duration = float(
         max_steps
         if max_steps is not None
@@ -168,7 +176,7 @@ def run_simulation(
 
     tripinfo_path = results_dir / f"tripinfo_{run_id}.xml"
     if metrics_csv_path is None:
-        metrics_csv_path = results_dir / f"metrics_{scenario}_{controller}_s{seed}.csv"
+        metrics_csv_path = results_dir / f"metrics_{scenario_name}_{controller}_s{seed}.csv"
 
     logger_step = StepMetricsLogger(metrics_csv_path)
 
@@ -270,8 +278,20 @@ def run_simulation(
                 oracle_provider.update(t)
 
             # Step controllers
-            for ctrl in controllers_map.values():
+            for tid, ctrl in controllers_map.items():
                 ctrl.step(t)
+                if hasattr(ctrl, "pop_events"):
+                    events = ctrl.pop_events()
+                    if live:
+                        for ev in events:
+                            emit_json_line({
+                                "type": "event",
+                                "run_id": run_id,
+                                "t": int(t),
+                                "kind": ev["kind"],
+                                "tls": ev.get("tls", tid),
+                                "detail": ev["detail"],
+                            })
 
             active_vehs = list(sumo_api.vehicle.getIDList())
             n_vehicles = len(active_vehs)
@@ -404,7 +424,7 @@ def run_simulation(
         "throughput_veh_per_hr": metrics["throughput_veh_per_hr"],
         "seed": seed,
         "controller": controller,
-        "scenario": scenario,
+        "scenario": scenario_name,
         # VANET metric fields
         "pdr": None,
         "avg_latency_ms": None,
@@ -430,6 +450,22 @@ def run_simulation(
         result_payload["avg_latency_ms"] = final_comm["latency_ms"]
         result_payload["avg_hops"] = 1.0
 
+    # Write preemption events CSV if any occurred
+    import csv
+    all_preemption_records = []
+    for ctrl in controllers_map.values():
+        if hasattr(ctrl, "preemption_records"):
+            all_preemption_records.extend(ctrl.preemption_records)
+
+    if all_preemption_records:
+        preempt_csv_path = results_dir / f"preemption_events_{scenario_name}_{controller}_s{seed}.csv"
+        with open(preempt_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["time", "tls_id", "vehicle_id", "eta_at_trigger", "duration"]
+            )
+            writer.writeheader()
+            writer.writerows(all_preemption_records)
+
     if live:
         if was_interrupted:
             emit_json_line({
@@ -451,7 +487,7 @@ def run_simulation(
             "metrics": result_payload,
             "seed": seed,
             "controller": controller,
-            "scenario": scenario,
+            "scenario": scenario_name,
         })
 
     return result_payload
