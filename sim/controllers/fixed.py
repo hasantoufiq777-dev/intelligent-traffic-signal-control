@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 from sim.controllers.base import BaseController
+from sim.sensing import StateProvider
 
 
 class FixedTimeController(BaseController):
@@ -17,10 +18,11 @@ class FixedTimeController(BaseController):
         self,
         tls_id: str,
         params: Optional[Dict[str, Any]] = None,
+        provider: Optional[StateProvider] = None,
         sumo_api: Any = None,
     ) -> None:
         """Initialize fixed-time controller with cycle parameters."""
-        super().__init__(tls_id, params=params, sumo_api=sumo_api)
+        super().__init__(tls_id, params=params, provider=provider, sumo_api=sumo_api)
 
         # Durations in seconds
         self.green_ns: float = float(self.params.get("green_ns", 30.0))
@@ -38,10 +40,8 @@ class FixedTimeController(BaseController):
 
     def step(self, sim_time: float) -> None:
         """Advance controller by one simulation step (1s)."""
-        # Advance any active transition (yellow or all-red)
         self.update_transitions(1.0)
 
-        # If transitioning, hold counter
         if self.is_in_transition():
             self.time_in_current_green = 0.0
             return

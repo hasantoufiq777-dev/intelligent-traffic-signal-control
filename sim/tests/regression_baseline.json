@@ -1,0 +1,134 @@
+{
+  "normal_fixed_s1": {
+    "avg_waiting_time": 8.49,
+    "avg_time_loss": 15.66,
+    "avg_travel_time": 59.68,
+    "ev_travel_time": 0.0,
+    "max_queue": 6.0,
+    "throughput_veh_per_hr": 1062.0,
+    "seed": 1,
+    "controller": "fixed",
+    "scenario": "normal"
+  },
+  "normal_fixed_s2": {
+    "avg_waiting_time": 10.22,
+    "avg_time_loss": 17.13,
+    "avg_travel_time": 61.0,
+    "ev_travel_time": 0.0,
+    "max_queue": 6.0,
+    "throughput_veh_per_hr": 900.0,
+    "seed": 2,
+    "controller": "fixed",
+    "scenario": "normal"
+  },
+  "normal_fixed_s3": {
+    "avg_waiting_time": 8.95,
+    "avg_time_loss": 15.67,
+    "avg_travel_time": 59.8,
+    "ev_travel_time": 0.0,
+    "max_queue": 7.0,
+    "throughput_veh_per_hr": 1008.0,
+    "seed": 3,
+    "controller": "fixed",
+    "scenario": "normal"
+  },
+  "normal_adaptive_s1": {
+    "avg_waiting_time": 8.3,
+    "avg_time_loss": 17.4,
+    "avg_travel_time": 61.48,
+    "ev_travel_time": 0.0,
+    "max_queue": 6.0,
+    "throughput_veh_per_hr": 1008.0,
+    "seed": 1,
+    "controller": "adaptive",
+    "scenario": "normal"
+  },
+  "normal_adaptive_s2": {
+    "avg_waiting_time": 3.39,
+    "avg_time_loss": 9.86,
+    "avg_travel_time": 53.96,
+    "ev_travel_time": 0.0,
+    "max_queue": 5.0,
+    "throughput_veh_per_hr": 1008.0,
+    "seed": 2,
+    "controller": "adaptive",
+    "scenario": "normal"
+  },
+  "normal_adaptive_s3": {
+    "avg_waiting_time": 7.36,
+    "avg_time_loss": 14.87,
+    "avg_travel_time": 58.93,
+    "ev_travel_time": 0.0,
+    "max_queue": 7.0,
+    "throughput_veh_per_hr": 1044.0,
+    "seed": 3,
+    "controller": "adaptive",
+    "scenario": "normal"
+  },
+  "congested_fixed_s1": {
+    "avg_waiting_time": 8.41,
+    "avg_time_loss": 17.69,
+    "avg_travel_time": 61.56,
+    "ev_travel_time": 0.0,
+    "max_queue": 10.0,
+    "throughput_veh_per_hr": 1818.0,
+    "seed": 1,
+    "controller": "fixed",
+    "scenario": "congested"
+  },
+  "congested_fixed_s2": {
+    "avg_waiting_time": 8.59,
+    "avg_time_loss": 16.83,
+    "avg_travel_time": 60.63,
+    "ev_travel_time": 0.0,
+    "max_queue": 10.0,
+    "throughput_veh_per_hr": 1926.0,
+    "seed": 2,
+    "controller": "fixed",
+    "scenario": "congested"
+  },
+  "congested_fixed_s3": {
+    "avg_waiting_time": 11.67,
+    "avg_time_loss": 21.41,
+    "avg_travel_time": 65.24,
+    "ev_travel_time": 0.0,
+    "max_queue": 14.0,
+    "throughput_veh_per_hr": 1674.0,
+    "seed": 3,
+    "controller": "fixed",
+    "scenario": "congested"
+  },
+  "congested_adaptive_s1": {
+    "avg_waiting_time": 10.9,
+    "avg_time_loss": 21.95,
+    "avg_travel_time": 65.87,
+    "ev_travel_time": 0.0,
+    "max_queue": 10.0,
+    "throughput_veh_per_hr": 1746.0,
+    "seed": 1,
+    "controller": "adaptive",
+    "scenario": "congested"
+  },
+  "congested_adaptive_s2": {
+    "avg_waiting_time": 8.16,
+    "avg_time_loss": 18.58,
+    "avg_travel_time": 62.55,
+    "ev_travel_time": 0.0,
+    "max_queue": 11.0,
+    "throughput_veh_per_hr": 1782.0,
+    "seed": 2,
+    "controller": "adaptive",
+    "scenario": "congested"
+  },
+  "congested_adaptive_s3": {
+    "avg_waiting_time": 8.32,
+    "avg_time_loss": 18.01,
+    "avg_travel_time": 61.97,
+    "ev_travel_time": 0.0,
+    "max_queue": 12.0,
+    "throughput_veh_per_hr": 1836.0,
+    "seed": 3,
+    "controller": "adaptive",
+    "scenario": "congested"
+  }
+}

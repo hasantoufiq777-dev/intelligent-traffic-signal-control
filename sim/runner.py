@@ -1,7 +1,7 @@
 """Simulation runner module.
 
 Executes SUMO simulations with the selected controller, scenario, and random seed.
-Provides a unified wrapper for traci / libsumo and streams live JSON protocol lines.
+Provides a unified wrapper for traci / libsumo and streams live JSON protocol v2 lines.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ import signal
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
-# Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -23,10 +22,10 @@ import yaml
 from sim.analytics.metrics import StepMetricsLogger, parse_tripinfo
 from sim.controllers.fixed import FixedTimeController
 from sim.scenarios.generate_routes import generate_routes, load_scenario_config
+from sim.sensing import OracleStateProvider, StateProvider
 
 logger = logging.getLogger(__name__)
 
-# Global flag for graceful termination
 _STOP_REQUESTED = False
 
 
@@ -60,26 +59,30 @@ def create_controller(
     controller_name: str,
     tls_id: str,
     params: Dict[str, Any],
-    sumo_api: Any,
+    provider: StateProvider,
+    sumo_api: Any = None,
 ) -> Any:
-    """Factory to instantiate the appropriate controller."""
+    """Factory to instantiate the appropriate controller with injected StateProvider."""
     ctrl_lower = controller_name.lower()
     if ctrl_lower == "fixed":
-        return FixedTimeController(tls_id, params=params, sumo_api=sumo_api)
+        return FixedTimeController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
     elif ctrl_lower in ("adaptive", "adaptive_ev", "adaptive_ev_tuned"):
         try:
             from sim.controllers.adaptive import AdaptiveController
             if ctrl_lower == "adaptive":
-                return AdaptiveController(tls_id, params=params, sumo_api=sumo_api)
+                return AdaptiveController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
         except ImportError:
             pass
 
         try:
             from sim.controllers.preemption import PreemptionController
             if ctrl_lower in ("adaptive_ev", "adaptive_ev_tuned"):
-                return PreemptionController(tls_id, params=params, sumo_api=sumo_api)
+                return PreemptionController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
         except ImportError:
             pass
+
+    elif ctrl_lower in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
+        raise NotImplementedError(f"VANET controller '{controller_name}' is scheduled for Module 6/8.")
 
     raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
 
@@ -100,33 +103,29 @@ def run_simulation(
     emit_interval: int = 1,
     max_steps: Optional[int] = None,
     metrics_csv_path: Optional[Path] = None,
+    nav: str = "none",
+    penetration: float = 1.0,
+    nav_fraction: float = 0.3,
+    loss: float = 0.0,
+    range_m: float = 300.0,
+    relay: str = "off",
+    aco_params: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run a single simulation run and return performance metrics.
-
-    Args:
-        scenario: Scenario name ('normal', 'congested', 'emergency', 'incident') or path.
-        controller: Controller name ('fixed', 'adaptive', 'adaptive_ev', etc.).
-        seed: Random seed for traffic generation.
-        params: Optional controller/simulation parameter overrides.
-        gui: If True, launch sumo-gui via TraCI; else headless.
-        run_id: Identifier for the simulation run.
-        live: If True, stream live state, status, and event lines on stdout.
-        emit_interval: Interval in sim seconds between live state emissions.
-        max_steps: Maximum simulation seconds.
-        metrics_csv_path: Custom path for per-step CSV log.
-
-    Returns:
-        Dictionary matching PROJECT_CONTEXT.md results shape.
-    """
+    """Run a single simulation run and return performance metrics."""
     global _STOP_REQUESTED
     _STOP_REQUESTED = False
 
-    # Register OS signals for graceful shutdown
+    # Check for features not implemented yet
+    if nav != "none":
+        raise NotImplementedError(f"Navigation mode '{nav}' is not implemented yet (scheduled for Module 9).")
+    if relay == "on":
+        raise NotImplementedError("VANET V2V relaying is not implemented yet (scheduled for Module 8).")
+
     try:
         signal.signal(signal.SIGINT, _handle_signal)
         signal.signal(signal.SIGTERM, _handle_signal)
     except (ValueError, AttributeError):
-        pass  # In certain multi-threaded or Windows edge cases
+        pass
 
     project_root = Path(__file__).resolve().parent.parent
 
@@ -209,12 +208,16 @@ def run_simulation(
     try:
         sumo_api.start(sumo_cmd)
 
+        # Initialize StateProvider (OracleStateProvider for current tier)
+        provider = OracleStateProvider(sumo_api)
+
         tls_ids = list(sumo_api.trafficlight.getIDList())
         for tid in tls_ids:
             controllers_map[tid] = create_controller(
                 controller_name=controller,
                 tls_id=tid,
                 params=ctrl_params,
+                provider=provider,
                 sumo_api=sumo_api,
             )
 
@@ -224,6 +227,7 @@ def run_simulation(
                 break
 
             t += 1.0
+            provider.update(t)
 
             # Step controllers
             for ctrl in controllers_map.values():
@@ -232,37 +236,9 @@ def run_simulation(
             active_vehs = list(sumo_api.vehicle.getIDList())
             n_vehicles = len(active_vehs)
 
-            # Detect emergency vehicles and extract ETA
-            ev_list: List[Dict[str, Any]] = []
-            ev_present = False
-
-            for vid in active_vehs:
-                vtype = sumo_api.vehicle.getTypeID(vid)
-                if vtype == "emergency" or "amb" in vid.lower():
-                    ev_present = True
-                    speed = float(sumo_api.vehicle.getSpeed(vid))
-                    target_tls = "J0"
-                    dist = 0.0
-
-                    try:
-                        tls_ahead = sumo_api.vehicle.getNextTLS(vid)
-                        if tls_ahead:
-                            target_tls = tls_ahead[0][0]
-                            dist = float(tls_ahead[0][2])
-                        else:
-                            pos = sumo_api.vehicle.getPosition(vid)
-                            dist = (pos[0] ** 2 + pos[1] ** 2) ** 0.5
-                    except Exception:
-                        pass
-
-                    eta = round(dist / max(speed, 0.1), 1)
-                    ev_list.append({
-                        "id": vid,
-                        "tls": target_tls,
-                        "eta": eta,
-                        "dist": round(dist, 1),
-                        "speed": round(speed, 1),
-                    })
+            # Retrieve EV info through provider
+            ev_list = provider.get_ev_info("J0")
+            ev_present = len(ev_list) > 0
 
             # Check newly arrived vehicles
             try:
@@ -293,12 +269,12 @@ def run_simulation(
                 tls_state_dict[tid] = {
                     "phase": phase_name,
                     "queues": queues,
+                    "queues_est": queues,  # Equal to true queue in oracle mode
                     "signal": approach_signals,
                 }
 
-            # Emit live state if requested
+            # Emit live state if requested (protocol v2 schema)
             if live and (int(t) % emit_interval == 0):
-                # Calculate active wait time
                 active_waits = [sumo_api.vehicle.getWaitingTime(v) for v in active_vehs]
                 avg_wait = round(float(sum(active_waits) / len(active_waits)), 1) if active_waits else 0.0
                 hours = max(t / 3600.0, 1e-4)
@@ -315,11 +291,25 @@ def run_simulation(
                         "n_vehicles": n_vehicles,
                         "throughput": throughput_rate,
                     },
+                    "comm": {
+                        "pdr": 1.0,
+                        "latency_ms": 0.0,
+                        "penetration": penetration,
+                        "sent": 0,
+                        "lost": 0,
+                    },
+                    "nav": {
+                        "mode": nav,
+                        "navigating": 0,
+                        "avg_tt_nav": 0.0,
+                        "avg_tt_non": 0.0,
+                        "max_edge_load": 0,
+                        "edge_load_cv": 0.0,
+                    },
                 })
 
             sumo_api.simulationStep()
 
-            # Early stop if all vehicles departed and arrived
             if t > 60.0 and sumo_api.simulation.getMinExpectedNumber() <= 0:
                 break
 
@@ -348,6 +338,7 @@ def run_simulation(
         except Exception:
             pass
 
+    # Extended result dictionary matching PROJECT_CONTEXT v2
     result_payload = {
         "avg_waiting_time": metrics["avg_waiting_time"],
         "avg_time_loss": metrics["avg_time_loss"],
@@ -358,6 +349,21 @@ def run_simulation(
         "seed": seed,
         "controller": controller,
         "scenario": scenario,
+        # VANET metric fields (placeholders for Module 4b)
+        "pdr": None,
+        "avg_latency_ms": None,
+        "avg_hops": None,
+        "missed_preemptions": None,
+        "ev_alert_delivery_time": None,
+        "queue_estimate_mae": None,
+        # Navigation metric fields (placeholders for Module 4b)
+        "nav_mode": nav,
+        "nav_avg_travel_time": None,
+        "nonnav_avg_travel_time": None,
+        "edge_load_cv": None,
+        "route_search_expansions": None,
+        "route_search_ms": None,
+        "reroute_count": None,
     }
 
     if live:

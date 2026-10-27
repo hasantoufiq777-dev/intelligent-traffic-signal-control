@@ -1,12 +1,15 @@
 """Base controller for traffic light signals.
 
-Provides safe phase switching (yellow -> all-red -> green) and queue inspection helpers.
+Provides safe phase switching (yellow -> all-red -> green) and queue inspection helpers
+via an injected StateProvider.
 """
 
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+
+from sim.sensing import OracleStateProvider, StateProvider
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +30,29 @@ class BaseController:
         self,
         tls_id: str,
         params: Optional[Dict[str, Any]] = None,
+        provider: Optional[StateProvider] = None,
         sumo_api: Any = None,
     ) -> None:
-        """Initialize base controller.
+        """Initialize base controller with dependency-injected StateProvider.
 
         Args:
             tls_id: ID of the traffic light in SUMO.
             params: Controller and safety parameters.
-            sumo_api: TraCI or libsumo module reference.
+            provider: StateProvider implementation (OracleStateProvider or VanetStateProvider).
+            sumo_api: Optional direct TraCI/libsumo reference (wrapped into OracleStateProvider if provider is omitted).
         """
         self.tls_id = tls_id
         self.params = params or {}
-        self.sumo_api = sumo_api
+
+        if provider is not None:
+            self.provider: Optional[StateProvider] = provider
+            self.sumo_api = sumo_api or getattr(provider, "sumo_api", None)
+        elif sumo_api is not None:
+            self.provider = OracleStateProvider(sumo_api)
+            self.sumo_api = sumo_api
+        else:
+            self.provider = None
+            self.sumo_api = None
 
         self.yellow_time: float = float(self.params.get("yellow_time", 3.0))
         self.all_red_time: float = float(self.params.get("all_red_time", 2.0))
@@ -51,13 +65,8 @@ class BaseController:
         self.target_phase: int = self.PHASE_NS_GREEN
         self.pending_target_phase: Optional[int] = None
 
-        # Cache controlled lanes and approaches
-        self.controlled_lanes: List[str] = []
         if self.sumo_api:
             try:
-                self.controlled_lanes = list(
-                    dict.fromkeys(self.sumo_api.trafficlight.getControlledLanes(self.tls_id))
-                )
                 self.current_phase = self.sumo_api.trafficlight.getPhase(self.tls_id)
             except Exception as e:
                 logger.warning("Could not read initial TLS info for %s: %s", self.tls_id, e)
@@ -104,7 +113,6 @@ class BaseController:
         if not state:
             return signals
 
-        # Link index ranges: N: 0..3, E: 4..7, S: 8..11, W: 12..15
         directions = {
             "N": range(0, min(4, len(state))),
             "E": range(4, min(8, len(state))),
@@ -124,27 +132,16 @@ class BaseController:
         return signals
 
     def get_queue_lengths(self) -> Dict[str, int]:
-        """Return number of halting vehicles per approach direction (N, S, E, W)."""
-        queues = {"N": 0, "S": 0, "E": 0, "W": 0}
-        if not self.sumo_api:
-            return queues
+        """Return number of halting vehicles per approach direction (N, S, E, W) via StateProvider."""
+        if self.provider:
+            return self.provider.get_queues(self.tls_id)
+        return {"N": 0, "S": 0, "E": 0, "W": 0}
 
-        for lane_id in self.controlled_lanes:
-            try:
-                halting = self.sumo_api.lane.getLastStepHaltingNumber(lane_id)
-            except Exception:
-                halting = 0
-
-            if "N2" in lane_id:
-                queues["N"] += halting
-            elif "S2" in lane_id:
-                queues["S"] += halting
-            elif "E2" in lane_id:
-                queues["E"] += halting
-            elif "W2" in lane_id:
-                queues["W"] += halting
-
-        return queues
+    def get_waiting_times(self) -> Dict[str, float]:
+        """Return max/mean vehicle waiting times per approach direction via StateProvider."""
+        if self.provider:
+            return self.provider.get_waiting_times(self.tls_id)
+        return {"N": 0.0, "S": 0.0, "E": 0.0, "W": 0.0}
 
     def is_in_transition(self) -> bool:
         """Check if controller is currently in yellow or all-red transition."""
@@ -155,20 +152,16 @@ class BaseController:
 
         Returns True if target_phase is immediately active, False if transitioning.
         """
-        # If already at the target phase and stable, do nothing
         if target_phase == self.current_phase and self.transition_state == "STABLE":
             return True
 
-        # If currently transitioning, update pending target
         if self.transition_state != "STABLE":
             self.pending_target_phase = target_phase
             return False
 
-        # Start transition from current green phase
         self.target_phase = target_phase
         self.pending_target_phase = None
 
-        # Determine yellow phase corresponding to current green
         yellow_phase = self.PHASE_NS_YELLOW if self.current_phase == self.PHASE_NS_GREEN else self.PHASE_EW_YELLOW
 
         self.transition_state = "YELLOW"
@@ -181,7 +174,6 @@ class BaseController:
         self.current_phase = phase_index
         if self.sumo_api:
             try:
-                # Reset to default program '0' in case an online state (like all-red) was active
                 self.sumo_api.trafficlight.setProgram(self.tls_id, "0")
             except Exception:
                 pass
@@ -210,13 +202,11 @@ class BaseController:
 
         if self.transition_timer <= 0:
             if self.transition_state == "YELLOW":
-                # Advance from YELLOW to ALL_RED
                 self.transition_state = "ALL_RED"
                 self.transition_timer = self.all_red_time
                 self._apply_all_red()
 
             elif self.transition_state == "ALL_RED":
-                # Advance from ALL_RED to TARGET GREEN
                 target = (
                     self.pending_target_phase
                     if self.pending_target_phase is not None

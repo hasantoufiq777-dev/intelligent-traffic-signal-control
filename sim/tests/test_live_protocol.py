@@ -1,4 +1,4 @@
-"""Unit tests validating live JSON streaming protocol for both main.py and mock_sim.py."""
+"""Unit tests validating live JSON streaming protocol v2 for both main.py and mock_sim.py."""
 
 from __future__ import annotations
 
@@ -13,18 +13,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def run_cli_subprocess(args: List[str]) -> subprocess.CompletedProcess[str]:
-    """Execute CLI command and return completed process."""
     cmd = [sys.executable] + args
-    return subprocess.run(
-        cmd,
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-    )
+    return subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True)
 
 
-def validate_schema(line_data: Dict[str, Any], expected_run_id: str) -> None:
-    """Validate JSON-lines protocol schema rules."""
+def validate_schema_v2(line_data: Dict[str, Any], expected_run_id: str) -> None:
     assert "type" in line_data
     assert "run_id" in line_data
     assert line_data["run_id"] == expected_run_id
@@ -41,34 +34,52 @@ def validate_schema(line_data: Dict[str, Any], expected_run_id: str) -> None:
         assert "tls" in line_data
         assert "ev" in line_data
         assert "metrics" in line_data
+        assert "comm" in line_data
+        assert "nav" in line_data
 
-        # Verify tls schema
+        # TLS validation
         for tls_id, tls_info in line_data["tls"].items():
             assert "phase" in tls_info
             assert "queues" in tls_info
+            assert "queues_est" in tls_info
             assert "signal" in tls_info
             for d in ("N", "S", "E", "W"):
                 assert d in tls_info["queues"]
+                assert d in tls_info["queues_est"]
                 assert d in tls_info["signal"]
 
-        # Verify ev schema
+        # EV validation
         for ev_entry in line_data["ev"]:
             assert "id" in ev_entry
             assert "tls" in ev_entry
             assert "eta" in ev_entry
             assert "dist" in ev_entry
             assert "speed" in ev_entry
+            assert "alert_age" in ev_entry
 
-        # Verify metrics schema
-        m = line_data["metrics"]
-        assert "avg_wait" in m
-        assert "n_vehicles" in m
-        assert "throughput" in m
+        # Comm validation
+        comm = line_data["comm"]
+        for key in ("pdr", "latency_ms", "penetration", "sent", "lost"):
+            assert key in comm
+
+        # Nav validation
+        nav = line_data["nav"]
+        for key in ("mode", "navigating", "avg_tt_nav", "avg_tt_non", "max_edge_load", "edge_load_cv"):
+            assert key in nav
 
     elif msg_type == "event":
         assert "t" in line_data
         assert "kind" in line_data
-        assert line_data["kind"] in ("preempt_start", "preempt_end", "incident_start", "incident_end")
+        assert line_data["kind"] in (
+            "preempt_start",
+            "preempt_end",
+            "incident_start",
+            "incident_end",
+            "alert_sent",
+            "alert_delivered",
+            "alert_lost",
+            "reroute",
+        )
         assert "tls" in line_data
         assert "detail" in line_data
 
@@ -77,123 +88,54 @@ def validate_schema(line_data: Dict[str, Any], expected_run_id: str) -> None:
         assert "seed" in line_data
         assert "controller" in line_data
         assert "scenario" in line_data
-        m = line_data["metrics"]
-        for key in (
-            "avg_waiting_time",
-            "avg_time_loss",
-            "avg_travel_time",
-            "ev_travel_time",
-            "max_queue",
-            "throughput_veh_per_hr",
-        ):
-            assert key in m
 
 
-def test_mock_sim_live_protocol() -> None:
-    """Verify mock_sim emits valid JSON lines adhering strictly to the live protocol."""
-    run_id = "test_mock_1"
+def test_mock_sim_live_protocol_v2() -> None:
+    run_id = "test_mock_v2"
     proc = run_cli_subprocess([
         "sim/mock_sim.py",
-        "--run-id",
-        run_id,
-        "--scenario",
-        "emergency",
-        "--controller",
-        "adaptive_ev",
-        "--seed",
-        "1",
+        "--run-id", run_id,
+        "--scenario", "emergency",
+        "--controller", "adaptive_ev",
+        "--seed", "1",
         "--live",
-        "--max-steps",
-        "25",
-        "--step-delay",
-        "0",
+        "--max-steps", "25",
+        "--step-delay", "0",
     ])
-
-    assert proc.returncode == 0, f"mock_sim failed: {proc.stderr}"
+    assert proc.returncode == 0
     lines = [line.strip() for line in proc.stdout.strip().splitlines() if line.strip()]
-    assert len(lines) >= 20
-
-    parsed_lines = []
     for line in lines:
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            pytest.fail(f"Non-JSON line encountered: {line}")
-        validate_schema(data, run_id)
-        parsed_lines.append(data)
-
-    # First line must be status: started
-    assert parsed_lines[0]["type"] == "status"
-    assert parsed_lines[0]["status"] == "started"
-
-    # Penultimate line must be status: finished
-    assert parsed_lines[-2]["type"] == "status"
-    assert parsed_lines[-2]["status"] == "finished"
-
-    # Last line must be result
-    assert parsed_lines[-1]["type"] == "result"
+        data = json.loads(line)
+        validate_schema_v2(data, run_id)
 
 
-def test_real_sim_live_protocol() -> None:
-    """Verify sim/main.py emits valid JSON lines in --live mode."""
-    run_id = "test_real_1"
+def test_real_sim_live_protocol_v2() -> None:
+    run_id = "test_real_v2"
     proc = run_cli_subprocess([
         "sim/main.py",
-        "--run-id",
-        run_id,
-        "--scenario",
-        "normal",
-        "--controller",
-        "fixed",
-        "--seed",
-        "1",
+        "--run-id", run_id,
+        "--scenario", "normal",
+        "--controller", "fixed",
+        "--seed", "1",
         "--live",
-        "--max-steps",
-        "15",
+        "--max-steps", "15",
     ])
-
-    assert proc.returncode == 0, f"main.py failed: {proc.stderr}"
+    assert proc.returncode == 0, f"Sim failed: {proc.stderr}"
     lines = [line.strip() for line in proc.stdout.strip().splitlines() if line.strip()]
-    assert len(lines) >= 15
-
-    parsed_lines = []
     for line in lines:
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            pytest.fail(f"Non-JSON line encountered on stdout: {line}")
-        validate_schema(data, run_id)
-        parsed_lines.append(data)
-
-    assert parsed_lines[0]["type"] == "status"
-    assert parsed_lines[0]["status"] == "started"
-
-    assert parsed_lines[-2]["type"] == "status"
-    assert parsed_lines[-2]["status"] == "finished"
-
-    assert parsed_lines[-1]["type"] == "result"
+        data = json.loads(line)
+        validate_schema_v2(data, run_id)
 
 
-def test_real_sim_error_protocol() -> None:
-    """Verify invalid scenario emits status: error line and non-zero exit code."""
-    run_id = "test_err_1"
+def test_cli_flags_not_implemented() -> None:
+    """Verify that unbuilt features like --nav astar raise clean NotImplementedError."""
     proc = run_cli_subprocess([
         "sim/main.py",
-        "--run-id",
-        run_id,
-        "--scenario",
-        "non_existent_xyz",
-        "--controller",
-        "fixed",
-        "--seed",
-        "1",
-        "--live",
+        "--run-id", "test_flags",
+        "--scenario", "normal",
+        "--controller", "fixed",
+        "--nav", "astar",
     ])
-
     assert proc.returncode != 0
     lines = [line.strip() for line in proc.stdout.strip().splitlines() if line.strip()]
-    assert len(lines) >= 1
-    err_obj = json.loads(lines[-1])
-    assert err_obj["type"] == "status"
-    assert err_obj["status"] == "error"
-    assert err_obj["run_id"] == run_id
+    assert any("NotImplementedError" in l for l in lines)

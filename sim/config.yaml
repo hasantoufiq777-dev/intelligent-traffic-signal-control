@@ -1,4 +1,4 @@
-# Intelligent Traffic Signal Control System - Global Configuration
+# Intelligent Traffic Signal Control System - Global Configuration (v2)
 
 simulation:
   step_length: 1.0
@@ -27,3 +27,47 @@ controllers:
     eta_threshold: 18.0
     clearance_time: 5.0
     recovery_time: 10.0
+    lookahead_junctions: 2
+
+vanet:
+  range: 300.0
+  base_loss: 0.0
+  max_loss: 0.2
+  base_delay_ms: 10.0
+  jitter_ms: 5.0
+  beacon_interval: 1.0
+  alert_interval: 0.5
+  alert_timeout: 2.0
+  stale_timeout: 3.0
+  queue_speed_threshold: 1.0
+  queue_zone_length: 100.0
+  backbone_delay_ms: 5.0
+  gps_sigma_m: 0.0
+  penetration: 1.0
+  relay: false
+  max_hops: 3
+
+navigation:
+  mode: "none" # none | astar | aco | aco_tuned
+  nav_fraction: 0.3
+  nav_interval: 30.0
+  v_min: 1.0
+  min_reroute_gap: 15.0
+  heuristic: "euclid" # euclid | zero
+
+aco:
+  alpha: 1.0
+  beta: 2.0
+  rho: 0.1
+  Q: 100.0
+  n_ants: 10
+  n_iterations: 10
+  elite_k: 3
+
+ga:
+  population_size: 12
+  generations: 12
+  crossover_rate: 0.8
+  mutation_rate: 0.2
+  elitism: 2
+  tuning_seeds: [101, 102, 103]

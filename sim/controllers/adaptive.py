@@ -2,7 +2,7 @@
 
 Adjusts green phase allocations dynamically based on real-time approach queues
 and starvation limits, while strictly enforcing minimum and maximum green constraints
-and safe yellow/all-red transitions.
+and safe yellow/all-red transitions. Reads traffic state strictly through a StateProvider.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from sim.controllers.base import BaseController
+from sim.sensing import StateProvider
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class AdaptiveController(BaseController):
        - Safe Transitions: Every phase switch routes through BaseController.set_phase_safe(),
          enforcing yellow clearance and all-red clearance intervals.
 
-    2. Demand Assessment (Every decision_interval seconds):
+    2. Demand Assessment (Every decision_interval seconds via StateProvider):
        - Measures queue lengths: Q_NS = Q_N + Q_S, Q_EW = Q_E + Q_W.
        - Monitors red-phase waiting duration per approach to detect starvation.
 
@@ -41,10 +42,11 @@ class AdaptiveController(BaseController):
         self,
         tls_id: str,
         params: Optional[Dict[str, Any]] = None,
+        provider: Optional[StateProvider] = None,
         sumo_api: Any = None,
     ) -> None:
-        """Initialize adaptive controller with policy parameters."""
-        super().__init__(tls_id, params=params, sumo_api=sumo_api)
+        """Initialize adaptive controller with policy parameters and state provider."""
+        super().__init__(tls_id, params=params, provider=provider, sumo_api=sumo_api)
 
         # Policy hyperparameters from config
         self.decision_interval: float = float(self.params.get("decision_interval", 5.0))
@@ -105,10 +107,8 @@ class AdaptiveController(BaseController):
 
     def step(self, sim_time: float) -> None:
         """Execute one simulation second of adaptive signal control."""
-        # 1. Progress active signal transitions (yellow -> all-red)
         self.update_transitions(1.0)
 
-        # In transition: hold green counter and decision timers
         if self.is_in_transition():
             self.time_in_current_green = 0.0
             self.decision_timer = 0.0
@@ -120,17 +120,16 @@ class AdaptiveController(BaseController):
         self.time_in_current_green += 1.0
         self.decision_timer += 1.0
 
-        # 2. Check if decision evaluation interval has elapsed
         if self.decision_timer < self.decision_interval:
             return
 
         self.decision_timer = 0.0
 
-        # 3. Constraint: Enforce Minimum Green
+        # Constraint 1: Enforce Minimum Green
         if self.time_in_current_green < self.min_green:
             return
 
-        # 4. Constraint: Enforce Maximum Green
+        # Constraint 2: Enforce Maximum Green
         if self.time_in_current_green >= self.max_green:
             target_phase = (
                 self.PHASE_EW_GREEN
@@ -141,7 +140,7 @@ class AdaptiveController(BaseController):
             self.time_in_current_green = 0.0
             return
 
-        # 5. Evaluate Traffic Pressure & Starvation
+        # Demand assessment
         q_ns = queues.get("N", 0) + queues.get("S", 0)
         q_ew = queues.get("E", 0) + queues.get("W", 0)
 
@@ -155,16 +154,12 @@ class AdaptiveController(BaseController):
         )
 
         if self.current_phase == self.PHASE_NS_GREEN:
-            # Current phase is NS Green. Decide whether to switch to EW Green.
             should_switch = False
-
             if ew_starving:
                 should_switch = True
             elif q_ns <= 1 and q_ew > 0:
-                # Active approach is empty/discharged while competing approach has waiting cars
                 should_switch = True
             elif q_ew > q_ns and (q_ew - q_ns >= self.queue_threshold):
-                # Competing direction demand exceeds current by threshold
                 should_switch = True
 
             if should_switch:
@@ -172,16 +167,12 @@ class AdaptiveController(BaseController):
                 self.time_in_current_green = 0.0
 
         elif self.current_phase == self.PHASE_EW_GREEN:
-            # Current phase is EW Green. Decide whether to switch to NS Green.
             should_switch = False
-
             if ns_starving:
                 should_switch = True
             elif q_ew <= 1 and q_ns > 0:
-                # Active approach is empty/discharged while competing approach has waiting cars
                 should_switch = True
             elif q_ns > q_ew and (q_ns - q_ew >= self.queue_threshold):
-                # Competing direction demand exceeds current by threshold
                 should_switch = True
 
             if should_switch:
