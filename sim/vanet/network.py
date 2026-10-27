@@ -12,8 +12,9 @@ import math
 import random
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from sim.vanet.alerts import AlertManager
 from sim.vanet.channel import WirelessChannel
-from sim.vanet.messages import BeaconMessage
+from sim.vanet.messages import BeaconMessage, EvAlertMessage
 from sim.vanet.nodes import RSUNode, TMC, is_vehicle_equipped
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class VanetNetwork:
         penetration_override: Optional[float] = None,
         loss_override: Optional[float] = None,
         range_override: Optional[float] = None,
+        relay_override: Optional[bool] = None,
     ) -> None:
         """Initialize VANET environment from configuration."""
         self.sumo_api = sumo_api
@@ -91,6 +93,15 @@ class VanetNetwork:
         self.queue_zone_length = float(self.config.get("queue_zone_length", 100.0))
         backbone_delay_ms = float(self.config.get("backbone_delay_ms", 5.0))
         self.gps_sigma_m = float(self.config.get("gps_sigma_m", 0.0))
+
+        relay_enabled = (
+            bool(relay_override)
+            if relay_override is not None
+            else bool(self.config.get("relay", False))
+        )
+        alert_interval = float(self.config.get("alert_interval", 0.5))
+        alert_timeout = float(self.config.get("alert_timeout", 2.0))
+        max_hops = int(self.config.get("max_hops", 3))
 
         # Channel & Node instances
         self.channel = WirelessChannel(
@@ -142,6 +153,20 @@ class VanetNetwork:
                 lane_directions=lane_dirs,
                 edge_directions=edge_dirs,
             )
+
+        # Emergency Alert Manager (Module 8)
+        self.alerts = AlertManager(
+            channel=self.channel,
+            rsus=self.rsus,
+            tls_ids=self.tls_ids,
+            alert_interval=alert_interval,
+            alert_timeout=alert_timeout,
+            relay_enabled=relay_enabled,
+            max_hops=max_hops,
+            backbone_delay_ms=backbone_delay_ms,
+            penetration=self.penetration,
+            seed=self.seed,
+        )
 
     def step(self, sim_time: float) -> None:
         """Execute one simulation second of the VANET emulation."""
@@ -205,13 +230,19 @@ class VanetNetwork:
 
                 self.last_beacon_time[vid] = sim_time
 
-        # 2. Deliver messages scheduled for or before sim_time
+        # 2. Step Emergency Alert Manager (Module 8)
+        self.alerts.step(sim_time, self.sumo_api)
+
+        # 3. Deliver messages scheduled for or before sim_time
         due_transmissions = self.channel.get_due_messages(sim_time)
         for msg, rsu_id, latency_ms in due_transmissions:
-            if rsu_id in self.rsus and isinstance(msg, BeaconMessage):
-                self.rsus[rsu_id].receive_beacon(msg, sim_time)
+            if rsu_id in self.rsus:
+                if isinstance(msg, BeaconMessage):
+                    self.rsus[rsu_id].receive_beacon(msg, sim_time)
+                elif isinstance(msg, EvAlertMessage):
+                    self.alerts.handle_delivered_alert(rsu_id, msg, latency_ms, sim_time)
 
-        # 3. RSUs prune stale records and update TMC via backbone
+        # 4. RSUs prune stale records and update TMC via backbone
         for rsu in self.rsus.values():
             speeds = rsu.estimate_edge_speeds(sim_time)
             self.tmc.receive_rsu_report(speeds)
@@ -231,8 +262,12 @@ class VanetNetwork:
         return rsu.estimate_waiting_times(self.current_sim_time)
 
     def get_rsu_ev_info(self, tls_id: str) -> List[Dict[str, Any]]:
-        """Return EV alert info received by this RSU (implemented in Module 8)."""
-        return []
+        """Return EV alert info received by this junction's RSU."""
+        return self.alerts.get_rsu_ev_info(tls_id, self.current_sim_time)
+
+    def pop_events(self) -> List[Dict[str, Any]]:
+        """Pop accumulated communication and alert telemetry events."""
+        return self.alerts.pop_events()
 
     def get_comm_stats(self) -> Dict[str, Any]:
         """Return communication statistics dictionary matching protocol v2 schema."""
@@ -240,10 +275,14 @@ class VanetNetwork:
         lost = self.channel.stats["lost"]
         pdr = round(float(self.channel.get_pdr()), 3) if sent > 0 else 1.0
         lat_ms = round(float(self.channel.get_avg_latency_ms()), 1)
+        alert_metrics = self.alerts.get_metrics()
         return {
             "pdr": pdr,
             "latency_ms": lat_ms,
             "penetration": self.penetration,
             "sent": sent,
             "lost": lost,
+            "ev_alert_delivery_time": alert_metrics["ev_alert_delivery_time"],
+            "missed_preemptions": alert_metrics["missed_preemptions"],
+            "avg_hops": alert_metrics["avg_hops"],
         }

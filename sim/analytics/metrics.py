@@ -119,8 +119,18 @@ def parse_tripinfo(
             "throughput_veh_per_hr": 0.0,
         }
 
-    tree = ET.parse(path)
-    root = tree.getroot()
+    try:
+        tree = ET.parse(path)
+        root = tree.getroot()
+    except Exception:
+        return {
+            "avg_waiting_time": 0.0,
+            "avg_time_loss": 0.0,
+            "avg_travel_time": 0.0,
+            "ev_travel_time": 0.0,
+            "max_queue": float(max_queue),
+            "throughput_veh_per_hr": 0.0,
+        }
 
     waiting_times: List[float] = []
     time_losses: List[float] = []

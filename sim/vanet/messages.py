@@ -53,11 +53,15 @@ class EvAlertMessage(BaseMessage):
     pos: Tuple[float, float] = (0.0, 0.0)
     speed: float = 0.0
     route_edges: List[str] = field(default_factory=list)
+    current_edge: str = ""
     eta: float = 0.0
+    sender_id: str = ""
+    via_backbone: bool = False
 
     def __post_init__(self) -> None:
         self.msg_type = MessageType.EV_ALERT
-        self.ttl = 3
+        if self.ttl == 1:
+            self.ttl = 3
 
 
 @dataclass

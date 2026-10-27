@@ -173,6 +173,10 @@ def generate_routes(
             if network == "grid2x2":
                 from_edge = ev.get("from_edge", "bottom0J0")
                 to_edge = ev.get("to_edge", "top1J3")
+                if from_edge in ("S2J0", "N2J0", "E2J0", "W2J0"):
+                    from_edge = "bottom0J0"
+                if to_edge in ("J02S", "J02N", "J02E", "J02W"):
+                    to_edge = "top1J3"
                 route_edges = GRID_DEFAULT_OD_ROUTES.get((from_edge, to_edge), [from_edge, to_edge])
                 route_str = " ".join(route_edges)
             else:

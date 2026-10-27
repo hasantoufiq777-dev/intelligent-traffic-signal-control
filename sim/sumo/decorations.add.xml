@@ -166,4 +166,9 @@
     <poi id="park_tree_3" type="nature.tree" color="34,139,34" x="260" y="390" layer="2"/>
     <poi id="park_tree_4" type="nature.tree" color="46,204,113" x="275" y="355" layer="2"/>
     <poi id="park_tree_5" type="nature.tree" color="34,139,34" x="240" y="320" layer="2"/>
+    <!-- =================================================================== -->
+    <!-- 6. VANET RSU INFRASTRUCTURE (DSRC / C-V2X Tower at Junction J0)     -->
+    <!-- =================================================================== -->
+    <poi id="poi_rsu_j0" type="rsu.antenna" color="0,190,255" x="306" y="306" width="3" height="3" name="RSU-J0 [VANET DSRC/C-V2X 5.9GHz]" layer="5"/>
+
 </additional>

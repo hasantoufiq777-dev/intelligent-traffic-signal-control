@@ -112,3 +112,85 @@ To ensure scientific honesty and transparency, the following design boundaries m
    - Path loss follows a deterministic quadratic curve rather than multi-path Nakagami-$m$, Rayleigh, or Two-Ray Ground fading models. Obstacles such as urban building shadowing are not ray-traced.
 3. **Co-located RSUs**:
    - RSUs are assumed to be stationed at intersection poles with omnidirectional antennas. RSU placement optimization is omitted as all junctions require individual signal controllers on the 2x2 grid.
+
+---
+
+## 5. VANET Emergency Vehicle Preemption & Message Flow (Module 8)
+
+Under the `adaptive_ev_vanet` controller policy, signal preemption operates without oracle access to SUMO TraCI ground truth. Instead, emergency preemption is driven purely by distributed V2I, V2V relay, and infrastructure backbone messages.
+
+### 5.1 Communication Topology & Message Types
+
+1. **`EV_ALERT` Generation**:
+   The emergency vehicle's OBU broadcasts an `EvAlertMessage` periodically every $\Delta t_{\text{alert}} = 0.5\,\text{s}$. The payload contains:
+   - Vehicle ID (`ev_id`)
+   - Sending timestamp ($t_{\text{alert}}$)
+   - Real-time kinematic coordinates $(x, y)$
+   - Instantaneous speed ($v$)
+   - Complete route edge list ($\mathcal{R}_{\text{edges}}$)
+   - Time-to-Live (`ttl = 3`) and Hop Count (`hops = 0`)
+
+2. **Direct V2I Transmission**:
+   RSUs positioned within the EV's direct line-of-sight RF range ($d \le R$) receive the alert subject to channel loss $P(\text{loss} \mid d)$ and stochastic delay $\text{delay}_{\text{ms}}$.
+
+3. **V2V Multi-Hop Relaying (`--relay on`)**:
+   When direct single-hop communication is blocked or attenuated by distance ($d > R$):
+   - Nearby equipped civilian vehicles ($v_{\text{civ}}$) within range of the EV ingest the alert.
+   - Using per-node duplicate suppression on `msg_id`, each vehicle re-broadcasts the alert exactly once with decremented TTL (`ttl - 1`) and incremented hop count (`hops + 1`).
+   - The relayed packet reaches downstream RSUs that were originally beyond the single-hop horizon.
+
+4. **Wired Infrastructure Backbone**:
+   Upon ingesting an alert (via direct V2I or V2V relay), the receiving RSU inspects $\mathcal{R}_{\text{edges}}$:
+   - For all downstream signalized junctions along the EV's path, the alert is forwarded across the high-speed wired backbone with fixed latency $\delta_{\text{backbone}} = 5.0\,\text{ms}$ and zero packet loss.
+   - Downstream controllers look ahead and prepare signal transitions prior to the EV entering their local RF radius.
+
+### 5.2 RSU Dead-Reckoning & Alert Expiry
+
+When a controller queries `provider.get_ev_info(tls_id)` at time $t$:
+1. **Age Threshold**: The alert age $\tau_{\text{age}} = t - t_{\text{alert}}$ is evaluated. If $\tau_{\text{age}} > \tau_{\text{timeout}} = 2.0\,\text{s}$, the alert is expired and dropped. Preemption immediately aborts to avoid green trap hazards.
+2. **Dead-Reckoning Extrapolation**:
+   $$d_{\text{extrap}}(t) = \max\left(0.0,\, \text{dist}(\text{pos}_{\text{alert}},\, \text{RSU}) - v \cdot \tau_{\text{age}}\right)$$
+3. **Queue-Blocked Velocity Compensation**:
+   If an ambulance is trapped behind a red-light queue ($v < 1.0\,\text{m/s}$ and $d \le 150\,\text{m}$), an uncompensated ETA calculation $d/v \to \infty$ would fail to trigger preemption. The RSU applies a nominal cruising speed fallback $v_{\text{cruise}} = 15.0\,\text{m/s}$:
+   $$\text{ETA}(t) = \frac{d_{\text{extrap}}(t)}{\max(v, 15.0 \text{ if } v < 1.0 \text{ else } 0.1)}$$
+
+### 5.3 Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor EV as Emergency Vehicle (OBU)
+    participant Relay as Civilian Vehicles (V2V Relay)
+    participant RSU as Local Junction RSU (J0)
+    participant Backbone as Wired Backbone
+    participant Downstream as Downstream RSU (J1)
+    participant Controller as Signal Controller (adaptive_ev_vanet)
+
+    Note over EV: EV enters corridor, emits periodic alert (0.5s interval)
+    EV->>RSU: EV_ALERT (Direct V2I, 0 hops, d <= 300m)
+    alt Range Exceeded / High Loss
+        EV->>Relay: EV_ALERT (Wireless Broadcast)
+        Relay->>RSU: EV_ALERT (Relayed V2V, 1 hop, TTL-1)
+    end
+
+    Note over RSU: RSU ingests alert, updates dead-reckoning state
+    RSU->>Backbone: Forward alert to downstream junctions on route
+    Backbone->>Downstream: EV_ALERT (Low-latency wired delivery, 5ms)
+
+    loop Every Simulation Step (1s)
+        Controller->>RSU: provider.get_ev_info("J0")
+        RSU-->>Controller: [id: amb1, approach: S, ETA: 13.4s, alert_age: 0.1s]
+        
+        alt ETA <= 18s and alert_age <= 2.0s
+            Note over Controller: Preemption Triggered!
+            Controller->>Controller: Phase State: NORMAL -> TRANSITION -> EV_GREEN
+        else alert_age > 2.0s (Stale)
+            Note over Controller: Alert Timeout: EV Unknown (Preemption Disallowed)
+        end
+    end
+
+    Note over EV: EV crosses stop line (dist <= 0m)
+    RSU-->>Controller: EV Cleared
+    Controller->>Controller: Phase State: EV_GREEN -> RECOVERY (Discharge Starved Queues)
+```
+

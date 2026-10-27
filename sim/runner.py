@@ -66,7 +66,7 @@ def create_controller(
     ctrl_lower = controller_name.lower()
     if ctrl_lower == "fixed":
         return FixedTimeController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
-    elif ctrl_lower in ("adaptive", "adaptive_vanet", "adaptive_ev", "adaptive_ev_tuned"):
+    elif ctrl_lower in ("adaptive", "adaptive_vanet", "adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
         try:
             from sim.controllers.adaptive import AdaptiveController
             if ctrl_lower in ("adaptive", "adaptive_vanet"):
@@ -76,13 +76,10 @@ def create_controller(
 
         try:
             from sim.controllers.preemption import PreemptionController
-            if ctrl_lower in ("adaptive_ev", "adaptive_ev_tuned"):
+            if ctrl_lower in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
                 return PreemptionController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
         except ImportError:
             pass
-
-    elif ctrl_lower in ("adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
-        raise NotImplementedError(f"VANET EV preemption controller '{controller_name}' is scheduled for Module 8.")
 
     raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
 
@@ -118,8 +115,6 @@ def run_simulation(
     # Check for features not implemented yet
     if nav != "none":
         raise NotImplementedError(f"Navigation mode '{nav}' is not implemented yet (scheduled for Module 9).")
-    if relay == "on":
-        raise NotImplementedError("VANET V2V relaying is not implemented yet (scheduled for Module 8).")
 
     try:
         signal.signal(signal.SIGINT, _handle_signal)
@@ -140,10 +135,10 @@ def run_simulation(
     if ctrl_section is None:
         if controller == "adaptive_vanet":
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
-        elif controller in ("adaptive_ev", "adaptive_ev_tuned"):
+        elif controller in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {}).copy()
             ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
-    elif controller in ("adaptive_ev", "adaptive_ev_tuned"):
+    elif controller in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
         ctrl_section = dict(ctrl_section)
         ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
 
@@ -166,7 +161,7 @@ def run_simulation(
         else scenario_cfg.get("simulation", {}).get("duration", 1000.0)
     )
 
-    network = scenario_cfg.get("network", "single")
+    network = params.get("network") if params and "network" in params else scenario_cfg.get("network", "single")
     routes_path = project_root / "sim" / "sumo" / f"routes_{run_id}.rou.xml"
     generate_routes(scenario_cfg, routes_path, override_seed=seed, network_override=network)
 
@@ -220,7 +215,7 @@ def run_simulation(
     t = 0.0
     arrived_count = 0
     was_interrupted = False
-    is_vanet_controller = (controller == "adaptive_vanet")
+    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"))
     vanet_net: Optional[Any] = None
     queue_errors: List[float] = []
 
@@ -243,6 +238,7 @@ def run_simulation(
             vanet_cfg = base_config.get("vanet", {}).copy()
             if params and "vanet" in params:
                 vanet_cfg.update(params["vanet"])
+            relay_flag = True if relay == "on" else (False if relay == "off" else None)
             vanet_net = VanetNetwork(
                 sumo_api=sumo_api,
                 tls_ids=tls_ids,
@@ -251,6 +247,7 @@ def run_simulation(
                 penetration_override=penetration,
                 loss_override=loss,
                 range_override=range_m,
+                relay_override=relay_flag,
             )
             provider: StateProvider = VanetStateProvider(vanet_net)
             oracle_provider = OracleStateProvider(sumo_api)
@@ -362,6 +359,10 @@ def run_simulation(
                         "lost": 0,
                     }
 
+                if is_vanet_controller and vanet_net is not None:
+                    for a_ev in vanet_net.pop_events():
+                        emit_json_line(a_ev)
+
                 emit_json_line({
                     "type": "state",
                     "run_id": run_id,
@@ -389,6 +390,13 @@ def run_simulation(
             if t > 60.0 and sumo_api.simulation.getMinExpectedNumber() <= 0:
                 break
 
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "connection closed" in err_msg or "closed by sumo" in err_msg or "fataltracierror" in type(e).__name__.lower():
+            logger.info("SUMO GUI window closed by user or connection closed.")
+            was_interrupted = True
+        else:
+            raise
     finally:
         logger_step.close()
         try:
@@ -448,7 +456,9 @@ def run_simulation(
         result_payload["queue_estimate_mae"] = mae
         result_payload["pdr"] = final_comm["pdr"]
         result_payload["avg_latency_ms"] = final_comm["latency_ms"]
-        result_payload["avg_hops"] = 1.0
+        result_payload["avg_hops"] = final_comm.get("avg_hops", 1.0)
+        result_payload["ev_alert_delivery_time"] = final_comm.get("ev_alert_delivery_time", 0.0)
+        result_payload["missed_preemptions"] = final_comm.get("missed_preemptions", 0)
 
     # Write preemption events CSV if any occurred
     import csv

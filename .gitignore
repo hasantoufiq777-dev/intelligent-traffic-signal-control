@@ -50,6 +50,8 @@ build/
 *.dump.xml
 *.net.xml.bak
 sumo-launchd.log
+tripinfo_*.xml
+routes_*.rou.xml
 
 # Simulation logs & experiment raw runs
 logs/
