@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class StateProvider(ABC):
@@ -32,10 +32,7 @@ class StateProvider(ABC):
 
     @abstractmethod
     def get_ev_info(self, tls_id: str) -> List[Dict[str, Any]]:
-        """Return list of emergency vehicle records relevant to this TLS.
-
-        Each record contains: {'id': str, 'tls': str, 'eta': float, 'dist': float, 'speed': float, 'alert_age': float}
-        """
+        """Return list of emergency vehicle records relevant to this TLS."""
         pass
 
     @abstractmethod
@@ -54,6 +51,7 @@ class OracleStateProvider(StateProvider):
     def __init__(self, sumo_api: Any) -> None:
         self.sumo_api = sumo_api
         self._controlled_lanes_cache: Dict[str, List[str]] = {}
+        self._lane_direction_cache: Dict[str, str] = {}
 
     @property
     def name(self) -> str:
@@ -68,6 +66,43 @@ class OracleStateProvider(StateProvider):
                 self._controlled_lanes_cache[tls_id] = []
         return self._controlled_lanes_cache[tls_id]
 
+    def _resolve_lane_direction(self, lane_id: str, tls_id: str) -> str:
+        """Determine approach direction (N, S, E, W) dynamically using geometry."""
+        cache_key = f"{tls_id}_{lane_id}"
+        if cache_key in self._lane_direction_cache:
+            return self._lane_direction_cache[cache_key]
+
+        # Fast heuristic based on edge name prefixes
+        edge_id = lane_id.split("_")[0]
+        if edge_id.startswith("N2") or edge_id.startswith("top") or "top" in edge_id or edge_id in ("J2J0", "J3J1"):
+            direction = "N"
+        elif edge_id.startswith("S2") or edge_id.startswith("bottom") or "bottom" in edge_id or edge_id in ("J0J2", "J1J3"):
+            direction = "S"
+        elif edge_id.startswith("E2") or edge_id.startswith("right") or "right" in edge_id or edge_id in ("J1J0", "J3J2"):
+            direction = "E"
+        elif edge_id.startswith("W2") or edge_id.startswith("left") or "left" in edge_id or edge_id in ("J0J1", "J2J3"):
+            direction = "W"
+        else:
+            # Fallback to geometric shape if available
+            try:
+                shape = self.sumo_api.lane.getShape(lane_id)
+                if len(shape) >= 2:
+                    p1 = shape[0]
+                    p2 = shape[-1]
+                    dx = p1[0] - p2[0]
+                    dy = p1[1] - p2[1]
+                    if abs(dy) >= abs(dx):
+                        direction = "N" if dy > 0 else "S"
+                    else:
+                        direction = "E" if dx > 0 else "W"
+                else:
+                    direction = "N"
+            except Exception:
+                direction = "N"
+
+        self._lane_direction_cache[cache_key] = direction
+        return direction
+
     def get_queues(self, tls_id: str) -> Dict[str, int]:
         queues = {"N": 0, "S": 0, "E": 0, "W": 0}
         if not self.sumo_api:
@@ -80,15 +115,8 @@ class OracleStateProvider(StateProvider):
             except Exception:
                 halting = 0
 
-            # Directional mapping from lane/edge name
-            if "N2" in lane_id or ":J0" in lane_id and "N" in lane_id:
-                queues["N"] += halting
-            elif "S2" in lane_id or ":J0" in lane_id and "S" in lane_id:
-                queues["S"] += halting
-            elif "E2" in lane_id or ":J0" in lane_id and "E" in lane_id:
-                queues["E"] += halting
-            elif "W2" in lane_id or ":J0" in lane_id and "W" in lane_id:
-                queues["W"] += halting
+            d = self._resolve_lane_direction(lane_id, tls_id)
+            queues[d] += halting
 
         return queues
 
@@ -113,14 +141,8 @@ class OracleStateProvider(StateProvider):
                 except Exception:
                     pass
 
-            if "N2" in lane_id:
-                wait_times["N"] = max(wait_times["N"], max_w)
-            elif "S2" in lane_id:
-                wait_times["S"] = max(wait_times["S"], max_w)
-            elif "E2" in lane_id:
-                wait_times["E"] = max(wait_times["E"], max_w)
-            elif "W2" in lane_id:
-                wait_times["W"] = max(wait_times["W"], max_w)
+            d = self._resolve_lane_direction(lane_id, tls_id)
+            wait_times[d] = max(wait_times[d], max_w)
 
         return wait_times
 
@@ -172,7 +194,7 @@ class OracleStateProvider(StateProvider):
         try:
             edge_ids = self.sumo_api.edge.getIDList()
             for eid in edge_ids:
-                if not eid.startswith(":"):  # skip internal junction edges
+                if not eid.startswith(":"):
                     speeds[eid] = float(self.sumo_api.edge.getLastStepMeanSpeed(eid))
         except Exception:
             pass

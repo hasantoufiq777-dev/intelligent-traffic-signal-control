@@ -68,15 +68,29 @@ class BaseController:
         if self.sumo_api:
             try:
                 self.current_phase = self.sumo_api.trafficlight.getPhase(self.tls_id)
+                self._cache_link_directions()
             except Exception as e:
                 logger.warning("Could not read initial TLS info for %s: %s", self.tls_id, e)
 
-    @staticmethod
-    def has_conflicting_greens(state: str) -> bool:
+    def has_conflicting_greens(self_or_state: Any, state: str = "") -> bool:
         """Check if a signal state string contains simultaneous conflicting greens."""
+        if isinstance(self_or_state, str):
+            state_str = self_or_state
+            self_obj = None
+        else:
+            self_obj = self_or_state
+            state_str = state
+
         green_chars = {"G", "g"}
-        ns_has_green = any(i < len(state) and state[i] in green_chars for i in BaseController.NS_LINKS)
-        ew_has_green = any(i < len(state) and state[i] in green_chars for i in BaseController.EW_LINKS)
+        ns_indices = getattr(self_obj, "_ns_link_indices", set()) if self_obj else set()
+        ew_indices = getattr(self_obj, "_ew_link_indices", set()) if self_obj else set()
+
+        if not ns_indices or not ew_indices:
+            ns_indices = BaseController.NS_LINKS
+            ew_indices = BaseController.EW_LINKS
+
+        ns_has_green = any(i < len(state_str) and state_str[i] in green_chars for i in ns_indices)
+        ew_has_green = any(i < len(state_str) and state_str[i] in green_chars for i in ew_indices)
         return ns_has_green and ew_has_green
 
     def get_current_phase(self) -> int:
@@ -106,6 +120,42 @@ class BaseController:
         }
         return names.get(self.current_phase, f"PHASE_{self.current_phase}")
 
+    def _cache_link_directions(self) -> None:
+        """Cache approach direction for each traffic light link index."""
+        if not self.sumo_api:
+            return
+        try:
+            controlled_links = self.sumo_api.trafficlight.getControlledLinks(self.tls_id)
+            self._link_directions: List[str] = []
+            self._ns_link_indices: set[int] = set()
+            self._ew_link_indices: set[int] = set()
+
+            for idx, link_list in enumerate(controlled_links):
+                direction = "N"
+                if link_list and len(link_list[0]) > 0:
+                    from_lane = link_list[0][0]
+                    if self.provider and hasattr(self.provider, "_resolve_lane_direction"):
+                        direction = self.provider._resolve_lane_direction(from_lane, self.tls_id)
+                    else:
+                        if "N2" in from_lane or "top" in from_lane or from_lane in ("J2J0_0", "J2J0_1", "J3J1_0", "J3J1_1"):
+                            direction = "N"
+                        elif "S2" in from_lane or "bottom" in from_lane or from_lane in ("J0J2_0", "J0J2_1", "J1J3_0", "J1J3_1"):
+                            direction = "S"
+                        elif "E2" in from_lane or "right" in from_lane or from_lane in ("J1J0_0", "J1J0_1", "J3J2_0", "J3J2_1"):
+                            direction = "E"
+                        elif "W2" in from_lane or "left" in from_lane or from_lane in ("J0J1_0", "J0J1_1", "J2J3_0", "J2J3_1"):
+                            direction = "W"
+
+                self._link_directions.append(direction)
+                if direction in ("N", "S"):
+                    self._ns_link_indices.add(idx)
+                else:
+                    self._ew_link_indices.add(idx)
+        except Exception:
+            self._link_directions = []
+            self._ns_link_indices = set(self.NS_LINKS)
+            self._ew_link_indices = set(self.EW_LINKS)
+
     def get_approach_signals(self) -> Dict[str, str]:
         """Return dominant signal state ('G', 'y', 'r') per approach direction."""
         signals = {"N": "r", "S": "r", "E": "r", "W": "r"}
@@ -113,6 +163,20 @@ class BaseController:
         if not state:
             return signals
 
+        if not hasattr(self, "_link_directions") or not self._link_directions:
+            self._cache_link_directions()
+
+        if hasattr(self, "_link_directions") and self._link_directions:
+            for idx, d in enumerate(self._link_directions):
+                if idx < len(state):
+                    char = state[idx]
+                    if char in ("G", "g"):
+                        signals[d] = "G"
+                    elif char == "y" and signals[d] != "G":
+                        signals[d] = "y"
+            return signals
+
+        # Fallback to single junction link index ranges
         directions = {
             "N": range(0, min(4, len(state))),
             "E": range(4, min(8, len(state))),

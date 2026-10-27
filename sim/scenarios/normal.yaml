@@ -1,12 +1,12 @@
 name: normal
-network: single
+network: single # single | grid2x2
 simulation:
   duration: 1000
   step_length: 1.0
 
 traffic:
   seed: 1
-  rates: # vehicles per hour per direction
+  rates: # For single network (vehicles per hour per direction)
     N: 360
     S: 360
     E: 300
@@ -15,6 +15,20 @@ traffic:
     left: 0.15
     straight: 0.70
     right: 0.15
+  rate_per_od: 100 # For grid2x2 network (vehicles per hour per OD pair)
+  od_flows:
+    - {from: "bottom0J0", to: "top1J3", rate: 100}
+    - {from: "bottom1J1", to: "top0J2", rate: 100}
+    - {from: "left0J0", to: "right1J3", rate: 100}
+    - {from: "left1J2", to: "right0J1", rate: 100}
+    - {from: "top0J2", to: "bottom1J1", rate: 100}
+    - {from: "top1J3", to: "bottom0J0", rate: 100}
+    - {from: "right0J1", to: "left1J2", rate: 100}
+    - {from: "right1J3", to: "left0J0", rate: 100}
+    - {from: "bottom0J0", to: "top0J2", rate: 120}
+    - {from: "bottom1J1", to: "top1J3", rate: 120}
+    - {from: "left0J0", to: "right0J1", rate: 120}
+    - {from: "left1J2", to: "right1J3", rate: 120}
 
 emergency:
   enabled: false

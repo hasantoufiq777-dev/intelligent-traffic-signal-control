@@ -47,6 +47,7 @@ def main() -> None:
     parser.add_argument("--params", type=str, default=None, help="Path to params YAML")
     parser.add_argument("--run-id", type=str, default="r1", help="Run identifier")
     parser.add_argument("--live", action="store_true", help="Stream live JSON protocol")
+    parser.add_argument("--network", type=str, default=None, help="Network type (single | grid2x2)")
     parser.add_argument("--max-steps", type=int, default=60, help="Simulation duration in steps")
     parser.add_argument("--step-delay", type=float, default=0.02, help="Real-world delay per step in seconds")
 
@@ -87,12 +88,30 @@ def main() -> None:
 
     rng = random.Random(args.seed)
 
+    # Determine network type
+    network = args.network
+    if not network:
+        if Path(args.scenario).exists():
+            try:
+                import yaml
+                with open(args.scenario, "r", encoding="utf-8") as f:
+                    sc_data = yaml.safe_load(f)
+                    network = sc_data.get("network", "single")
+            except Exception:
+                network = "single"
+        elif args.scenario == "navigation":
+            network = "grid2x2"
+        else:
+            network = "single"
+
+    tls_ids = ["J0", "J1", "J2", "J3"] if network == "grid2x2" else ["J0"]
+
     if args.live:
         emit_json({
             "type": "status",
             "run_id": args.run_id,
             "status": "started",
-            "message": f"Mock simulation started for scenario '{args.scenario}' with controller '{args.controller}'",
+            "message": f"Mock simulation started for scenario '{args.scenario}' with controller '{args.controller}' on network '{network}'",
         })
 
     t = 0
@@ -211,19 +230,21 @@ def main() -> None:
             total_lost += step_lost
             pdr = round(float((total_sent - total_lost) / max(total_sent, 1)), 2)
 
+            tls_data: Dict[str, Any] = {}
+            for jid in tls_ids:
+                tls_data[jid] = {
+                    "phase": phase_name,
+                    "queues": {"N": q_n, "S": q_s, "E": q_e, "W": q_w},
+                    "queues_est": {"N": q_est_n, "S": q_est_s, "E": q_est_e, "W": q_est_w},
+                    "signal": signals,
+                }
+
             if args.live:
                 emit_json({
                     "type": "state",
                     "run_id": args.run_id,
                     "t": t,
-                    "tls": {
-                        "J0": {
-                            "phase": phase_name,
-                            "queues": {"N": q_n, "S": q_s, "E": q_e, "W": q_w},
-                            "queues_est": {"N": q_est_n, "S": q_est_s, "E": q_est_e, "W": q_est_w},
-                            "signal": signals,
-                        }
-                    },
+                    "tls": tls_data,
                     "ev": ev_list,
                     "metrics": {
                         "avg_wait": avg_wait,

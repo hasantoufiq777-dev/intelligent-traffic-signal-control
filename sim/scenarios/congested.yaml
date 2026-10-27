@@ -1,12 +1,12 @@
 name: congested
-network: single
+network: single # single | grid2x2
 simulation:
   duration: 1000
   step_length: 1.0
 
 traffic:
   seed: 1
-  rates: # vehicles per hour per direction (2x normal demand)
+  rates: # For single network (2x demand)
     N: 720
     S: 720
     E: 600
@@ -15,6 +15,20 @@ traffic:
     left: 0.15
     straight: 0.70
     right: 0.15
+  rate_per_od: 200 # For grid2x2 network (2x demand)
+  od_flows:
+    - {from: "bottom0J0", to: "top1J3", rate: 200}
+    - {from: "bottom1J1", to: "top0J2", rate: 200}
+    - {from: "left0J0", to: "right1J3", rate: 200}
+    - {from: "left1J2", to: "right0J1", rate: 200}
+    - {from: "top0J2", to: "bottom1J1", rate: 200}
+    - {from: "top1J3", to: "bottom0J0", rate: 200}
+    - {from: "right0J1", to: "left1J2", rate: 200}
+    - {from: "right1J3", to: "left0J0", rate: 200}
+    - {from: "bottom0J0", to: "top0J2", rate: 240}
+    - {from: "bottom1J1", to: "top1J3", rate: 240}
+    - {from: "left0J0", to: "right0J1", rate: 240}
+    - {from: "left1J2", to: "right1J3", rate: 240}
 
 emergency:
   enabled: false

@@ -1,0 +1,29 @@
+name: navigation
+network: grid2x2
+simulation:
+  duration: 1000
+  step_length: 1.0
+
+traffic:
+  seed: 1
+  rate_per_od: 150
+  od_flows:
+    - {from: "bottom0J0", to: "top1J3", rate: 250} # High diagonal demand with 2 equal alternatives
+    - {from: "left0J0", to: "right1J3", rate: 250} # High diagonal demand with 2 equal alternatives
+    - {from: "bottom1J1", to: "top0J2", rate: 150}
+    - {from: "left1J2", to: "right0J1", rate: 150}
+    - {from: "top0J2", to: "bottom1J1", rate: 150}
+    - {from: "top1J3", to: "bottom0J0", rate: 150}
+    - {from: "right0J1", to: "left1J2", rate: 150}
+    - {from: "right1J3", to: "left0J0", rate: 150}
+    - {from: "bottom0J0", to: "top0J2", rate: 100}
+    - {from: "bottom1J1", to: "top1J3", rate: 100}
+    - {from: "left0J0", to: "right0J1", rate: 100}
+    - {from: "left1J2", to: "right1J3", rate: 100}
+
+emergency:
+  enabled: false
+  vehicles: []
+
+incident:
+  enabled: false

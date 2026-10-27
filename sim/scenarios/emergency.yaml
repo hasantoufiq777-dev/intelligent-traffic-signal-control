@@ -1,5 +1,5 @@
 name: emergency
-network: single
+network: single # single | grid2x2
 simulation:
   duration: 1000
   step_length: 1.0
@@ -15,14 +15,28 @@ traffic:
     left: 0.15
     straight: 0.70
     right: 0.15
+  rate_per_od: 100
+  od_flows:
+    - {from: "bottom0J0", to: "top1J3", rate: 100}
+    - {from: "bottom1J1", to: "top0J2", rate: 100}
+    - {from: "left0J0", to: "right1J3", rate: 100}
+    - {from: "left1J2", to: "right0J1", rate: 100}
+    - {from: "top0J2", to: "bottom1J1", rate: 100}
+    - {from: "top1J3", to: "bottom0J0", rate: 100}
+    - {from: "right0J1", to: "left1J2", rate: 100}
+    - {from: "right1J3", to: "left0J0", rate: 100}
+    - {from: "bottom0J0", to: "top0J2", rate: 120}
+    - {from: "bottom1J1", to: "top1J3", rate: 120}
+    - {from: "left0J0", to: "right0J1", rate: 120}
+    - {from: "left1J2", to: "right1J3", rate: 120}
 
 emergency:
   enabled: true
   vehicles:
     - id: amb1
       depart: 120.0
-      from_edge: S2J0
-      to_edge: J02N
+      from_edge: S2J0 # for single net; for grid2x2, bottom0J0 is used
+      to_edge: J02N # for single net; for grid2x2, top1J3 is used
       approach_direction: S
 
 incident:

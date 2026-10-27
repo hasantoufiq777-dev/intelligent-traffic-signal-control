@@ -154,8 +154,9 @@ def run_simulation(
         else scenario_cfg.get("simulation", {}).get("duration", 1000.0)
     )
 
+    network = scenario_cfg.get("network", "single")
     routes_path = project_root / "sim" / "sumo" / f"routes_{run_id}.rou.xml"
-    generate_routes(scenario_cfg, routes_path, override_seed=seed)
+    generate_routes(scenario_cfg, routes_path, override_seed=seed, network_override=network)
 
     # 3. Setup outputs
     results_dir = project_root / "results"
@@ -172,7 +173,10 @@ def run_simulation(
     import sumolib
 
     sumo_binary = sumolib.checkBinary("sumo-gui" if gui else "sumo")
-    net_path = project_root / "sim" / "sumo" / "net.xml"
+    if network == "grid2x2":
+        net_path = project_root / "sim" / "sumo" / "grid2x2.net.xml"
+    else:
+        net_path = project_root / "sim" / "sumo" / "net.xml"
 
     sumo_cmd = [
         sumo_binary,
