@@ -200,3 +200,9 @@ class OracleStateProvider(StateProvider):
             pass
 
         return speeds
+
+
+# Import VanetStateProvider for unified sensing package interface
+from sim.vanet.sensing_vanet import VanetStateProvider  # noqa: E402
+
+__all__ = ["StateProvider", "OracleStateProvider", "VanetStateProvider"]

@@ -3,6 +3,7 @@
     <input>
         <net-file value="net.xml"/>
         <route-files value="routes.rou.xml"/>
+        <additional-files value="decorations.add.xml"/>
     </input>
     <output>
         <tripinfo-output value="tripinfo.out.xml"/>

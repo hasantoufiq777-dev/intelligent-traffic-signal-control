@@ -67,6 +67,10 @@ def test_step_metrics_logger(tmp_path: Path) -> None:
         queue_w=0,
         n_vehicles=8,
         ev_present=False,
+        queue_est_n=2,
+        queue_est_s=5,
+        queue_est_e=1,
+        queue_est_w=0,
     )
     logger.log_step(
         sim_time=2.0,
@@ -78,6 +82,10 @@ def test_step_metrics_logger(tmp_path: Path) -> None:
         queue_w=2,
         n_vehicles=16,
         ev_present=True,
+        queue_est_n=4,
+        queue_est_s=7,
+        queue_est_e=3,
+        queue_est_w=2,
     )
     logger.close()
 
@@ -85,5 +93,6 @@ def test_step_metrics_logger(tmp_path: Path) -> None:
 
     content = csv_file.read_text(encoding="utf-8").strip().splitlines()
     assert len(content) == 3  # Header + 2 data lines
-    assert content[0] == "time,tls_id,phase,queue_N,queue_S,queue_E,queue_W,n_vehicles,ev_present"
-    assert "2.0,J0,0,4,7,3,2,16,1" in content[2]
+    expected_header = "time,tls_id,phase,queue_N,queue_S,queue_E,queue_W,n_vehicles,ev_present,queue_est_N,queue_est_S,queue_est_E,queue_est_W"
+    assert content[0] == expected_header
+    assert "2.0,J0,0,4,7,3,2,16,1,4,7,3,2" in content[2]

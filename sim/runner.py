@@ -66,10 +66,10 @@ def create_controller(
     ctrl_lower = controller_name.lower()
     if ctrl_lower == "fixed":
         return FixedTimeController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
-    elif ctrl_lower in ("adaptive", "adaptive_ev", "adaptive_ev_tuned"):
+    elif ctrl_lower in ("adaptive", "adaptive_vanet", "adaptive_ev", "adaptive_ev_tuned"):
         try:
             from sim.controllers.adaptive import AdaptiveController
-            if ctrl_lower == "adaptive":
+            if ctrl_lower in ("adaptive", "adaptive_vanet"):
                 return AdaptiveController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
         except ImportError:
             pass
@@ -81,8 +81,8 @@ def create_controller(
         except ImportError:
             pass
 
-    elif ctrl_lower in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
-        raise NotImplementedError(f"VANET controller '{controller_name}' is scheduled for Module 6/8.")
+    elif ctrl_lower in ("adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
+        raise NotImplementedError(f"VANET EV preemption controller '{controller_name}' is scheduled for Module 8.")
 
     raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
 
@@ -136,7 +136,11 @@ def run_simulation(
         with open(config_file, "r", encoding="utf-8") as f:
             base_config = yaml.safe_load(f) or {}
 
-    ctrl_params = base_config.get("controllers", {}).get(controller, {}).copy()
+    ctrl_section = base_config.get("controllers", {}).get(controller)
+    if ctrl_section is None and controller == "adaptive_vanet":
+        ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
+
+    ctrl_params = dict(ctrl_section or {})
     if params:
         ctrl_params.update(params)
 
@@ -196,10 +200,21 @@ def run_simulation(
         "-1",
     ]
 
+    decorations_file = project_root / "sim" / "sumo" / "decorations.add.xml"
+    if network == "single" and decorations_file.exists():
+        sumo_cmd.extend(["-a", str(decorations_file)])
+
+    gui_settings_file = project_root / "sim" / "sumo" / "gui-settings.cfg.xml"
+    if gui and gui_settings_file.exists():
+        sumo_cmd.extend(["--gui-settings-file", str(gui_settings_file)])
+
     controllers_map: Dict[str, Any] = {}
     t = 0.0
     arrived_count = 0
     was_interrupted = False
+    is_vanet_controller = (controller == "adaptive_vanet")
+    vanet_net: Optional[Any] = None
+    queue_errors: List[float] = []
 
     if live:
         emit_json_line({
@@ -211,11 +226,30 @@ def run_simulation(
 
     try:
         sumo_api.start(sumo_cmd)
-
-        # Initialize StateProvider (OracleStateProvider for current tier)
-        provider = OracleStateProvider(sumo_api)
-
         tls_ids = list(sumo_api.trafficlight.getIDList())
+
+        if is_vanet_controller:
+            from sim.vanet.network import VanetNetwork
+            from sim.vanet.sensing_vanet import VanetStateProvider
+
+            vanet_cfg = base_config.get("vanet", {}).copy()
+            if params and "vanet" in params:
+                vanet_cfg.update(params["vanet"])
+            vanet_net = VanetNetwork(
+                sumo_api=sumo_api,
+                tls_ids=tls_ids,
+                config=vanet_cfg,
+                seed=seed,
+                penetration_override=penetration,
+                loss_override=loss,
+                range_override=range_m,
+            )
+            provider: StateProvider = VanetStateProvider(vanet_net)
+            oracle_provider = OracleStateProvider(sumo_api)
+        else:
+            provider = OracleStateProvider(sumo_api)
+            oracle_provider = provider
+
         for tid in tls_ids:
             controllers_map[tid] = create_controller(
                 controller_name=controller,
@@ -232,6 +266,8 @@ def run_simulation(
 
             t += 1.0
             provider.update(t)
+            if is_vanet_controller:
+                oracle_provider.update(t)
 
             # Step controllers
             for ctrl in controllers_map.values():
@@ -253,27 +289,38 @@ def run_simulation(
             # Step metrics logging and live state payload
             tls_state_dict: Dict[str, Any] = {}
             for tid, ctrl in controllers_map.items():
-                queues = ctrl.get_queue_lengths()
                 current_phase = ctrl.get_current_phase()
                 phase_name = getattr(ctrl, "get_phase_name", lambda: f"PHASE_{current_phase}")()
                 approach_signals = getattr(ctrl, "get_approach_signals", lambda: {"N": "r", "S": "r", "E": "r", "W": "r"})()
+
+                true_q = oracle_provider.get_queues(tid)
+                if is_vanet_controller:
+                    est_q = provider.get_queues(tid)
+                    for d in ("N", "S", "E", "W"):
+                        queue_errors.append(abs(true_q.get(d, 0) - est_q.get(d, 0)))
+                else:
+                    est_q = true_q
 
                 logger_step.log_step(
                     sim_time=t,
                     tls_id=tid,
                     phase=current_phase,
-                    queue_n=queues.get("N", 0),
-                    queue_s=queues.get("S", 0),
-                    queue_e=queues.get("E", 0),
-                    queue_w=queues.get("W", 0),
+                    queue_n=true_q.get("N", 0),
+                    queue_s=true_q.get("S", 0),
+                    queue_e=true_q.get("E", 0),
+                    queue_w=true_q.get("W", 0),
                     n_vehicles=n_vehicles,
                     ev_present=ev_present,
+                    queue_est_n=est_q.get("N", 0),
+                    queue_est_s=est_q.get("S", 0),
+                    queue_est_e=est_q.get("E", 0),
+                    queue_est_w=est_q.get("W", 0),
                 )
 
                 tls_state_dict[tid] = {
                     "phase": phase_name,
-                    "queues": queues,
-                    "queues_est": queues,  # Equal to true queue in oracle mode
+                    "queues": true_q,
+                    "queues_est": est_q,
                     "signal": approach_signals,
                 }
 
@@ -283,6 +330,17 @@ def run_simulation(
                 avg_wait = round(float(sum(active_waits) / len(active_waits)), 1) if active_waits else 0.0
                 hours = max(t / 3600.0, 1e-4)
                 throughput_rate = round(arrived_count / hours, 1)
+
+                if is_vanet_controller and vanet_net is not None:
+                    comm_dict = vanet_net.get_comm_stats()
+                else:
+                    comm_dict = {
+                        "pdr": 1.0,
+                        "latency_ms": 0.0,
+                        "penetration": penetration,
+                        "sent": 0,
+                        "lost": 0,
+                    }
 
                 emit_json_line({
                     "type": "state",
@@ -295,13 +353,7 @@ def run_simulation(
                         "n_vehicles": n_vehicles,
                         "throughput": throughput_rate,
                     },
-                    "comm": {
-                        "pdr": 1.0,
-                        "latency_ms": 0.0,
-                        "penetration": penetration,
-                        "sent": 0,
-                        "lost": 0,
-                    },
+                    "comm": comm_dict,
                     "nav": {
                         "mode": nav,
                         "navigating": 0,
@@ -343,7 +395,7 @@ def run_simulation(
             pass
 
     # Extended result dictionary matching PROJECT_CONTEXT v2
-    result_payload = {
+    result_payload: Dict[str, Any] = {
         "avg_waiting_time": metrics["avg_waiting_time"],
         "avg_time_loss": metrics["avg_time_loss"],
         "avg_travel_time": metrics["avg_travel_time"],
@@ -353,14 +405,14 @@ def run_simulation(
         "seed": seed,
         "controller": controller,
         "scenario": scenario,
-        # VANET metric fields (placeholders for Module 4b)
+        # VANET metric fields
         "pdr": None,
         "avg_latency_ms": None,
         "avg_hops": None,
         "missed_preemptions": None,
         "ev_alert_delivery_time": None,
         "queue_estimate_mae": None,
-        # Navigation metric fields (placeholders for Module 4b)
+        # Navigation metric fields (placeholders for Module 9)
         "nav_mode": nav,
         "nav_avg_travel_time": None,
         "nonnav_avg_travel_time": None,
@@ -369,6 +421,14 @@ def run_simulation(
         "route_search_ms": None,
         "reroute_count": None,
     }
+
+    if is_vanet_controller and vanet_net is not None:
+        mae = round(float(sum(queue_errors) / max(len(queue_errors), 1)), 3)
+        final_comm = vanet_net.get_comm_stats()
+        result_payload["queue_estimate_mae"] = mae
+        result_payload["pdr"] = final_comm["pdr"]
+        result_payload["avg_latency_ms"] = final_comm["latency_ms"]
+        result_payload["avg_hops"] = 1.0
 
     if live:
         if was_interrupted:

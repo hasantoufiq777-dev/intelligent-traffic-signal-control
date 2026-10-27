@@ -1,0 +1,72 @@
+"""Message dataclasses for the VANET communication layer.
+
+Defines protocol data units for V2I, V2V, and infrastructure signaling:
+- BEACON: Periodic vehicle telemetry (position, speed, edge/lane).
+- EV_ALERT: Emergency vehicle warning broadcasts (ETA, route, priority).
+- INCIDENT_FLAG: Incident and lane blockage notices.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Optional, Tuple
+
+
+class MessageType(str, Enum):
+    BEACON = "BEACON"
+    EV_ALERT = "EV_ALERT"
+    INCIDENT_FLAG = "INCIDENT_FLAG"
+
+
+@dataclass
+class BaseMessage:
+    """Base VANET message header."""
+
+    msg_id: str = ""
+    msg_type: MessageType = MessageType.BEACON
+    timestamp: float = 0.0
+    ttl: int = 1
+    hop_count: int = 0
+
+
+@dataclass
+class BeaconMessage(BaseMessage):
+    """Periodic telemetry beacon broadcasted by equipped vehicles."""
+
+    sender_id: str = ""
+    pos: Tuple[float, float] = (0.0, 0.0)
+    speed: float = 0.0
+    edge_id: str = ""
+    lane_id: str = ""
+    vtype: str = "car"
+
+    def __post_init__(self) -> None:
+        self.msg_type = MessageType.BEACON
+
+
+@dataclass
+class EvAlertMessage(BaseMessage):
+    """Emergency vehicle alert broadcasted via V2I / V2V."""
+
+    ev_id: str = ""
+    pos: Tuple[float, float] = (0.0, 0.0)
+    speed: float = 0.0
+    route_edges: List[str] = field(default_factory=list)
+    eta: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.msg_type = MessageType.EV_ALERT
+        self.ttl = 3
+
+
+@dataclass
+class IncidentFlagMessage(BaseMessage):
+    """Incident notice generated upon detecting stopped traffic or lane blockage."""
+
+    edge_id: str = ""
+    reason: str = "stopped_vehicle"
+
+    def __post_init__(self) -> None:
+        self.msg_type = MessageType.INCIDENT_FLAG
+        self.ttl = 5

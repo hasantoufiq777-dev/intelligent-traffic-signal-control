@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 import xml.etree.ElementTree as ET
 import numpy as np
 
@@ -25,6 +25,10 @@ class StepMetricsLogger:
         "queue_W",
         "n_vehicles",
         "ev_present",
+        "queue_est_N",
+        "queue_est_S",
+        "queue_est_E",
+        "queue_est_W",
     ]
 
     def __init__(self, filepath: Union[str, Path]) -> None:
@@ -47,11 +51,20 @@ class StepMetricsLogger:
         queue_w: int,
         n_vehicles: int,
         ev_present: bool,
+        queue_est_n: Optional[int] = None,
+        queue_est_s: Optional[int] = None,
+        queue_est_e: Optional[int] = None,
+        queue_est_w: Optional[int] = None,
     ) -> None:
         """Write one row of metrics."""
         step_max_q = max(queue_n, queue_s, queue_e, queue_w)
         if step_max_q > self.max_queue:
             self.max_queue = step_max_q
+
+        q_est_n = queue_n if queue_est_n is None else queue_est_n
+        q_est_s = queue_s if queue_est_s is None else queue_est_s
+        q_est_e = queue_e if queue_est_e is None else queue_est_e
+        q_est_w = queue_w if queue_est_w is None else queue_est_w
 
         self.writer.writerow([
             f"{sim_time:.1f}",
@@ -63,6 +76,10 @@ class StepMetricsLogger:
             queue_w,
             n_vehicles,
             1 if ev_present else 0,
+            q_est_n,
+            q_est_s,
+            q_est_e,
+            q_est_w,
         ])
 
     def flush(self) -> None:
