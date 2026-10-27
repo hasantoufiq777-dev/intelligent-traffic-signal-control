@@ -39,6 +39,7 @@ METRICS = [
 ]
 
 
+# Run one eco-selection configuration on one seed.
 def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
     from sim.runner import run_simulation
 
@@ -58,6 +59,7 @@ def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+# Compare no eco cars, random choice and choice by data on the same traffic, then save the results.
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--scenario", default="normal")

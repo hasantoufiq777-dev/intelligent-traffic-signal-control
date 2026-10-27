@@ -45,11 +45,14 @@ METRICS = [
 LABELS = {
     "fixed": "Fixed-time (30 s greens)",
     "adaptive": "Adaptive (queue threshold, existing)",
+    "level": "Queue levelling",
+    "level_vanet": "Queue levelling, VANET sensing",
     "dynamic": "Dynamic congestion-aware",
     "dynamic_vanet": "Dynamic congestion-aware, VANET sensing",
 }
 
 
+# Run one controller on one scenario and seed, in its own temporary folder.
 def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
     from sim.runner import run_simulation
 
@@ -70,6 +73,7 @@ def run_job(job: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+# Mean and standard deviation over seeds, plus each controller's change against fixed-time.
 def summarise(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for scen in dict.fromkeys(r["scenario"] for r in rows):
@@ -93,6 +97,7 @@ def summarise(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return out
 
 
+# Write the comparison as readable tables in summary.md.
 def write_markdown(summary: Dict[str, Any], meta: Dict[str, Any], path: Path) -> None:
     lines = ["# Fixed-time vs dynamic signal control", "",
              f"Network {meta['network']}, seeds {meta['seeds']}, {meta['max_steps'] or 'full'} s per run, "
@@ -119,6 +124,7 @@ def write_markdown(summary: Dict[str, Any], meta: Dict[str, Any], path: Path) ->
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+# Run every scenario/controller/seed on the same traffic and save raw.csv, summary.json and summary.md.
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--scenarios", nargs="+", default=["normal", "congested"])

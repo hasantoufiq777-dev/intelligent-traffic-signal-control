@@ -157,6 +157,13 @@ export function createGateway(overrides = {}) {
       viewers: np.viewers, status: live.lastStatus?.status ?? null });
   });
 
+  // Every car of the current run against its HBEFA4 reference (Driving page)
+  app.get('/api/live/eco-cars', requireAuth, (_req, res) => {
+    const e = live.current?.entry;
+    res.json({ run_id: live.current?.run_id ?? null, t: live.ecoCarsT, scenario: e?.scenario ?? null,
+      controller: e?.controller ?? null, penetration: e?.penetration ?? null, cars: [...live.ecoCars.values()] });
+  });
+
   app.get('/api/live/playlist', requireAuth, (_req, res) => res.json({ loop: cfg.LIVE_LOOP, playlist: live.playlist }));
 
   app.get('/api/options', requireAuth, (_req, res) => res.json({ ...OPTIONS, playlist: live.playlist, mock: cfg.USE_MOCK }));

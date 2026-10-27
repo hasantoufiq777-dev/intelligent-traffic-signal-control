@@ -32,8 +32,8 @@ logger = logging.getLogger("sim.main")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Intelligent Traffic Signal Control Simulation CLI")
     parser.add_argument("--scenario", type=str, default="normal", help="Scenario name or YAML file path")
-    parser.add_argument("--controller", type=str, default="dynamic_vanet",
-                        help="Controller name (default dynamic_vanet: congestion-aware over VANET; also dynamic, fixed, adaptive, ...)")
+    parser.add_argument("--controller", type=str, default="level_vanet",
+                        help="Controller name (default level_vanet: longest queue down to the next, over VANET; also level, dynamic, dynamic_vanet, fixed, adaptive, ...)")
     parser.add_argument("--seed", type=int, default=1, help="Random seed")
     parser.add_argument("--gui", action="store_true", help="Launch SUMO with GUI")
     parser.add_argument("--params", type=str, default=None, help="Path to custom parameters YAML file")
@@ -60,6 +60,10 @@ def main() -> None:
         "--eco-fraction", type=float, default=0.0,
         help="Fraction of equipped vehicles that follow GLOSA eco-driving advice (0 = off)",
     )
+    parser.add_argument("--eco-commit", type=float, default=None,
+                        help="Eco runs: lock the end of a dynamic or level green this many seconds ahead (0 = off)")
+    parser.add_argument("--eco-routing", type=str, default=None, choices=["on", "off"],
+                        help="Eco cars choose the route with the lowest expected fuel (default: config)")
     parser.add_argument(
         "--eco-select", type=str, default="data", choices=["data", "random"],
         help="How eco cars are chosen: data = the cars burning most fuel above the SUMO fuel-curve model "
@@ -143,6 +147,8 @@ def main() -> None:
             step_delay=max(0.0, args.step_delay),
             eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
             eco_select=args.eco_select,
+            eco_commit=args.eco_commit,
+            eco_routing=None if args.eco_routing is None else args.eco_routing == "on",
             ev_routing=(args.ev_routing == "on"),
             driver=args.driver,
             demand=min(2.0, max(0.25, args.demand)),

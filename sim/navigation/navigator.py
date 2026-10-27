@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 
 from sim.navigation.aco import AcoRouter
+from sim.vehicles import type_category
 from sim.navigation.astar import astar_search  # noqa: F401  (kept for callers importing it from here)
 from sim.navigation.planners import make_planner
 from sim.vehicles import is_driven_type
@@ -81,6 +82,12 @@ class VehicleNavigator:
         self.planner = make_planner(self.mode, self.graph, aco_router=self.aco_router, rng=self.rng,
                                     heuristic=self.heuristic)
 
+        # Eco-routing (off by default): eco cars search for the lowest expected fuel
+        self.eco_planner: Optional[Any] = None
+        self.eco_check: Optional[Any] = None  # vehicle id -> is it an eco car
+        self.eco_reroutes: int = 0
+        self._kind_cache: Dict[str, str] = {}
+
         # Vehicle tracking state
         self.last_reroute_time: Dict[str, float] = {}
         self.vehicle_prev_edge: Dict[str, str] = {}
@@ -106,6 +113,25 @@ class VehicleNavigator:
         self.last_decision: Optional[Dict[str, Any]] = None
         self._last_event_sec: int = -1
         self._event_sec_count: int = 0
+
+    # Turn on fuel-based routes for eco cars; other cars keep this run's navigation mode.
+    def enable_eco_routing(self, stop_probability: float = 0.7) -> None:
+        from sim.navigation.planners import EcoPlanner
+
+        self.eco_planner = EcoPlanner(self.graph, stop_probability=stop_probability)
+
+    # True when this vehicle is an eco car and eco-routing is on.
+    def _eco_routed(self, vid: str) -> bool:
+        return self.eco_planner is not None and self.eco_check is not None and bool(self.eco_check(vid))
+
+    # Vehicle category, which selects its HBEFA4 fuel curve.
+    def _kind(self, vid: str) -> str:
+        if vid not in self._kind_cache:
+            try:
+                self._kind_cache[vid] = type_category(str(self.sumo_api.vehicle.getTypeID(vid)))
+            except Exception:
+                self._kind_cache[vid] = "car"
+        return self._kind_cache[vid]
 
     def smoothed_speeds(
         self, sim_time: float, speed_map: Optional[Dict[str, float]], keep_raw: Optional[Set[str]] = None
@@ -137,7 +163,7 @@ class VehicleNavigator:
         return events
 
     def _emit_reroute_event(
-        self, vid: str, old_route: List[str], new_route: List[str], sim_time: float
+        self, vid: str, old_route: List[str], new_route: List[str], sim_time: float, mode: Optional[str] = None
     ) -> None:
         """Emit a sampled reroute event."""
         sec = int(sim_time)
@@ -152,7 +178,7 @@ class VehicleNavigator:
                 "event": "reroute",
                 "vehicle_id": vid,
                 "time": sim_time,
-                "mode": self.mode,
+                "mode": mode or self.mode,
                 "from_edge": new_route[0] if new_route else "",
                 "to_edge": new_route[-1] if new_route else "",
                 "edges_count": len(new_route),
@@ -216,14 +242,15 @@ class VehicleNavigator:
                 self.last_reroute_time.pop(tracked_vid, None)
                 self.vehicle_prev_edge.pop(tracked_vid, None)
 
-        if self.mode == "none":
+        if self.mode == "none" and self.eco_planner is None:
             return
 
         speed_map = self.smoothed_speeds(sim_time, speed_map, keep_raw=incident_edges)
 
         # 3. Dynamic Rerouting Evaluation
         for vid in active_vids:
-            if not self.is_nav_vehicle.get(vid, False):
+            eco_route = self._eco_routed(vid) and not self._is_emergency(vid)
+            if not eco_route and (self.planner is None or not self.is_nav_vehicle.get(vid, False)):
                 continue
 
             try:
@@ -277,9 +304,12 @@ class VehicleNavigator:
             # here only made every alternative look cheaper by that edge's cost.
             remaining_route = current_route[route_index:] if route_index >= 0 else [curr_road, goal_edge]
             curr_route_cost = 0.0
-            for r_edge in remaining_route[1:]:
-                c = self.graph.get_edge_cost(r_edge, speed_map=speed_map, closed_edges=closed_edges)
-                curr_route_cost += c
+            if eco_route:
+                curr_route_cost = self.eco_planner.route_cost(remaining_route[1:], self._kind(vid), speed_map, closed_edges)
+            else:
+                for r_edge in remaining_route[1:]:
+                    c = self.graph.get_edge_cost(r_edge, speed_map=speed_map, closed_edges=closed_edges)
+                    curr_route_cost += c
 
             # Search alternative route
             t_start = time.perf_counter()
@@ -291,7 +321,11 @@ class VehicleNavigator:
             expansions: int = 0
 
             # Strategy: the planner of this navigation mode (A*, ACO; sim/navigation/planners.py)
-            if self.planner is not None:
+            if eco_route:
+                res = self.eco_planner.plan(curr_road, goal_edge, speed_map, closed_edges, self._vclass(vid),
+                                            kind=self._kind(vid))
+                new_path, new_cost, expansions = res.path, res.cost, res.expansions
+            elif self.planner is not None:
                 res = self.planner.plan(curr_road, goal_edge, speed_map, closed_edges, self._vclass(vid))
                 new_path, new_cost, expansions = res.path, res.cost, res.expansions
                 decision_routes, chosen_idx = res.alternatives, res.chosen
@@ -308,9 +342,10 @@ class VehicleNavigator:
                     try:
                         self.sumo_api.vehicle.setRoute(vid, new_path)
                         self.reroute_count += 1
+                        self.eco_reroutes += 1 if eco_route else 0
                         self.reroute_log.append((sim_time, vid))
                         self.last_reroute_time[vid] = sim_time
-                        self._emit_reroute_event(vid, remaining_route, new_path, sim_time)
+                        self._emit_reroute_event(vid, remaining_route, new_path, sim_time, "eco" if eco_route else None)
                         applied = True
                     except Exception as e:
                         logger.debug("Failed to setRoute for vehicle %s: %s", vid, e)
@@ -367,5 +402,6 @@ class VehicleNavigator:
             "max_edge_load": metrics["max_edge_load"],
             "edge_load_cv": metrics["edge_load_cv"],
             "reroutes": self.reroute_count,
+            "eco_reroutes": self.eco_reroutes,
             "last_decision": self.last_decision,
         }

@@ -22,6 +22,7 @@ import random
 from typing import Callable, Dict, List, Optional, Protocol, Set, Tuple
 
 from sim.navigation.aco import AcoRouter
+from sim.eco_speed import eco_edge_cost, min_fuel_per_m
 from sim.navigation.astar import astar_search
 from sim.navigation.graph import EdgeGraph
 
@@ -62,6 +63,40 @@ class AStarPlanner:
                                               heuristic=self.heuristic, vclass=vclass, cost=self.cost)
         return PlanResult(path=path, cost=cost, expansions=expansions,
                           alternatives=[(path, cost, 1.0)] if path else [], chosen=0)
+
+
+class EcoPlanner:
+    """Eco-routing: A* on expected fuel (HBEFA4) for this vehicle's category instead of travel time."""
+
+    name = "eco"
+
+    def __init__(self, graph: EdgeGraph, stop_probability: float = 0.7, v_min: float = 1.0) -> None:
+        self.graph = graph
+        self.stop_probability = float(stop_probability)
+        self.v_min = float(v_min)
+
+    def edge_cost(self, edge: str, kind: str, speed_map: Optional[Dict[str, float]] = None,
+                  closed_edges: Optional[Set[str]] = None) -> float:
+        """Expected fuel (mg) on one road at the speed reported by the traffic centre."""
+        self.graph.cost_evals += 1
+        node = self.graph.edges.get(edge)
+        if node is None or (closed_edges and edge in closed_edges):
+            return math.inf
+        observed = (speed_map or {}).get(edge, 0.0)
+        speed = max(observed if observed > 0.0 else node.free_flow_speed, self.v_min)
+        delay = self.graph.junction_delay_s if node.signalized_end else 0.0
+        return eco_edge_cost(kind, node.length, speed, delay, self.stop_probability)
+
+    def route_cost(self, edges: List[str], kind: str, speed_map: Optional[Dict[str, float]] = None,
+                   closed_edges: Optional[Set[str]] = None) -> float:
+        return sum(self.edge_cost(e, kind, speed_map, closed_edges) for e in edges)
+
+    def plan(self, start: str, goal: str, speed_map: Optional[Dict[str, float]] = None,
+             closed_edges: Optional[Set[str]] = None, vclass: Optional[str] = None, kind: str = "car") -> PlanResult:
+        path, cost, expansions = astar_search(
+            graph=self.graph, start_edge=start, goal_edge=goal, closed_edges=closed_edges, vclass=vclass,
+            cost_fn=lambda e: self.edge_cost(e, kind, speed_map, closed_edges), h_per_m=min_fuel_per_m(kind))
+        return PlanResult(path=path, cost=cost, expansions=expansions)
 
 
 class AcoPlanner:

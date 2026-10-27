@@ -1,5 +1,6 @@
 [
-  {"label": "Dynamic congestion-aware signals over VANET (default mode, 50% equipped)", "scenario": "normal", "network": "grid2x2", "controller": "dynamic_vanet", "nav": "none", "seed": 1, "penetration": 0.5},
+  {"label": "Queue levelling over VANET (default: congested traffic, all cars connected)", "scenario": "congested", "network": "grid2x2", "controller": "level_vanet", "nav": "none", "seed": 1, "penetration": 1, "loss": 0, "relay": "off", "ev_routing": "off", "eco_fraction": 0, "eco_select": "data", "eco_commit": 0, "eco_routing": "off", "demand": 1},
+  {"label": "Dynamic congestion-aware signals over VANET (50% equipped)", "scenario": "normal", "network": "grid2x2", "controller": "dynamic_vanet", "nav": "none", "seed": 1, "penetration": 0.5},
   {"label": "Baseline: fixed-time signals", "scenario": "normal", "network": "grid2x2", "controller": "fixed", "nav": "none", "seed": 1},
   {"label": "VANET-sensed adaptive signals (50% equipped)", "scenario": "normal", "network": "grid2x2", "controller": "adaptive_vanet", "nav": "none", "seed": 1, "penetration": 0.5},
   {"label": "Ambulance with V2I/V2V preemption and route choice", "scenario": "emergency", "network": "grid2x2", "controller": "adaptive_ev_vanet", "nav": "none", "seed": 2, "loss": 0.1, "relay": "on", "ev_routing": "on"},

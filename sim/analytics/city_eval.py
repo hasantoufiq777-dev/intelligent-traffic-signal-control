@@ -54,7 +54,7 @@ def road_class_use(seed: int = 1, steps: int = 1200) -> Dict[str, Dict[str, int]
 
     from sim.scenarios.generate_routes import generate_routes, load_scenario_config
 
-    net_path = ROOT / "sim" / "sumo" / "grid2x2_city.net.xml"
+    net_path = ROOT / "sim" / "sumo" / "xml" / "networks" / "grid2x2_city.net.xml"
     net = sumolib.net.readNet(str(net_path))
     with tempfile.TemporaryDirectory() as tmp:
         rou = Path(tmp) / "r.rou.xml"

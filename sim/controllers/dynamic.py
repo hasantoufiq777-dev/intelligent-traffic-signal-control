@@ -1,4 +1,4 @@
-"""Dynamic, congestion-aware traffic signal controller (the default mode).
+"""Dynamic, congestion-aware traffic signal controller.
 
 A heuristic controller inspired by the state used in reinforcement-learning signal control
 (queue, waiting time, density, flow and downstream congestion), without any learning. Every
@@ -49,13 +49,18 @@ DIR_NAME = {"N": "North", "S": "South", "E": "East", "W": "West"}
 LOG_SIZE = 8
 
 
+# The conflicting phase: NS <-> EW.
 def other_group(g: str) -> str:
     return "EW" if g == "NS" else "NS"
 
 
+# Dynamic control (`dynamic`, `dynamic_vanet`): scores every road and sizes each NS/EW green to demand.
+# LevelingController builds on this class and reuses its sensing, step loop and live view.
 class DynamicController(BaseController):
     """Congestion-aware signal control: phase choice and green length from live road measures."""
 
+    # Load the timing limits and score weights from config, create the traffic monitor, reset the
+    # decision state, and start on north-south green.
     def __init__(self, tls_id: str, params: Optional[Dict[str, Any]] = None,
                  provider: Optional[StateProvider] = None, sumo_api: Any = None) -> None:
         super().__init__(tls_id, params=params, provider=provider, sumo_api=sumo_api)
@@ -90,6 +95,9 @@ class DynamicController(BaseController):
         self.reason = ""
         self.log: Deque[Dict[str, Any]] = deque(maxlen=LOG_SIZE)
         self._next_reason: Optional[str] = None  # why the phase being switched to was chosen
+        # Eco runs: lock the end of a green this many seconds ahead so cars can receive exact timing (0 = off)
+        self.commit_green_s = max(0.0, float(p.get("commit_green_s", 0.0)))
+        self._commit: Optional[Tuple[float, str]] = None  # (green length at which it ends, next phase)
 
         self.current_phase = self.PHASE_NS_GREEN
         if self.sumo_api:
@@ -99,6 +107,7 @@ class DynamicController(BaseController):
                 pass
 
     # ------------------------------------------------------------------ measures and scores
+    # Refresh this second's road measurements and recompute road and phase priority scores.
     def _measure(self, t: float) -> None:
         closed = set()
         incidents: Dict[str, str] = {}
@@ -112,6 +121,8 @@ class DynamicController(BaseController):
         self.scores = {d: self.score(s) for d, s in self.stats.items()}
         self.group_scores = {g: round(sum(self.scores.get(d, 0.0) for d in dirs), 2) for g, dirs in GROUPS.items()}
 
+    # Priority of one road: queue first, then density and arrivals, reduced by a full road ahead,
+    # plus a waiting-time term so a long wait is not ignored.
     def score(self, s: ApproachStats) -> float:
         """Priority score of one road (see the module docstring)."""
         if s.closed:
@@ -121,23 +132,30 @@ class DynamicController(BaseController):
         f_down = self.blocked_factor if s.down_status == "blocked" else max(self.blocked_factor, 1.0 - self.w_down * s.down_occ)
         return round(demand * f_down + self.w_wait * s.mean_wait_s / 10.0, 2)
 
+    # Open (not closed by an incident) roads of a phase.
     def _roads(self, g: str) -> List[ApproachStats]:
         return [self.stats[d] for d in GROUPS[g] if d in self.stats and not self.stats[d].closed]
 
+    # True when a phase has any vehicle, waiting or arriving.
     def _has_demand(self, g: str) -> bool:
         """Vehicles on any road of the phase (waiting or approaching)."""
         return any(s.vehicles > 0 for s in self._roads(g))
 
+    # Total waiting vehicles in a phase.
     def _waiting(self, g: str) -> float:
         return sum(s.waiting for s in self._roads(g))
 
+    # Longest waiting time in a phase; used by the fairness rule.
     def _max_wait(self, g: str) -> float:
         return max((s.max_wait_s for s in self._roads(g)), default=0.0)
 
+    # Readable phase name with its road ids, for decision messages.
     def _label(self, g: str) -> str:
         roads = [r for s in self._roads(g) for r in s.roads]
         return f"{GROUP_NAME[g]} ({', '.join(roads)})" if roads else GROUP_NAME[g]
 
+    # Green time needed to clear the queue: start-up time + headway per queued car per lane.
+    # Only cars that fit on the road ahead are counted, which shortens the green when it is congested.
     def green_need(self, g: str) -> Tuple[float, Optional[str]]:
         """Green time the phase's queues need (s), and a note when downstream space limits it."""
         need = 0.0
@@ -167,6 +185,7 @@ class DynamicController(BaseController):
                     f"downstream road {s.down_worst} {what}")
         return need, note
 
+    # Run when a green starts: fix its planned length, label it short/medium/long, and log why.
     def _plan(self, g: str) -> None:
         need, note = self.green_need(g)
         self.planned = min(self.max_green, max(self.min_green, need))
@@ -179,10 +198,12 @@ class DynamicController(BaseController):
             self._record(note + ".")
         self._next_reason = None
 
+    # Store a decision message for the dashboard's latest reason and recent-decisions list.
     def _record(self, text: str) -> None:
         self.reason = text
         self.log.append({"t": int(self.t), "text": text})
 
+    # End the current green: log why and start the safe yellow -> all-red -> next green change.
     def _switch(self, end_reason: str, choose_reason: str) -> None:
         self._record(end_reason)
         self._next_reason = choose_reason
@@ -190,8 +211,10 @@ class DynamicController(BaseController):
         self.set_phase_safe(target)
         self.elapsed = 0.0
         self.planned = None
+        self._commit = None
         self._tick = 0.0
 
+    # Explain why the other phase gets the next green.
     def _choose_reason(self, nxt: str) -> str:
         """Why the other phase gets the next green."""
         cur = other_group(nxt)
@@ -204,11 +227,14 @@ class DynamicController(BaseController):
                 f"(score {self.group_scores[nxt]:.1f}), {GROUP_NAME[cur]} served")
 
     # ------------------------------------------------------------------ control loop
+    # Phase that has the green now, or None during yellow and all-red.
     def serving(self) -> Optional[str]:
         if self.is_in_transition():
             return None
         return {self.PHASE_NS_GREEN: "NS", self.PHASE_EW_GREEN: "EW"}.get(self.current_phase)
 
+    # Controller loop, every simulated second: advance any transition, measure the roads, plan a new
+    # green if needed, then make a decision.
     def step(self, sim_time: float) -> None:
         self.t = float(sim_time)
         self.update_transitions(1.0)
@@ -224,8 +250,33 @@ class DynamicController(BaseController):
         if self._tick < self.decision_interval:
             return
         self._tick = 0.0
+        if self.commit_green_s > 0 and self._commit is not None:
+            if self.elapsed >= self._commit[0]:
+                self._commit_execute(g, self._commit[1])
+            return  # the change is announced: no other decision until it happens
         self._decide(g)
+        if self.commit_green_s > 0 and self.serving() == g:
+            self._maybe_commit(g)
 
+    # Lock the green's end once it is within commit_green_s, if another phase has vehicles to serve.
+    def _maybe_commit(self, g: str) -> None:
+        if self.planned is None or self.planned - self.elapsed > self.commit_green_s:
+            return
+        target = self._commit_target(g)
+        if target is not None:
+            self._commit = (max(self.planned, self.elapsed + 1.0), target)
+
+    # The phase a locked green hands over to; None when no other phase has vehicles.
+    def _commit_target(self, g: str) -> Optional[str]:
+        nxt = other_group(g)
+        return nxt if self._has_demand(nxt) else None
+
+    # The announced moment has arrived: start the safe change.
+    def _commit_execute(self, g: str, target: str) -> None:
+        self._switch(f"{GROUP_NAME[g]} ended as announced after {self.elapsed:.0f} s", self._choose_reason(target))
+
+    # Decision during a green: end it for fairness, an empty road or a blocked road ahead; extend it
+    # while cars still need it; otherwise switch when its time is used and the other phase has vehicles.
     def _decide(self, g: str) -> None:
         nxt = other_group(g)
         if self.elapsed < self.min_green:
@@ -278,18 +329,25 @@ class DynamicController(BaseController):
                 self._record(f"{GROUP_NAME[nxt]} skipped: no waiting vehicles; {GROUP_NAME[g]} stays green.")
 
     # ------------------------------------------------------------------ SPaT and live view
+    # Earliest and latest end of this green, broadcast to cars as signal timing (SPaT).
     def _green_remaining_bounds(self) -> Tuple[Optional[float], Optional[float]]:
         """The green can end at the first decision after min_green, and ends by max_green unless
         the other phase is empty (then within one decision after a vehicle arrives there)."""
+        if self._commit is not None:
+            remaining = max(0.0, self._commit[0] - self.elapsed)
+            return remaining, remaining  # locked: the exact end is known
         return max(0.0, self.min_green - self.elapsed), max(0.0, self.max_green - self.elapsed) + self.decision_interval
 
+    # Shortest and longest possible future green, used in the SPaT prediction.
     def _green_length_bounds(self, group: str) -> Tuple[Optional[float], Optional[float]]:
         return self.min_green, self.max_green + self.decision_interval
 
+    # Phase the current yellow/all-red is changing to.
     def _target_group(self) -> Optional[str]:
         target = self.pending_target_phase if self.pending_target_phase is not None else self.target_phase
         return {self.PHASE_NS_GREEN: "NS", self.PHASE_EW_GREEN: "EW"}.get(target)
 
+    # Package road measurements, scores, plan and reasons for the dashboard.
     def get_live_info(self) -> Dict[str, Any]:
         """Why the controller does what it does, for the dashboard (one junction)."""
         g = self.serving()
@@ -313,6 +371,7 @@ class DynamicController(BaseController):
             "planned_s": None if planned is None else round(planned, 0),
             "remaining_s": None if planned is None else round(max(0.0, planned - self.elapsed), 0),
             "tier": self.tier if g is not None else None,
+            "locked_s": None if self._commit is None or g is None else round(max(0.0, self._commit[0] - self.elapsed), 0),
             "group_scores": self.group_scores,
             "roads": roads,
             "reason": self.reason,

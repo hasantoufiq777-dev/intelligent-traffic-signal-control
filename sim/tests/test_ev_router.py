@@ -10,7 +10,7 @@ from sim.navigation.ev_router import EmergencyRouter
 from sim.navigation.graph import EdgeGraph
 from sim.runner import run_simulation
 
-GRID = Path(__file__).resolve().parent.parent / "sumo" / "grid2x2.net.xml"
+GRID = Path(__file__).resolve().parent.parent / "sumo" / "xml" / "networks" / "grid2x2.net.xml"
 DEFAULT_ROUTE = ["bottom0J0", "J0J1", "J1J3", "J3top1"]
 OTHER_ROUTE = ["bottom0J0", "J0J2", "J2J3", "J3top1"]
 

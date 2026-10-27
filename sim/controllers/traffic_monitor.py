@@ -36,6 +36,7 @@ FLOW_WINDOW_S = 60.0
 JAM_DENSITY = 1000.0 / 7.5  # vehicles per km per lane when queued bumper to bumper (7.5 m per vehicle)
 
 
+# Everything measured on one incoming road in one second; the controllers decide from this record.
 @dataclass
 class ApproachStats:
     """Traffic on one incoming approach of a junction."""
@@ -51,6 +52,9 @@ class ApproachStats:
     max_wait_s: float = 0.0
     flow_vpm: float = 0.0
     near_stopline: float = 0.0  # vehicles within the gap distance of the stop line (moving or not)
+    approaching: float = 0.0  # moving vehicles within approach_m of the stop line
+    approach_eta_s: Optional[float] = None  # seconds until the first of them reaches the stop line
+    stopline_occupied: bool = False  # the stop-line detector sees a stopped vehicle
     down_roads: Optional[List[str]] = None
     down_occ: float = 0.0
     down_worst: str = ""  # the fullest downstream road
@@ -58,13 +62,17 @@ class ApproachStats:
     down_status: str = "clear"
     closed: bool = False  # the approach itself is closed by an incident (no flow possible)
 
+    # Convert the measurements to a plain dictionary.
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
+# The junction's sensor layer: turns exact SUMO data or VANET beacons into one ApproachStats per road.
 class TrafficMonitor:
     """Per-approach traffic measures for one junction, from SUMO or from its RSU."""
 
+    # Read the junction's static map once: incoming lanes per direction, the roads they feed,
+    # how many movements go to each, and lane lengths. Also prepare the arrival-flow counters.
     def __init__(self, tls_id: str, sumo_api: Any, link_directions: List[str], provider: Any = None,
                  params: Optional[Dict[str, Any]] = None) -> None:
         p = dict(params or {})
@@ -73,6 +81,10 @@ class TrafficMonitor:
         self.provider = provider
         self.jam_spacing_m = float(p.get("jam_spacing_m", 7.5))
         self.gap_dist_m = float(p.get("gap_dist_m", 30.0))
+        self.approach_m = float(p.get("approach_m", 150.0))
+        # VANET runs: a stop-line detector also reports a stopped car, so a car without a radio is not stranded
+        self.stopline_detector = bool(p.get("stopline_detector", False))
+        self._occupied_since: Dict[str, float] = {}
         self.busy_occ = float(p.get("down_busy_occ", 0.4))
         self.blocked_occ = float(p.get("down_blocked_occ", 0.75))
 
@@ -119,18 +131,23 @@ class TrafficMonitor:
         self._arrivals: Dict[str, Deque[float]] = {d: deque() for d in DIRECTIONS}
         self._t0: Optional[float] = None
 
+    # Road id of a lane id: 'J0J1_1' -> 'J0J1'.
     @staticmethod
     def edge_of(lane: str) -> str:
         return lane.rsplit("_", 1)[0]
 
+    # Incoming road ids of one direction (N, S, E or W).
     def roads(self, d: str) -> List[str]:
         return list(dict.fromkeys(self.edge_of(l) for l in self.in_lanes.get(d, [])))
 
+    # Directions that really exist here, so T-junctions and unusual networks also work.
     def directions(self) -> List[str]:
         """Approaches that exist at this junction (have incoming lanes)."""
         return [d for d in DIRECTIONS if self.in_lanes[d]]
 
     # ------------------------------------------------------------------ observation sources
+    # Exact sensing (`dynamic`, `level`): read every vehicle on the incoming lanes and count the
+    # outgoing lanes directly from SUMO. Scale is 1 because no vehicle is missed.
     def _observe_sumo(self) -> Tuple[Dict[str, List[Tuple[str, float, float, float]]], Dict[str, Tuple[float, float]], float]:
         """Vehicles on the incoming lanes [(id, distance to stop line, speed, wait)], and per
         outgoing lane (vehicles, stopped vehicles). Exact data: scale 1."""
@@ -159,6 +176,9 @@ class TrafficMonitor:
                 out[lane] = (0.0, 0.0)
         return veh, out, 1.0
 
+    # VANET sensing (`dynamic_vanet`, `level_vanet`): use only beacons this roadside unit received.
+    # Unequipped, out-of-range and lost-message cars are invisible, so counts are later scaled by
+    # 1 / penetration (at 50 % connected, one beacon counts as two cars).
     def _observe_rsu(self, rsu: Any, t: float) -> Tuple[Dict[str, List[Tuple[str, float, float, float]]], Dict[str, Tuple[float, float]], float]:
         """The same from the beacons the RSU has received (equipped cars in range only)."""
         try:
@@ -184,6 +204,7 @@ class TrafficMonitor:
         scale = 1.0 / max(0.01, float(getattr(rsu, "penetration", 1.0)))
         return veh, {k: (v[0], v[1]) for k, v in out.items()}, scale
 
+    # Return this junction's roadside unit when the run uses VANET sensing, otherwise None.
     def _rsu(self) -> Any:
         net = getattr(self.provider, "vanet_net", None) if self.provider is not None else None
         if net is None or getattr(self.provider, "name", "") != "vanet":
@@ -191,6 +212,25 @@ class TrafficMonitor:
         return net.rsus.get(self.tls_id)
 
     # ------------------------------------------------------------------ measures
+    # Stop-line detector (a loop or camera): tells only that a car is stopped here, so an otherwise
+    # invisible car without a radio counts as one waiting vehicle and its wait is timed.
+    def _apply_stopline_detector(self, s: ApproachStats, d: str, lanes: List[str], t: float) -> None:
+        try:
+            occupied = any(self.api.lane.getLastStepHaltingNumber(lane) > 0 for lane in lanes)
+        except Exception:
+            occupied = False
+        if not occupied:
+            self._occupied_since.pop(d, None)
+            return
+        since = self._occupied_since.setdefault(d, t)
+        s.stopline_occupied = True
+        s.waiting = max(s.waiting, 1.0)
+        s.vehicles = max(s.vehicles, 1.0)
+        s.near_stopline = max(s.near_stopline, 1.0)
+        s.max_wait_s = max(s.max_wait_s, t - since)
+
+    # Main sensing step, once per second: choose the source, then compute each road's queue, density,
+    # waiting times, arrival flow and how full its downstream roads are.
     def observe(self, t: float, closed_approaches: Optional[Set[str]] = None,
                 incidents: Optional[Dict[str, str]] = None) -> Dict[str, ApproachStats]:
         """Measure every approach now. closed_approaches: approaches whose incoming road is closed;
@@ -217,6 +257,11 @@ class TrafficMonitor:
             s.mean_wait_s = (sum(waits) / len(waits)) if waits else 0.0
             s.max_wait_s = max(waits, default=0.0)
             s.near_stopline = sum(1 for r in records if r[1] <= self.gap_dist_m) * scale
+            coming = [r for r in records if r[2] >= HALT_SPEED and r[1] <= self.approach_m]
+            s.approaching = len(coming) * scale
+            s.approach_eta_s = min((r[1] / r[2] for r in coming), default=None)
+            if rsu is not None and self.stopline_detector:
+                self._apply_stopline_detector(s, d, lanes, float(t))
 
             # Arrival flow over the last minute
             seen = self._seen[d]

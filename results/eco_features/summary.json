@@ -1,0 +1,1581 @@
+{
+  "meta": {
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "max_steps": 1000,
+    "penetration": 0.5,
+    "generated_at": "2026-11-22T20:00:03"
+  },
+  "results": {
+    "level_vanet": {
+      "normal": {
+        "none": {
+          "fuel_l_per_100km": {
+            "mean": 12.748,
+            "vs_glosa_pct": -0.39,
+            "vs_glosa_p": 0.5569
+          },
+          "co2_g_per_km": {
+            "mean": 292.95,
+            "vs_glosa_pct": -0.39,
+            "vs_glosa_p": 0.5577
+          },
+          "stops_per_vehicle": {
+            "mean": 2.123,
+            "vs_glosa_pct": -1.84,
+            "vs_glosa_p": 0.1825
+          },
+          "idle_s_per_vehicle": {
+            "mean": 31.616,
+            "vs_glosa_pct": -1.65,
+            "vs_glosa_p": 0.4597
+          },
+          "avg_waiting_time": {
+            "mean": 31.616,
+            "vs_glosa_pct": -1.65,
+            "vs_glosa_p": 0.4597
+          },
+          "avg_travel_time": {
+            "mean": 116.546,
+            "vs_glosa_pct": -0.62,
+            "vs_glosa_p": 0.4308
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1134.36,
+            "vs_glosa_pct": 0.48,
+            "vs_glosa_p": 0.3389
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa": {
+          "fuel_l_per_100km": {
+            "mean": 12.798,
+            "vs_none_pct": 0.4,
+            "vs_none_p": 0.5569
+          },
+          "co2_g_per_km": {
+            "mean": 294.107,
+            "vs_none_pct": 0.39,
+            "vs_none_p": 0.5577
+          },
+          "stops_per_vehicle": {
+            "mean": 2.163,
+            "vs_none_pct": 1.87,
+            "vs_none_p": 0.1825
+          },
+          "idle_s_per_vehicle": {
+            "mean": 32.147,
+            "vs_none_pct": 1.68,
+            "vs_none_p": 0.4597
+          },
+          "avg_waiting_time": {
+            "mean": 32.147,
+            "vs_none_pct": 1.68,
+            "vs_none_p": 0.4597
+          },
+          "avg_travel_time": {
+            "mean": 117.272,
+            "vs_none_pct": 0.62,
+            "vs_none_p": 0.4308
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1128.96,
+            "vs_none_pct": -0.48,
+            "vs_none_p": 0.3389
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 12.425
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 13.11
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 2.218
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.118
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 25.786
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 37.387
+          },
+          "eco_advised_vehicles": {
+            "mean": 14.2
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+commit": {
+          "fuel_l_per_100km": {
+            "mean": 12.423,
+            "vs_none_pct": -2.54,
+            "vs_none_p": 0.003,
+            "vs_glosa_pct": -2.93,
+            "vs_glosa_p": 0.0005
+          },
+          "co2_g_per_km": {
+            "mean": 285.493,
+            "vs_none_pct": -2.55,
+            "vs_none_p": 0.003,
+            "vs_glosa_pct": -2.93,
+            "vs_glosa_p": 0.0005
+          },
+          "stops_per_vehicle": {
+            "mean": 1.947,
+            "vs_none_pct": -8.31,
+            "vs_none_p": 0.0002,
+            "vs_glosa_pct": -9.99,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle": {
+            "mean": 28.73,
+            "vs_none_pct": -9.13,
+            "vs_none_p": 0.0029,
+            "vs_glosa_pct": -10.63,
+            "vs_glosa_p": 0.0011
+          },
+          "avg_waiting_time": {
+            "mean": 28.73,
+            "vs_none_pct": -9.13,
+            "vs_none_p": 0.0029,
+            "vs_glosa_pct": -10.63,
+            "vs_glosa_p": 0.0011
+          },
+          "avg_travel_time": {
+            "mean": 113.001,
+            "vs_none_pct": -3.04,
+            "vs_none_p": 0.0022,
+            "vs_glosa_pct": -3.64,
+            "vs_glosa_p": 0.0005
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1133.64,
+            "vs_none_pct": -0.06,
+            "vs_none_p": 0.8853,
+            "vs_glosa_pct": 0.41,
+            "vs_glosa_p": 0.1911
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 11.825,
+            "vs_glosa_pct": -4.82,
+            "vs_glosa_p": 0.0
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 12.922,
+            "vs_glosa_pct": -1.43,
+            "vs_glosa_p": 0.1104
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.889,
+            "vs_glosa_pct": -14.81,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.992,
+            "vs_glosa_pct": -5.94,
+            "vs_glosa_p": 0.0002
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 19.801,
+            "vs_glosa_pct": -23.21,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 36.133,
+            "vs_glosa_pct": -3.35,
+            "vs_glosa_p": 0.2608
+          },
+          "eco_advised_vehicles": {
+            "mean": 48.5,
+            "vs_glosa_pct": 241.55,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+routing": {
+          "fuel_l_per_100km": {
+            "mean": 12.792,
+            "vs_none_pct": 0.35,
+            "vs_none_p": 0.6612,
+            "vs_glosa_pct": -0.05,
+            "vs_glosa_p": 0.8815
+          },
+          "co2_g_per_km": {
+            "mean": 293.974,
+            "vs_none_pct": 0.35,
+            "vs_none_p": 0.6619,
+            "vs_glosa_pct": -0.05,
+            "vs_glosa_p": 0.8818
+          },
+          "stops_per_vehicle": {
+            "mean": 2.159,
+            "vs_none_pct": 1.69,
+            "vs_none_p": 0.2492,
+            "vs_glosa_pct": -0.18,
+            "vs_glosa_p": 0.5883
+          },
+          "idle_s_per_vehicle": {
+            "mean": 32.176,
+            "vs_none_pct": 1.77,
+            "vs_none_p": 0.5382,
+            "vs_glosa_pct": 0.09,
+            "vs_glosa_p": 0.9412
+          },
+          "avg_waiting_time": {
+            "mean": 32.176,
+            "vs_none_pct": 1.77,
+            "vs_none_p": 0.5382,
+            "vs_glosa_pct": 0.09,
+            "vs_glosa_p": 0.9412
+          },
+          "avg_travel_time": {
+            "mean": 117.216,
+            "vs_none_pct": 0.57,
+            "vs_none_p": 0.5364,
+            "vs_glosa_pct": -0.05,
+            "vs_glosa_p": 0.8903
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1125.72,
+            "vs_none_pct": -0.76,
+            "vs_none_p": 0.1315,
+            "vs_glosa_pct": -0.29,
+            "vs_glosa_p": 0.0947
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 12.454,
+            "vs_glosa_pct": 0.24,
+            "vs_glosa_p": 0.6013
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 13.075,
+            "vs_glosa_pct": -0.27,
+            "vs_glosa_p": 0.3298
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 2.217,
+            "vs_glosa_pct": -0.04,
+            "vs_glosa_p": 0.9596
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.112,
+            "vs_glosa_pct": -0.27,
+            "vs_glosa_p": 0.1872
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 26.235,
+            "vs_glosa_pct": 1.74,
+            "vs_glosa_p": 0.4435
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 37.054,
+            "vs_glosa_pct": -0.89,
+            "vs_glosa_p": 0.3692
+          },
+          "eco_advised_vehicles": {
+            "mean": 13.5,
+            "vs_glosa_pct": -4.93,
+            "vs_glosa_p": 0.3217
+          },
+          "eco_reroutes": {
+            "mean": 1.2,
+            "vs_none_p": 0.0887,
+            "vs_glosa_p": 0.0887
+          }
+        },
+        "all": {
+          "fuel_l_per_100km": {
+            "mean": 12.415,
+            "vs_none_pct": -2.61,
+            "vs_none_p": 0.0012,
+            "vs_glosa_pct": -2.99,
+            "vs_glosa_p": 0.001
+          },
+          "co2_g_per_km": {
+            "mean": 285.297,
+            "vs_none_pct": -2.61,
+            "vs_none_p": 0.0012,
+            "vs_glosa_pct": -3.0,
+            "vs_glosa_p": 0.001
+          },
+          "stops_per_vehicle": {
+            "mean": 1.934,
+            "vs_none_pct": -8.92,
+            "vs_none_p": 0.0001,
+            "vs_glosa_pct": -10.6,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle": {
+            "mean": 28.757,
+            "vs_none_pct": -9.04,
+            "vs_none_p": 0.0013,
+            "vs_glosa_pct": -10.55,
+            "vs_glosa_p": 0.0013
+          },
+          "avg_waiting_time": {
+            "mean": 28.757,
+            "vs_none_pct": -9.04,
+            "vs_none_p": 0.0013,
+            "vs_glosa_pct": -10.55,
+            "vs_glosa_p": 0.0013
+          },
+          "avg_travel_time": {
+            "mean": 113.125,
+            "vs_none_pct": -2.94,
+            "vs_none_p": 0.0014,
+            "vs_glosa_pct": -3.54,
+            "vs_glosa_p": 0.0012
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1134.36,
+            "vs_none_pct": 0.0,
+            "vs_none_p": 1.0,
+            "vs_glosa_pct": 0.48,
+            "vs_glosa_p": 0.1604
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 11.829,
+            "vs_glosa_pct": -4.8,
+            "vs_glosa_p": 0.0
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 12.904,
+            "vs_glosa_pct": -1.57,
+            "vs_glosa_p": 0.0915
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.902,
+            "vs_glosa_pct": -14.24,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.959,
+            "vs_glosa_pct": -7.49,
+            "vs_glosa_p": 0.0002
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 19.695,
+            "vs_glosa_pct": -23.62,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 36.212,
+            "vs_glosa_pct": -3.14,
+            "vs_glosa_p": 0.2606
+          },
+          "eco_advised_vehicles": {
+            "mean": 48.7,
+            "vs_glosa_pct": 242.96,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.2,
+            "vs_none_p": 0.1679,
+            "vs_glosa_p": 0.1679
+          }
+        }
+      },
+      "navigation": {
+        "none": {
+          "fuel_l_per_100km": {
+            "mean": 14.371,
+            "vs_glosa_pct": 0.01,
+            "vs_glosa_p": 0.9903
+          },
+          "co2_g_per_km": {
+            "mean": 330.243,
+            "vs_glosa_pct": 0.01,
+            "vs_glosa_p": 0.9897
+          },
+          "stops_per_vehicle": {
+            "mean": 2.998,
+            "vs_glosa_pct": -0.33,
+            "vs_glosa_p": 0.8042
+          },
+          "idle_s_per_vehicle": {
+            "mean": 41.213,
+            "vs_glosa_pct": 0.8,
+            "vs_glosa_p": 0.664
+          },
+          "avg_waiting_time": {
+            "mean": 41.213,
+            "vs_glosa_pct": 0.8,
+            "vs_glosa_p": 0.664
+          },
+          "avg_travel_time": {
+            "mean": 138.959,
+            "vs_glosa_pct": -0.02,
+            "vs_glosa_p": 0.9817
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1550.52,
+            "vs_glosa_pct": -0.37,
+            "vs_glosa_p": 0.3947
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa": {
+          "fuel_l_per_100km": {
+            "mean": 14.369,
+            "vs_none_pct": -0.01,
+            "vs_none_p": 0.9903
+          },
+          "co2_g_per_km": {
+            "mean": 330.216,
+            "vs_none_pct": -0.01,
+            "vs_none_p": 0.9897
+          },
+          "stops_per_vehicle": {
+            "mean": 3.008,
+            "vs_none_pct": 0.33,
+            "vs_none_p": 0.8042
+          },
+          "idle_s_per_vehicle": {
+            "mean": 40.885,
+            "vs_none_pct": -0.8,
+            "vs_none_p": 0.664
+          },
+          "avg_waiting_time": {
+            "mean": 40.885,
+            "vs_none_pct": -0.8,
+            "vs_none_p": 0.664
+          },
+          "avg_travel_time": {
+            "mean": 138.983,
+            "vs_none_pct": 0.02,
+            "vs_none_p": 0.9817
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1556.28,
+            "vs_none_pct": 0.37,
+            "vs_none_p": 0.3947
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 14.319
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 14.396
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 3.148
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.899
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 37.824
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 43.189
+          },
+          "eco_advised_vehicles": {
+            "mean": 26.8
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+commit": {
+          "fuel_l_per_100km": {
+            "mean": 13.886,
+            "vs_none_pct": -3.37,
+            "vs_none_p": 0.0003,
+            "vs_glosa_pct": -3.36,
+            "vs_glosa_p": 0.0001
+          },
+          "co2_g_per_km": {
+            "mean": 319.108,
+            "vs_none_pct": -3.37,
+            "vs_none_p": 0.0003,
+            "vs_glosa_pct": -3.36,
+            "vs_glosa_p": 0.0001
+          },
+          "stops_per_vehicle": {
+            "mean": 2.818,
+            "vs_none_pct": -6.03,
+            "vs_none_p": 0.0002,
+            "vs_glosa_pct": -6.34,
+            "vs_glosa_p": 0.0004
+          },
+          "idle_s_per_vehicle": {
+            "mean": 36.263,
+            "vs_none_pct": -12.01,
+            "vs_none_p": 0.0001,
+            "vs_glosa_pct": -11.3,
+            "vs_glosa_p": 0.0
+          },
+          "avg_waiting_time": {
+            "mean": 36.263,
+            "vs_none_pct": -12.01,
+            "vs_none_p": 0.0001,
+            "vs_glosa_pct": -11.3,
+            "vs_glosa_p": 0.0
+          },
+          "avg_travel_time": {
+            "mean": 132.911,
+            "vs_none_pct": -4.35,
+            "vs_none_p": 0.0001,
+            "vs_glosa_pct": -4.37,
+            "vs_glosa_p": 0.0001
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1566.0,
+            "vs_none_pct": 1.0,
+            "vs_none_p": 0.0469,
+            "vs_glosa_pct": 0.62,
+            "vs_glosa_p": 0.0281
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 13.747,
+            "vs_glosa_pct": -3.99,
+            "vs_glosa_p": 0.0
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 13.986,
+            "vs_glosa_pct": -2.85,
+            "vs_glosa_p": 0.001
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 2.963,
+            "vs_glosa_pct": -5.86,
+            "vs_glosa_p": 0.0023
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.708,
+            "vs_glosa_pct": -6.58,
+            "vs_glosa_p": 0.0014
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 31.271,
+            "vs_glosa_pct": -17.32,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 40.019,
+            "vs_glosa_pct": -7.34,
+            "vs_glosa_p": 0.0007
+          },
+          "eco_advised_vehicles": {
+            "mean": 78.7,
+            "vs_glosa_pct": 193.66,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+routing": {
+          "fuel_l_per_100km": {
+            "mean": 14.407,
+            "vs_none_pct": 0.25,
+            "vs_none_p": 0.741,
+            "vs_glosa_pct": 0.26,
+            "vs_glosa_p": 0.6929
+          },
+          "co2_g_per_km": {
+            "mean": 331.078,
+            "vs_none_pct": 0.25,
+            "vs_none_p": 0.7413,
+            "vs_glosa_pct": 0.26,
+            "vs_glosa_p": 0.6929
+          },
+          "stops_per_vehicle": {
+            "mean": 3.072,
+            "vs_none_pct": 2.44,
+            "vs_none_p": 0.0621,
+            "vs_glosa_pct": 2.1,
+            "vs_glosa_p": 0.1012
+          },
+          "idle_s_per_vehicle": {
+            "mean": 42.69,
+            "vs_none_pct": 3.58,
+            "vs_none_p": 0.2055,
+            "vs_glosa_pct": 4.41,
+            "vs_glosa_p": 0.074
+          },
+          "avg_waiting_time": {
+            "mean": 42.69,
+            "vs_none_pct": 3.58,
+            "vs_none_p": 0.2055,
+            "vs_glosa_pct": 4.41,
+            "vs_glosa_p": 0.074
+          },
+          "avg_travel_time": {
+            "mean": 139.586,
+            "vs_none_pct": 0.45,
+            "vs_none_p": 0.6366,
+            "vs_glosa_pct": 0.43,
+            "vs_glosa_p": 0.6182
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1554.12,
+            "vs_none_pct": 0.23,
+            "vs_none_p": 0.6441,
+            "vs_glosa_pct": -0.14,
+            "vs_glosa_p": 0.768
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 14.206,
+            "vs_glosa_pct": -0.79,
+            "vs_glosa_p": 0.2489
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 14.556,
+            "vs_glosa_pct": 1.11,
+            "vs_glosa_p": 0.1902
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 3.158,
+            "vs_glosa_pct": 0.34,
+            "vs_glosa_p": 0.8002
+          },
+          "stops_per_vehicle_non": {
+            "mean": 3.001,
+            "vs_glosa_pct": 3.52,
+            "vs_glosa_p": 0.0209
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 38.941,
+            "vs_glosa_pct": 2.95,
+            "vs_glosa_p": 0.2252
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 45.621,
+            "vs_glosa_pct": 5.63,
+            "vs_glosa_p": 0.0672
+          },
+          "eco_advised_vehicles": {
+            "mean": 24.0,
+            "vs_glosa_pct": -10.45,
+            "vs_glosa_p": 0.3085
+          },
+          "eco_reroutes": {
+            "mean": 27.3,
+            "vs_none_p": 0.0,
+            "vs_glosa_p": 0.0
+          }
+        },
+        "all": {
+          "fuel_l_per_100km": {
+            "mean": 14.062,
+            "vs_none_pct": -2.15,
+            "vs_none_p": 0.0068,
+            "vs_glosa_pct": -2.14,
+            "vs_glosa_p": 0.0165
+          },
+          "co2_g_per_km": {
+            "mean": 323.144,
+            "vs_none_pct": -2.15,
+            "vs_none_p": 0.0068,
+            "vs_glosa_pct": -2.14,
+            "vs_glosa_p": 0.0165
+          },
+          "stops_per_vehicle": {
+            "mean": 2.901,
+            "vs_none_pct": -3.25,
+            "vs_none_p": 0.0338,
+            "vs_glosa_pct": -3.57,
+            "vs_glosa_p": 0.0895
+          },
+          "idle_s_per_vehicle": {
+            "mean": 39.001,
+            "vs_none_pct": -5.37,
+            "vs_none_p": 0.0286,
+            "vs_glosa_pct": -4.61,
+            "vs_glosa_p": 0.0783
+          },
+          "avg_waiting_time": {
+            "mean": 39.001,
+            "vs_none_pct": -5.37,
+            "vs_none_p": 0.0286,
+            "vs_glosa_pct": -4.61,
+            "vs_glosa_p": 0.0783
+          },
+          "avg_travel_time": {
+            "mean": 135.352,
+            "vs_none_pct": -2.6,
+            "vs_none_p": 0.0041,
+            "vs_glosa_pct": -2.61,
+            "vs_glosa_p": 0.018
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1564.2,
+            "vs_none_pct": 0.88,
+            "vs_none_p": 0.0491,
+            "vs_glosa_pct": 0.51,
+            "vs_glosa_p": 0.2157
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 13.765,
+            "vs_glosa_pct": -3.87,
+            "vs_glosa_p": 0.0001
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 14.285,
+            "vs_glosa_pct": -0.77,
+            "vs_glosa_p": 0.4241
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 2.957,
+            "vs_glosa_pct": -6.05,
+            "vs_glosa_p": 0.002
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.855,
+            "vs_glosa_pct": -1.52,
+            "vs_glosa_p": 0.5489
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 33.142,
+            "vs_glosa_pct": -12.38,
+            "vs_glosa_p": 0.0003
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 43.518,
+            "vs_glosa_pct": 0.76,
+            "vs_glosa_p": 0.7785
+          },
+          "eco_advised_vehicles": {
+            "mean": 72.4,
+            "vs_glosa_pct": 170.15,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 26.1,
+            "vs_none_p": 0.0,
+            "vs_glosa_p": 0.0
+          }
+        }
+      }
+    },
+    "dynamic_vanet": {
+      "normal": {
+        "none": {
+          "fuel_l_per_100km": {
+            "mean": 10.503,
+            "vs_glosa_pct": 0.16,
+            "vs_glosa_p": 0.162
+          },
+          "co2_g_per_km": {
+            "mean": 241.373,
+            "vs_glosa_pct": 0.16,
+            "vs_glosa_p": 0.1615
+          },
+          "stops_per_vehicle": {
+            "mean": 1.381,
+            "vs_glosa_pct": 0.8,
+            "vs_glosa_p": 0.4783
+          },
+          "idle_s_per_vehicle": {
+            "mean": 12.781,
+            "vs_glosa_pct": 0.93,
+            "vs_glosa_p": 0.1475
+          },
+          "avg_waiting_time": {
+            "mean": 12.781,
+            "vs_glosa_pct": 0.93,
+            "vs_glosa_p": 0.1475
+          },
+          "avg_travel_time": {
+            "mean": 92.956,
+            "vs_glosa_pct": 0.11,
+            "vs_glosa_p": 0.4262
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1154.88,
+            "vs_glosa_pct": -0.28,
+            "vs_glosa_p": 0.1708
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa": {
+          "fuel_l_per_100km": {
+            "mean": 10.487,
+            "vs_none_pct": -0.16,
+            "vs_none_p": 0.162
+          },
+          "co2_g_per_km": {
+            "mean": 240.988,
+            "vs_none_pct": -0.16,
+            "vs_none_p": 0.1615
+          },
+          "stops_per_vehicle": {
+            "mean": 1.37,
+            "vs_none_pct": -0.79,
+            "vs_none_p": 0.4783
+          },
+          "idle_s_per_vehicle": {
+            "mean": 12.663,
+            "vs_none_pct": -0.92,
+            "vs_none_p": 0.1475
+          },
+          "avg_waiting_time": {
+            "mean": 12.663,
+            "vs_none_pct": -0.92,
+            "vs_none_p": 0.1475
+          },
+          "avg_travel_time": {
+            "mean": 92.858,
+            "vs_none_pct": -0.11,
+            "vs_none_p": 0.4262
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1158.12,
+            "vs_none_pct": 0.28,
+            "vs_none_p": 0.1708
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 10.18
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 10.757
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.366
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.373
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 7.526
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 17.112
+          },
+          "eco_advised_vehicles": {
+            "mean": 18.5
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+commit": {
+          "fuel_l_per_100km": {
+            "mean": 10.566,
+            "vs_none_pct": 0.59,
+            "vs_none_p": 0.1024,
+            "vs_glosa_pct": 0.75,
+            "vs_glosa_p": 0.098
+          },
+          "co2_g_per_km": {
+            "mean": 242.799,
+            "vs_none_pct": 0.59,
+            "vs_none_p": 0.1037,
+            "vs_glosa_pct": 0.75,
+            "vs_glosa_p": 0.099
+          },
+          "stops_per_vehicle": {
+            "mean": 1.454,
+            "vs_none_pct": 5.31,
+            "vs_none_p": 0.0163,
+            "vs_glosa_pct": 6.15,
+            "vs_glosa_p": 0.0056
+          },
+          "idle_s_per_vehicle": {
+            "mean": 13.235,
+            "vs_none_pct": 3.55,
+            "vs_none_p": 0.0543,
+            "vs_glosa_pct": 4.52,
+            "vs_glosa_p": 0.0442
+          },
+          "avg_waiting_time": {
+            "mean": 13.235,
+            "vs_none_pct": 3.55,
+            "vs_none_p": 0.0543,
+            "vs_glosa_pct": 4.52,
+            "vs_glosa_p": 0.0442
+          },
+          "avg_travel_time": {
+            "mean": 93.999,
+            "vs_none_pct": 1.12,
+            "vs_none_p": 0.0103,
+            "vs_glosa_pct": 1.23,
+            "vs_glosa_p": 0.0211
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1150.92,
+            "vs_none_pct": -0.34,
+            "vs_none_p": 0.1372,
+            "vs_glosa_pct": -0.62,
+            "vs_glosa_p": 0.0011
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 10.323,
+            "vs_glosa_pct": 1.41,
+            "vs_glosa_p": 0.0019
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 10.78,
+            "vs_glosa_pct": 0.21,
+            "vs_glosa_p": 0.7158
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.482,
+            "vs_glosa_pct": 8.45,
+            "vs_glosa_p": 0.0021
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.432,
+            "vs_glosa_pct": 4.27,
+            "vs_glosa_p": 0.0563
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 8.65,
+            "vs_glosa_pct": 14.93,
+            "vs_glosa_p": 0.0002
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 17.161,
+            "vs_glosa_pct": 0.29,
+            "vs_glosa_p": 0.8995
+          },
+          "eco_advised_vehicles": {
+            "mean": 38.2,
+            "vs_glosa_pct": 106.49,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+routing": {
+          "fuel_l_per_100km": {
+            "mean": 10.5,
+            "vs_none_pct": -0.03,
+            "vs_none_p": 0.7973,
+            "vs_glosa_pct": 0.12,
+            "vs_glosa_p": 0.4317
+          },
+          "co2_g_per_km": {
+            "mean": 241.286,
+            "vs_none_pct": -0.04,
+            "vs_none_p": 0.7886,
+            "vs_glosa_pct": 0.12,
+            "vs_glosa_p": 0.4365
+          },
+          "stops_per_vehicle": {
+            "mean": 1.385,
+            "vs_none_pct": 0.28,
+            "vs_none_p": 0.8419,
+            "vs_glosa_pct": 1.07,
+            "vs_glosa_p": 0.0863
+          },
+          "idle_s_per_vehicle": {
+            "mean": 12.759,
+            "vs_none_pct": -0.17,
+            "vs_none_p": 0.7991,
+            "vs_glosa_pct": 0.76,
+            "vs_glosa_p": 0.3252
+          },
+          "avg_waiting_time": {
+            "mean": 12.759,
+            "vs_none_pct": -0.17,
+            "vs_none_p": 0.7991,
+            "vs_glosa_pct": 0.76,
+            "vs_glosa_p": 0.3252
+          },
+          "avg_travel_time": {
+            "mean": 93.047,
+            "vs_none_pct": 0.1,
+            "vs_none_p": 0.5492,
+            "vs_glosa_pct": 0.2,
+            "vs_glosa_p": 0.2926
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1155.24,
+            "vs_none_pct": 0.03,
+            "vs_none_p": 0.8114,
+            "vs_glosa_pct": -0.25,
+            "vs_glosa_p": 0.0868
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 10.179,
+            "vs_glosa_pct": -0.01,
+            "vs_glosa_p": 0.9602
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 10.786,
+            "vs_glosa_pct": 0.27,
+            "vs_glosa_p": 0.3301
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.386,
+            "vs_glosa_pct": 1.43,
+            "vs_glosa_p": 0.1408
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.384,
+            "vs_glosa_pct": 0.78,
+            "vs_glosa_p": 0.3702
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 7.637,
+            "vs_glosa_pct": 1.47,
+            "vs_glosa_p": 0.171
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 17.254,
+            "vs_glosa_pct": 0.83,
+            "vs_glosa_p": 0.4624
+          },
+          "eco_advised_vehicles": {
+            "mean": 18.6,
+            "vs_glosa_pct": 0.54,
+            "vs_glosa_p": 0.9102
+          },
+          "eco_reroutes": {
+            "mean": 0.6,
+            "vs_none_p": 0.0811,
+            "vs_glosa_p": 0.0811
+          }
+        },
+        "all": {
+          "fuel_l_per_100km": {
+            "mean": 10.575,
+            "vs_none_pct": 0.68,
+            "vs_none_p": 0.0296,
+            "vs_glosa_pct": 0.84,
+            "vs_glosa_p": 0.0376
+          },
+          "co2_g_per_km": {
+            "mean": 243.006,
+            "vs_none_pct": 0.68,
+            "vs_none_p": 0.0297,
+            "vs_glosa_pct": 0.84,
+            "vs_glosa_p": 0.0378
+          },
+          "stops_per_vehicle": {
+            "mean": 1.467,
+            "vs_none_pct": 6.22,
+            "vs_none_p": 0.0045,
+            "vs_glosa_pct": 7.07,
+            "vs_glosa_p": 0.0047
+          },
+          "idle_s_per_vehicle": {
+            "mean": 13.276,
+            "vs_none_pct": 3.87,
+            "vs_none_p": 0.0311,
+            "vs_glosa_pct": 4.84,
+            "vs_glosa_p": 0.0181
+          },
+          "avg_waiting_time": {
+            "mean": 13.276,
+            "vs_none_pct": 3.87,
+            "vs_none_p": 0.0311,
+            "vs_glosa_pct": 4.84,
+            "vs_glosa_p": 0.0181
+          },
+          "avg_travel_time": {
+            "mean": 94.034,
+            "vs_none_pct": 1.16,
+            "vs_none_p": 0.0041,
+            "vs_glosa_pct": 1.27,
+            "vs_glosa_p": 0.0097
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1151.28,
+            "vs_none_pct": -0.31,
+            "vs_none_p": 0.1864,
+            "vs_glosa_pct": -0.59,
+            "vs_glosa_p": 0.0101
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 10.339,
+            "vs_glosa_pct": 1.56,
+            "vs_glosa_p": 0.0005
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 10.786,
+            "vs_glosa_pct": 0.27,
+            "vs_glosa_p": 0.5791
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.497,
+            "vs_glosa_pct": 9.58,
+            "vs_glosa_p": 0.0008
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.442,
+            "vs_glosa_pct": 5.02,
+            "vs_glosa_p": 0.0502
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 8.814,
+            "vs_glosa_pct": 17.11,
+            "vs_glosa_p": 0.0001
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 17.156,
+            "vs_glosa_pct": 0.26,
+            "vs_glosa_p": 0.8979
+          },
+          "eco_advised_vehicles": {
+            "mean": 39.2,
+            "vs_glosa_pct": 111.89,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.2,
+            "vs_none_p": 0.3434,
+            "vs_glosa_p": 0.3434
+          }
+        }
+      },
+      "navigation": {
+        "none": {
+          "fuel_l_per_100km": {
+            "mean": 11.193,
+            "vs_glosa_pct": 0.57,
+            "vs_glosa_p": 0.0416
+          },
+          "co2_g_per_km": {
+            "mean": 257.231,
+            "vs_glosa_pct": 0.57,
+            "vs_glosa_p": 0.0417
+          },
+          "stops_per_vehicle": {
+            "mean": 1.711,
+            "vs_glosa_pct": 2.8,
+            "vs_glosa_p": 0.0208
+          },
+          "idle_s_per_vehicle": {
+            "mean": 14.114,
+            "vs_glosa_pct": 1.55,
+            "vs_glosa_p": 0.2871
+          },
+          "avg_waiting_time": {
+            "mean": 14.114,
+            "vs_glosa_pct": 1.55,
+            "vs_glosa_p": 0.2871
+          },
+          "avg_travel_time": {
+            "mean": 102.216,
+            "vs_glosa_pct": 0.51,
+            "vs_glosa_p": 0.0433
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1631.16,
+            "vs_glosa_pct": 0.04,
+            "vs_glosa_p": 0.8867
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa": {
+          "fuel_l_per_100km": {
+            "mean": 11.13,
+            "vs_none_pct": -0.56,
+            "vs_none_p": 0.0416
+          },
+          "co2_g_per_km": {
+            "mean": 255.78,
+            "vs_none_pct": -0.56,
+            "vs_none_p": 0.0417
+          },
+          "stops_per_vehicle": {
+            "mean": 1.664,
+            "vs_none_pct": -2.72,
+            "vs_none_p": 0.0208
+          },
+          "idle_s_per_vehicle": {
+            "mean": 13.899,
+            "vs_none_pct": -1.52,
+            "vs_none_p": 0.2871
+          },
+          "avg_waiting_time": {
+            "mean": 13.899,
+            "vs_none_pct": -1.52,
+            "vs_none_p": 0.2871
+          },
+          "avg_travel_time": {
+            "mean": 101.7,
+            "vs_none_pct": -0.5,
+            "vs_none_p": 0.0433
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1630.44,
+            "vs_none_pct": -0.04,
+            "vs_none_p": 0.8867
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 10.895
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 11.319
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.598
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.719
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 9.982
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 17.113
+          },
+          "eco_advised_vehicles": {
+            "mean": 25.3
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+commit": {
+          "fuel_l_per_100km": {
+            "mean": 11.628,
+            "vs_none_pct": 3.88,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 4.47,
+            "vs_glosa_p": 0.0
+          },
+          "co2_g_per_km": {
+            "mean": 267.213,
+            "vs_none_pct": 3.88,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 4.47,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle": {
+            "mean": 2.11,
+            "vs_none_pct": 23.37,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 26.83,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle": {
+            "mean": 16.868,
+            "vs_none_pct": 19.51,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 21.36,
+            "vs_glosa_p": 0.0
+          },
+          "avg_waiting_time": {
+            "mean": 16.868,
+            "vs_none_pct": 19.51,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 21.36,
+            "vs_glosa_p": 0.0
+          },
+          "avg_travel_time": {
+            "mean": 107.515,
+            "vs_none_pct": 5.18,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 5.72,
+            "vs_glosa_p": 0.0
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1618.2,
+            "vs_none_pct": -0.79,
+            "vs_none_p": 0.0141,
+            "vs_glosa_pct": -0.75,
+            "vs_glosa_p": 0.0389
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 11.59,
+            "vs_glosa_pct": 6.38,
+            "vs_glosa_p": 0.0
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 11.646,
+            "vs_glosa_pct": 2.9,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 2.163,
+            "vs_glosa_pct": 35.39,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.068,
+            "vs_glosa_pct": 20.26,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 14.367,
+            "vs_glosa_pct": 43.93,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 18.815,
+            "vs_glosa_pct": 9.95,
+            "vs_glosa_p": 0.0003
+          },
+          "eco_advised_vehicles": {
+            "mean": 65.9,
+            "vs_glosa_pct": 160.47,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 0.0
+          }
+        },
+        "glosa+routing": {
+          "fuel_l_per_100km": {
+            "mean": 11.111,
+            "vs_none_pct": -0.73,
+            "vs_none_p": 0.0082,
+            "vs_glosa_pct": -0.17,
+            "vs_glosa_p": 0.4487
+          },
+          "co2_g_per_km": {
+            "mean": 255.351,
+            "vs_none_pct": -0.73,
+            "vs_none_p": 0.0083,
+            "vs_glosa_pct": -0.17,
+            "vs_glosa_p": 0.4486
+          },
+          "stops_per_vehicle": {
+            "mean": 1.654,
+            "vs_none_pct": -3.31,
+            "vs_none_p": 0.0027,
+            "vs_glosa_pct": -0.61,
+            "vs_glosa_p": 0.5664
+          },
+          "idle_s_per_vehicle": {
+            "mean": 13.761,
+            "vs_none_pct": -2.5,
+            "vs_none_p": 0.1309,
+            "vs_glosa_pct": -0.99,
+            "vs_glosa_p": 0.3691
+          },
+          "avg_waiting_time": {
+            "mean": 13.761,
+            "vs_none_pct": -2.5,
+            "vs_none_p": 0.1309,
+            "vs_glosa_pct": -0.99,
+            "vs_glosa_p": 0.3691
+          },
+          "avg_travel_time": {
+            "mean": 101.455,
+            "vs_none_pct": -0.74,
+            "vs_none_p": 0.0083,
+            "vs_glosa_pct": -0.24,
+            "vs_glosa_p": 0.3763
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1629.36,
+            "vs_none_pct": -0.11,
+            "vs_none_p": 0.7184,
+            "vs_glosa_pct": -0.07,
+            "vs_glosa_p": 0.3434
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 10.894,
+            "vs_glosa_pct": -0.01,
+            "vs_glosa_p": 0.8881
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 11.286,
+            "vs_glosa_pct": -0.29,
+            "vs_glosa_p": 0.4283
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 1.603,
+            "vs_glosa_pct": 0.33,
+            "vs_glosa_p": 0.2673
+          },
+          "stops_per_vehicle_non": {
+            "mean": 1.697,
+            "vs_glosa_pct": -1.32,
+            "vs_glosa_p": 0.4773
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 9.982,
+            "vs_glosa_pct": 0.0,
+            "vs_glosa_p": 1.0
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 16.874,
+            "vs_glosa_pct": -1.4,
+            "vs_glosa_p": 0.3915
+          },
+          "eco_advised_vehicles": {
+            "mean": 24.9,
+            "vs_glosa_pct": -1.58,
+            "vs_glosa_p": 0.462
+          },
+          "eco_reroutes": {
+            "mean": 0.3,
+            "vs_none_p": 0.1934,
+            "vs_glosa_p": 0.1934
+          }
+        },
+        "all": {
+          "fuel_l_per_100km": {
+            "mean": 11.653,
+            "vs_none_pct": 4.11,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 4.7,
+            "vs_glosa_p": 0.0
+          },
+          "co2_g_per_km": {
+            "mean": 267.796,
+            "vs_none_pct": 4.11,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 4.7,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle": {
+            "mean": 2.132,
+            "vs_none_pct": 24.64,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 28.13,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle": {
+            "mean": 17.031,
+            "vs_none_pct": 20.67,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 22.53,
+            "vs_glosa_p": 0.0
+          },
+          "avg_waiting_time": {
+            "mean": 17.031,
+            "vs_none_pct": 20.67,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 22.53,
+            "vs_glosa_p": 0.0
+          },
+          "avg_travel_time": {
+            "mean": 107.722,
+            "vs_none_pct": 5.39,
+            "vs_none_p": 0.0,
+            "vs_glosa_pct": 5.92,
+            "vs_glosa_p": 0.0
+          },
+          "throughput_veh_per_hr": {
+            "mean": 1617.84,
+            "vs_none_pct": -0.82,
+            "vs_none_p": 0.0216,
+            "vs_glosa_pct": -0.77,
+            "vs_glosa_p": 0.027
+          },
+          "collisions": {
+            "mean": 0.0
+          },
+          "fuel_l_per_100km_eco": {
+            "mean": 11.608,
+            "vs_glosa_pct": 6.54,
+            "vs_glosa_p": 0.0
+          },
+          "fuel_l_per_100km_non": {
+            "mean": 11.678,
+            "vs_glosa_pct": 3.17,
+            "vs_glosa_p": 0.0001
+          },
+          "stops_per_vehicle_eco": {
+            "mean": 2.171,
+            "vs_glosa_pct": 35.86,
+            "vs_glosa_p": 0.0
+          },
+          "stops_per_vehicle_non": {
+            "mean": 2.102,
+            "vs_glosa_pct": 22.24,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_eco": {
+            "mean": 14.441,
+            "vs_glosa_pct": 44.67,
+            "vs_glosa_p": 0.0
+          },
+          "idle_s_per_vehicle_non": {
+            "mean": 19.046,
+            "vs_glosa_pct": 11.3,
+            "vs_glosa_p": 0.0004
+          },
+          "eco_advised_vehicles": {
+            "mean": 60.3,
+            "vs_glosa_pct": 138.34,
+            "vs_glosa_p": 0.0
+          },
+          "eco_reroutes": {
+            "mean": 1.6,
+            "vs_none_p": 0.0293,
+            "vs_glosa_p": 0.0293
+          }
+        }
+      }
+    }
+  }
+}

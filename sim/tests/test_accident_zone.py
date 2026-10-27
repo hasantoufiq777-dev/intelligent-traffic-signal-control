@@ -39,8 +39,8 @@ def alternating_live():
 def test_zone_network_keeps_the_grid_and_adds_one_contraflow_lane() -> None:
     import sumolib
 
-    base = sumolib.net.readNet(str(SUMO_DIR / "grid2x2.net.xml"))
-    zone = sumolib.net.readNet(str(SUMO_DIR / "grid2x2_zone.net.xml"))
+    base = sumolib.net.readNet(str(SUMO_DIR / "xml" / "networks" / "grid2x2.net.xml"))
+    zone = sumolib.net.readNet(str(SUMO_DIR / "xml" / "networks" / "grid2x2_zone.net.xml"))
     for j in ("J0", "J1", "J2", "J3"):
         a = sorted((c.getFrom().getID().split(".")[0], c.getTo().getID().split(".")[0], c.getDirection())
                    for c in base.getNode(j).getConnections())
