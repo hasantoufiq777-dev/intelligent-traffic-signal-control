@@ -144,6 +144,10 @@ def parse_tripinfo(
         vtype = trip.attrib.get("vType", "")
         vid = trip.attrib.get("id", "")
 
+        # Synthetic incident blockers (Module 10) are not traffic
+        if vid.startswith("incblk_") or vtype == "incident_blocker":
+            continue
+
         waiting_times.append(w)
         time_losses.append(tl)
         durations.append(d)

@@ -66,7 +66,7 @@ class AdaptiveController(BaseController):
         self.current_phase = self.PHASE_NS_GREEN
         if self.sumo_api:
             try:
-                self.sumo_api.trafficlight.setPhase(self.tls_id, self.PHASE_NS_GREEN)
+                self._apply_phase(self.PHASE_NS_GREEN)  # also holds the phase (no SUMO auto-advance)
             except Exception:
                 pass
 
@@ -115,6 +115,12 @@ class AdaptiveController(BaseController):
             return
 
         queues = self.get_queue_lengths()
+        # Module 10: a fully blocked incoming edge has zero flow, so its queue is not demand
+        # (no green and no starvation credit for it). Empty set when there is no incident.
+        if self.provider is not None:
+            blocked = self.provider.get_blocked_approaches(self.tls_id)
+            if blocked:
+                queues = {d: (0 if d in blocked else q) for d, q in queues.items()}
         self._update_starvation_trackers(1.0, queues)
 
         self.time_in_current_green += 1.0

@@ -7,7 +7,7 @@ TraCI queue or halting vehicle inquiries.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from sim.sensing import StateProvider
 from sim.vanet.network import VanetNetwork
@@ -40,6 +40,22 @@ class VanetStateProvider(StateProvider):
     def get_edge_speeds(self) -> Dict[str, float]:
         """Return global edge speed map from the TMC."""
         return self.vanet_net.tmc.get_edge_speeds()
+
+    def get_incidents(self) -> Dict[str, str]:
+        """Return the TMC incident map built from RSU INCIDENT_FLAGs."""
+        return self.vanet_net.get_incidents()
+
+    def get_blocked_approaches(self, tls_id: str) -> Set[str]:
+        """Approaches of tls_id whose incoming edge the TMC marks as fully blocked."""
+        incidents = self.vanet_net.get_incidents()
+        rsu = self.vanet_net.rsus.get(tls_id)
+        if not incidents or rsu is None:
+            return set()
+        return {
+            rsu.edge_directions[edge]
+            for edge, kind in incidents.items()
+            if kind == "edge_blocked" and edge in rsu.edge_directions
+        }
 
     def update(self, sim_time: float) -> None:
         """Step the underlying VANET network emulation."""

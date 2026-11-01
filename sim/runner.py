@@ -23,7 +23,7 @@ from sim.analytics.metrics import StepMetricsLogger, parse_tripinfo
 from sim.controllers.fixed import FixedTimeController
 from sim.scenarios.generate_routes import generate_routes, load_scenario_config
 from sim.sensing import OracleStateProvider, StateProvider
-from sim.vanet.nodes import is_vehicle_equipped
+from sim.vanet.nodes import internal_lane_junction, is_vehicle_equipped
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,75 @@ def create_controller(
     raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
 
 
+def _reroute_evs_around(
+    sumo_api: Any,
+    graph: Any,
+    vehicle_ids: List[str],
+    closed_edges: set,
+    speed_map: Dict[str, float],
+    rerouted: set,
+) -> None:
+    """Emergency vehicles (always equipped) avoid edges the TMC reports as closed.
+
+    Uses A* on the TMC map. The EV's new route then flows into its EV_ALERTs, so
+    preemption follows the new route.
+    """
+    from sim.navigation.astar import astar_search
+
+    for vid in vehicle_ids:
+        try:
+            if sumo_api.vehicle.getTypeID(vid) != "emergency":
+                continue
+            curr = str(sumo_api.vehicle.getRoadID(vid))
+            if curr.startswith(":") or curr in closed_edges or curr not in graph.edges:
+                continue
+            route = list(sumo_api.vehicle.getRoute(vid))
+            idx = int(sumo_api.vehicle.getRouteIndex(vid))
+            if not any(e in closed_edges for e in route[idx + 1:]):
+                continue
+            path, cost, _exp = astar_search(
+                graph=graph, start_edge=curr, goal_edge=route[-1],
+                speed_map=speed_map, closed_edges=closed_edges,
+            )
+            if path and cost < float("inf"):
+                sumo_api.vehicle.setRoute(vid, path)
+                rerouted.add(vid)
+                logger.info("EV %s rerouted around closed edge(s) %s", vid, sorted(closed_edges))
+        except Exception as e:
+            logger.debug("EV incident reroute failed for %s: %s", vid, e)
+
+
+def _resolve_path(project_root: Path, path: Any) -> Path:
+    p = Path(str(path))
+    return p if p.is_absolute() else project_root / p
+
+
+def _load_tuned_file(project_root: Path, path: Any, target: str) -> Dict[str, Any]:
+    """Load a GA output YAML (Module 11) or fail with a message saying how to create it."""
+    p = _resolve_path(project_root, path)
+    if not p.exists():
+        raise FileNotFoundError(
+            f"Tuned parameter file not found: {p}. "
+            f"Run: python sim/optimizer/ga_tuner.py --target {target}"
+        )
+    with open(p, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    data.pop("meta", None)
+    return data
+
+
+def protocol_event(raw: Dict[str, Any], run_id: str, t: float) -> Dict[str, Any]:
+    """Convert an internal event (VANET alert, reroute) to the live protocol event shape:
+    {"type","run_id","t","kind","tls","detail"}. Internal events name their kind under "event"."""
+    kind = raw.get("kind") or raw.get("event") or "unknown"
+    tls = raw.get("tls") or raw.get("tls_id") or raw.get("target") or ""
+    detail = raw.get("detail")
+    if not detail:
+        skip = {"type", "event", "kind", "tls", "tls_id", "time", "run_id", "t"}
+        detail = ", ".join(f"{k}={v}" for k, v in raw.items() if k not in skip)
+    return {"type": "event", "run_id": run_id, "t": int(t), "kind": kind, "tls": str(tls), "detail": str(detail)}
+
+
 def emit_json_line(data: Dict[str, Any]) -> None:
     """Emit a single line of JSON to stdout and flush immediately."""
     print(json.dumps(data), flush=True)
@@ -108,14 +177,16 @@ def run_simulation(
     range_m: float = 300.0,
     relay: str = "off",
     aco_params: Optional[str] = None,
+    output_dir: Optional[Path] = None,
+    step_delay: float = 0.0,
 ) -> Dict[str, Any]:
-    """Run a single simulation run and return performance metrics."""
+    """Run a single simulation run and return performance metrics.
+
+    output_dir: where tripinfo and the preemption-events CSV go (default results/).
+    Parallel callers such as the GA pass a private directory so runs never share files.
+    """
     global _STOP_REQUESTED
     _STOP_REQUESTED = False
-
-    # Check for features scheduled for future modules
-    if nav == "aco_tuned" and not aco_params:
-        raise NotImplementedError("ACO parameter tuning via GA is scheduled for Module 11.")
 
     # Global signal handlers for graceful interrupt
     try:
@@ -145,6 +216,22 @@ def run_simulation(
         ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
 
     ctrl_params = dict(ctrl_section or {})
+
+    # Module 11: *_tuned controllers use the GA output (defaults < tuned file < explicit params)
+    tuned_vanet: Dict[str, Any] = {}
+    if controller.endswith("_tuned"):
+        tuned_file = (params or {}).get("tuned_params_file") or base_config.get("ga", {}).get(
+            "signals_params_file", "results/ga/best_params_signals.yaml"
+        )
+        tuned = _load_tuned_file(project_root, tuned_file, "signals")
+        tuned_vanet = dict(tuned.pop("vanet", {}) or {})
+        ctrl_params.update(tuned)
+
+    if nav == "aco_tuned" and not aco_params:
+        aco_file = base_config.get("ga", {}).get("aco_params_file", "results/ga/best_params_aco.yaml")
+        _load_tuned_file(project_root, aco_file, "aco")  # clear error if the GA has not run
+        aco_params = str(_resolve_path(project_root, aco_file))
+
     if params:
         ctrl_params.update(params)
 
@@ -164,11 +251,17 @@ def run_simulation(
     )
 
     network = params.get("network") if params and "network" in params else scenario_cfg.get("network", "single")
+
+    # Incident config (Module 10); params["incident"] overrides fields, e.g. {"enabled": False}
+    incident_cfg: Dict[str, Any] = dict(scenario_cfg.get("incident") or {})
+    if params and isinstance(params.get("incident"), dict):
+        incident_cfg.update(params["incident"])
+    incident_enabled = bool(incident_cfg.get("enabled", False))
     routes_path = project_root / "sim" / "sumo" / f"routes_{run_id}.rou.xml"
     generate_routes(scenario_cfg, routes_path, override_seed=seed, network_override=network)
 
     # 3. Setup outputs
-    results_dir = project_root / "results"
+    results_dir = Path(output_dir) if output_dir is not None else project_root / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     tripinfo_path = results_dir / f"tripinfo_{run_id}.xml"
@@ -219,6 +312,8 @@ def run_simulation(
     was_interrupted = False
     is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"))
     vanet_net: Optional[Any] = None
+    vtype_cache: Dict[str, str] = {}
+    ev_crossings: set = set()  # (ev id, signalised junction) pairs the EV drove through
     queue_errors: List[float] = []
 
     if live:
@@ -233,13 +328,18 @@ def run_simulation(
         sumo_api.start(sumo_cmd)
         tls_ids = list(sumo_api.trafficlight.getIDList())
 
-        if is_vanet_controller:
+        vanet_cfg = base_config.get("vanet", {}).copy()
+        vanet_cfg.update(tuned_vanet)
+        if params and "vanet" in params:
+            vanet_cfg.update(params["vanet"])
+        # Incident detection runs through the VANET. "auto" = only when the scenario has an incident.
+        det_mode = str(vanet_cfg.get("incident_detection", "auto")).lower()
+        incident_detection_on = det_mode == "on" or (det_mode == "auto" and incident_enabled)
+
+        if is_vanet_controller or incident_detection_on:
             from sim.vanet.network import VanetNetwork
             from sim.vanet.sensing_vanet import VanetStateProvider
 
-            vanet_cfg = base_config.get("vanet", {}).copy()
-            if params and "vanet" in params:
-                vanet_cfg.update(params["vanet"])
             relay_flag = True if relay == "on" else (False if relay == "off" else None)
             vanet_net = VanetNetwork(
                 sumo_api=sumo_api,
@@ -250,12 +350,26 @@ def run_simulation(
                 loss_override=loss,
                 range_override=range_m,
                 relay_override=relay_flag,
+                incident_detection=incident_detection_on,
             )
+
+        if is_vanet_controller and vanet_net is not None:
             provider: StateProvider = VanetStateProvider(vanet_net)
             oracle_provider = OracleStateProvider(sumo_api)
         else:
             provider = OracleStateProvider(sumo_api)
             oracle_provider = provider
+
+        # Incident ground truth (Module 10). Oracle sensing may see the truth (ideal baseline);
+        # VANET sensing and navigation only see the TMC incident map.
+        incident_mgr: Optional[Any] = None
+        if incident_enabled:
+            from sim.scenarios.incident import IncidentManager
+
+            incident_mgr = IncidentManager(sumo_api, incident_cfg)
+            oracle_provider.set_incident_source(incident_mgr.get_true_incidents)
+        incident_speed = float(vanet_cfg.get("incident_speed", 1.0))
+        ev_informed_reroutes: set = set()
 
         for tid in tls_ids:
             controllers_map[tid] = create_controller(
@@ -276,10 +390,8 @@ def run_simulation(
             nav_cfg.update(params["navigation"])
         aco_cfg = base_config.get("aco", {}).copy()
         if aco_params:
-            aco_p_path = Path(aco_params)
-            if aco_p_path.exists():
-                with open(aco_p_path, "r", encoding="utf-8") as f:
-                    aco_cfg.update(yaml.safe_load(f) or {})
+            # Missing file = clear error; the "meta" block written by the GA is not an ACO parameter
+            aco_cfg.update(_load_tuned_file(project_root, aco_params, "aco"))
         elif params and "aco" in params:
             aco_cfg.update(params["aco"])
 
@@ -303,9 +415,31 @@ def run_simulation(
                 break
 
             t += 1.0
+            if incident_mgr is not None:
+                incident_mgr.step(t)
             provider.update(t)
             if is_vanet_controller:
                 oracle_provider.update(t)
+            elif vanet_net is not None:
+                # VANET used only for incident detection (oracle-sensed controller);
+                # its EV-alert events are not used by this controller, so drop them.
+                vanet_net.step(t)
+                vanet_net.pop_events()
+
+            if incident_mgr is not None:
+                if vanet_net is not None:
+                    incident_mgr.observe_tmc_changes(vanet_net.pop_incident_changes(), t)
+                inc_events = incident_mgr.pop_events()
+                if live:
+                    for ev in inc_events:
+                        emit_json_line({
+                            "type": "event",
+                            "run_id": run_id,
+                            "t": int(t),
+                            "kind": ev["kind"],
+                            "tls": ev.get("tls", ""),
+                            "detail": ev["detail"],
+                        })
 
             # Step controllers
             for tid, ctrl in controllers_map.items():
@@ -326,9 +460,32 @@ def run_simulation(
             active_vehs = list(sumo_api.vehicle.getIDList())
             n_vehicles = len(active_vehs)
 
-            # Retrieve EV info through provider
-            ev_list = provider.get_ev_info("J0")
-            ev_present = len(ev_list) > 0
+            # Emergency vehicles (type looked up once per vehicle) and the junctions they cross
+            for vid in active_vehs:
+                if vid not in vtype_cache:
+                    try:
+                        vtype_cache[vid] = sumo_api.vehicle.getTypeID(vid)
+                    except Exception:
+                        vtype_cache[vid] = "car"
+            active_evs = [v for v in active_vehs if vtype_cache.get(v) == "emergency"]
+            for vid in active_evs:
+                try:
+                    j = internal_lane_junction(str(sumo_api.vehicle.getRoadID(vid)))
+                except Exception:
+                    j = None
+                if j in controllers_map:
+                    ev_crossings.add((vid, j))
+
+            # Live EV list through the provider: each EV's nearest upcoming junction
+            ev_list: List[Dict[str, Any]] = []
+            if active_evs:
+                nearest: Dict[str, Dict[str, Any]] = {}
+                for tid in controllers_map:
+                    for rec in provider.get_ev_info(tid):
+                        if rec["id"] not in nearest or rec.get("dist", 1e9) < nearest[rec["id"]].get("dist", 1e9):
+                            nearest[rec["id"]] = rec
+                ev_list = list(nearest.values())
+            ev_present = len(active_evs) > 0
 
             # Check newly arrived vehicles
             try:
@@ -376,19 +533,33 @@ def run_simulation(
 
             # Step Navigation (Module 9)
             speed_map = provider.get_edge_speeds()
+            closed_edges: Optional[set] = None
+            tmc_incidents = vanet_net.get_incidents() if (vanet_net is not None and incident_detection_on) else {}
+            if tmc_incidents:
+                # Module 10: TMC incident map -> edge costs (closure = infinite, lane block = very slow)
+                speed_map = dict(speed_map)
+                closed_edges = {e for e, k in tmc_incidents.items() if k == "edge_blocked"}
+                for e, k in tmc_incidents.items():
+                    if k != "edge_blocked":
+                        speed_map[e] = incident_speed
+                if closed_edges:
+                    _reroute_evs_around(sumo_api, edge_graph, active_vehs, closed_edges, speed_map, ev_informed_reroutes)
             navigator.step(
                 sim_time=t,
                 speed_map=speed_map,
-                closed_edges=None,
+                closed_edges=closed_edges or None,
+                incident_edges=set(tmc_incidents) or None,
                 equipped_check_fn=lambda vid: is_vehicle_equipped(vid, penetration=penetration, seed=seed),
             )
             if live:
                 for n_ev in navigator.pop_events():
-                    emit_json_line(n_ev)
+                    emit_json_line(protocol_event(n_ev, run_id, t))
 
             # Emit live state if requested (protocol v2 schema)
             if live and (int(t) % emit_interval == 0):
-                active_waits = [sumo_api.vehicle.getWaitingTime(v) for v in active_vehs]
+                active_waits = [
+                    sumo_api.vehicle.getWaitingTime(v) for v in active_vehs if not v.startswith("incblk_")
+                ]
                 avg_wait = round(float(sum(active_waits) / len(active_waits)), 1) if active_waits else 0.0
                 hours = max(t / 3600.0, 1e-4)
                 throughput_rate = round(arrived_count / hours, 1)
@@ -406,7 +577,7 @@ def run_simulation(
 
                 if is_vanet_controller and vanet_net is not None:
                     for a_ev in vanet_net.pop_events():
-                        emit_json_line(a_ev)
+                        emit_json_line(protocol_event(a_ev, run_id, t))
 
                 emit_json_line({
                     "type": "state",
@@ -424,6 +595,11 @@ def run_simulation(
                 })
 
             sumo_api.simulationStep()
+            if step_delay > 0.0:
+                # Live demo pacing (wall-clock seconds per simulated second)
+                import time as _time
+
+                _time.sleep(step_delay)
 
             if t > 60.0 and sumo_api.simulation.getMinExpectedNumber() <= 0:
                 break
@@ -492,6 +668,38 @@ def run_simulation(
     nav_metrics = navigator.get_nav_metrics()
     result_payload.update(nav_metrics)
 
+    # Incident fields (Module 10). incident_added_delay needs a paired no-incident run and is
+    # filled by sim/analytics/vanet_experiments.py --incident.
+    result_payload.update({
+        "incident_type": None,
+        "incident_edge": None,
+        "incident_detected": None,
+        "incident_detection_delay": None,
+        "incident_detected_kind": None,
+        "incident_false_flags": None,
+        "incident_local_detours": None,
+        "incident_rerouted_vehicles": None,
+        "incident_nav_entries_after_detection": None,
+        "incident_nonnav_entries_after_detection": None,
+        "incident_added_delay": None,
+    })
+    if incident_mgr is not None:
+        result_payload.update(incident_mgr.get_metrics())
+        rerouted = set(incident_mgr.local_detour_vids) | set(ev_informed_reroutes)
+        rerouted |= {vid for (rt, vid) in navigator.reroute_log if incident_mgr.is_active_window(rt)}
+        result_payload["incident_rerouted_vehicles"] = len(rerouted)
+
+        from sim.navigation.navigator import is_vehicle_navigating
+
+        def _is_nav(vid: str) -> bool:
+            if nav == "none" or not is_vehicle_equipped(vid, penetration=penetration, seed=seed):
+                return False
+            return is_vehicle_navigating(vid, nav_fraction=nav_frac, seed=seed)
+
+        n_nav, n_non = incident_mgr.entries_after_detection(_is_nav)
+        result_payload["incident_nav_entries_after_detection"] = n_nav
+        result_payload["incident_nonnav_entries_after_detection"] = n_non
+
     if is_vanet_controller and vanet_net is not None:
         mae = round(float(sum(queue_errors) / max(len(queue_errors), 1)), 3)
         final_comm = vanet_net.get_comm_stats()
@@ -501,6 +709,14 @@ def run_simulation(
         result_payload["avg_hops"] = final_comm.get("avg_hops", 1.0)
         result_payload["ev_alert_delivery_time"] = final_comm.get("ev_alert_delivery_time", 0.0)
         result_payload["missed_preemptions"] = final_comm.get("missed_preemptions", 0)
+
+    # Missed preemptions: signalised junctions an EV drove through without that junction's
+    # preemption having triggered for it (only meaningful for preemption controllers)
+    if any(hasattr(c, "triggered_evs") for c in controllers_map.values()):
+        result_payload["missed_preemptions"] = sum(
+            1 for (ev_id, tid) in ev_crossings
+            if ev_id not in getattr(controllers_map.get(tid), "triggered_evs", set())
+        )
 
     # Write preemption events CSV if any occurred
     import csv

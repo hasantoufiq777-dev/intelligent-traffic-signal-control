@@ -81,6 +81,7 @@ class VehicleNavigator:
 
         # Telemetry metrics
         self.reroute_count: int = 0
+        self.reroute_log: List[Tuple[float, str]] = []  # (time, vehicle id) of applied reroutes
         self.total_search_expansions: int = 0
         self.total_search_ms: float = 0.0
         self.step_edge_loads: List[List[int]] = []
@@ -124,13 +125,19 @@ class VehicleNavigator:
         speed_map: Optional[Dict[str, float]] = None,
         closed_edges: Optional[Set[str]] = None,
         equipped_check_fn: Optional[Any] = None,
+        incident_edges: Optional[Set[str]] = None,
     ) -> None:
-        """Execute one simulation step of dynamic vehicle navigation."""
+        """Execute one simulation step of dynamic vehicle navigation.
+
+        incident_edges: edges in the TMC incident map (closed or lane-blocked). Navigating
+        vehicles whose remaining route uses one are re-checked right away.
+        """
         if not self.sumo_api:
             return
 
         try:
-            active_vids = set(self.sumo_api.vehicle.getIDList())
+            # Synthetic incident blockers (Module 10, id prefix "incblk_") are not traffic
+            active_vids = {v for v in self.sumo_api.vehicle.getIDList() if not v.startswith("incblk_")}
         except Exception:
             return
 
@@ -198,7 +205,17 @@ class VehicleNavigator:
             gap_ok = (time_since_reroute >= self.min_reroute_gap)
 
             if not (gap_ok and (passed_junction or interval_trigger)):
-                continue
+                # Module 10: a TMC-reported incident on the remaining route triggers an
+                # immediate reroute check (no change when incident_edges is empty).
+                if not incident_edges:
+                    continue
+                try:
+                    r_now = self.sumo_api.vehicle.getRoute(vid)
+                    i_now = int(self.sumo_api.vehicle.getRouteIndex(vid))
+                except Exception:
+                    continue
+                if not any(e in incident_edges for e in r_now[i_now + 1:]):
+                    continue
 
             try:
                 current_route = list(self.sumo_api.vehicle.getRoute(vid))
@@ -267,6 +284,7 @@ class VehicleNavigator:
                     try:
                         self.sumo_api.vehicle.setRoute(vid, new_path)
                         self.reroute_count += 1
+                        self.reroute_log.append((sim_time, vid))
                         self.last_reroute_time[vid] = sim_time
                         self._emit_reroute_event(vid, remaining_route, new_path, sim_time)
                     except Exception as e:

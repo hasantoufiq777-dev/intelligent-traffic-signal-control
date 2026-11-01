@@ -34,7 +34,7 @@ class FixedTimeController(BaseController):
         self.current_phase = self.PHASE_NS_GREEN
         if self.sumo_api:
             try:
-                self.sumo_api.trafficlight.setPhase(self.tls_id, self.PHASE_NS_GREEN)
+                self._apply_phase(self.PHASE_NS_GREEN)  # also holds the phase (no SUMO auto-advance)
             except Exception:
                 pass
 

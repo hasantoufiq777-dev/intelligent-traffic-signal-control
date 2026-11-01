@@ -54,6 +54,10 @@ def main() -> None:
     parser.add_argument("--range", type=float, default=300.0, dest="range_m", help="Wireless communication range in meters")
     parser.add_argument("--relay", type=str, default="off", choices=["on", "off"], help="V2V multi-hop relaying")
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO parameters YAML file")
+    parser.add_argument(
+        "--step-delay", type=float, default=0.0,
+        help="Wall-clock seconds to wait per simulated second (live demo pacing; 0 = as fast as possible)",
+    )
 
     args = parser.parse_args()
 
@@ -104,6 +108,7 @@ def main() -> None:
             range_m=args.range_m,
             relay=args.relay,
             aco_params=args.aco_params,
+            step_delay=max(0.0, args.step_delay),
         )
 
         # In non-live mode, output result at the end as JSON on stdout

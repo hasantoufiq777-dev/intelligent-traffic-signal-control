@@ -54,6 +54,10 @@ class EvAlertMessage(BaseMessage):
     speed: float = 0.0
     route_edges: List[str] = field(default_factory=list)
     current_edge: str = ""
+    # Progress along the route, known to the EV's OBU: index of the current route edge and
+    # position on the current lane (m). route_index -1 = unknown (older/hand-made alerts).
+    route_index: int = -1
+    lane_pos: float = 0.0
     eta: float = 0.0
     sender_id: str = ""
     via_backbone: bool = False
@@ -70,6 +74,13 @@ class IncidentFlagMessage(BaseMessage):
 
     edge_id: str = ""
     reason: str = "stopped_vehicle"
+    # "lane_blocked" (some lanes blocked: very high cost), "edge_blocked" (all lanes
+    # blocked: infinite cost) or "cleared" (the RSU no longer sees the incident).
+    kind: str = "lane_blocked"
+    rsu_id: str = ""
+    lanes_blocked: int = 0
+    n_lanes: int = 1
+    n_vehicles: int = 0
 
     def __post_init__(self) -> None:
         self.msg_type = MessageType.INCIDENT_FLAG

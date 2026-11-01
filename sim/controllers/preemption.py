@@ -9,7 +9,7 @@ safety clearances and safe phase transitions (yellow -> all-red -> EV green).
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from sim.controllers.adaptive import AdaptiveController
 from sim.controllers.base import BaseController
@@ -57,6 +57,8 @@ class PreemptionController(BaseController):
         # Event and history queues
         self.events_queue: List[Dict[str, Any]] = []
         self.preemption_records: List[Dict[str, Any]] = []
+        # EVs this junction has triggered preemption for (used for the missed_preemptions metric)
+        self.triggered_evs: Set[str] = set()
 
     def get_phase_name(self) -> str:
         """Return semantic name of the active signal phase."""
@@ -115,6 +117,7 @@ class PreemptionController(BaseController):
                 best_ev = candidates[0]
 
                 self.active_ev_id = str(best_ev["id"])
+                self.triggered_evs.add(self.active_ev_id)
                 self.active_ev_approach = str(best_ev.get("approach", "N"))
                 self.eta_at_trigger = float(best_ev.get("eta", 0.0))
                 self.preempt_start_time = float(sim_time)

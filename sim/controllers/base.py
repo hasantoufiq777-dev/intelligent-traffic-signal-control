@@ -23,6 +23,9 @@ class BaseController:
     PHASE_EW_GREEN = 2
     PHASE_EW_YELLOW = 3
 
+    # Remaining duration given to every phase the controller sets (effectively "until changed")
+    HOLD_PHASE_S = 1.0e6
+
     NS_LINKS = {0, 1, 2, 3, 8, 9, 10, 11}
     EW_LINKS = {4, 5, 6, 7, 12, 13, 14, 15}
 
@@ -242,6 +245,10 @@ class BaseController:
             except Exception:
                 pass
             self.sumo_api.trafficlight.setPhase(self.tls_id, phase_index)
+            # Hold the phase until the controller changes it. Without this, SUMO's static program
+            # advances by itself when the phase's net-file duration (30 s single, 42 s grid) ends,
+            # cutting long greens (adaptive max_green, EV preemption holds) behind the controller.
+            self.sumo_api.trafficlight.setPhaseDuration(self.tls_id, self.HOLD_PHASE_S)
             state = self.sumo_api.trafficlight.getRedYellowGreenState(self.tls_id)
             if self.has_conflicting_greens(state):
                 msg = f"SAFETY VIOLATION on {self.tls_id}: Conflicting greens in state {state}"

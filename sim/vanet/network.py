@@ -61,6 +61,7 @@ class VanetNetwork:
         loss_override: Optional[float] = None,
         range_override: Optional[float] = None,
         relay_override: Optional[bool] = None,
+        incident_detection: bool = False,
     ) -> None:
         """Initialize VANET environment from configuration."""
         self.sumo_api = sumo_api
@@ -168,6 +169,71 @@ class VanetNetwork:
             seed=self.seed,
         )
 
+        # Incident detection (Module 10): RSU flags -> wired backbone -> TMC incident map
+        self.backbone_delay_s = backbone_delay_ms / 1000.0
+        self.incident_backbone_queue: List[Tuple[float, Any]] = []
+        self.incident_changes: List[Dict[str, Any]] = []
+        self.incident_flags_sent: int = 0
+        self.incident_detection = bool(incident_detection)
+        if self.incident_detection:
+            edge_info = self._build_edge_map_info()
+            for rsu in self.rsus.values():
+                rsu.configure_incident_detection(
+                    edge_map_info=edge_info,
+                    detect_time=float(self.config.get("incident_detect_time", 30.0)),
+                    clear_time=float(self.config.get("incident_clear_time", 10.0)),
+                    stopline_exclusion=float(self.config.get("incident_stopline_exclusion_m", 30.0)),
+                    min_vehicles=int(self.config.get("incident_min_vehicles", 1)),
+                )
+
+    def _build_edge_map_info(self) -> Dict[str, Tuple[Tuple[float, float], int]]:
+        """Static digital-map data for RSUs: downstream end point and lane count per edge."""
+        info: Dict[str, Tuple[Tuple[float, float], int]] = {}
+        if not self.sumo_api:
+            return info
+        try:
+            edge_ids = list(self.sumo_api.edge.getIDList())
+        except Exception:
+            return info
+        for eid in edge_ids:
+            if eid.startswith(":"):
+                continue
+            try:
+                n_lanes = int(self.sumo_api.edge.getLaneNumber(eid))
+                shape = self.sumo_api.lane.getShape(f"{eid}_0")
+                end_xy = (float(shape[-1][0]), float(shape[-1][1]))
+            except Exception:
+                continue
+            info[eid] = (end_xy, max(1, n_lanes))
+        return info
+
+    def _step_incident_detection(self, sim_time: float) -> None:
+        """Deliver due backbone flags to the TMC, then let each RSU raise new flags."""
+        due = [item for item in self.incident_backbone_queue if item[0] <= sim_time + 1e-9]
+        self.incident_backbone_queue = [item for item in self.incident_backbone_queue if item[0] > sim_time + 1e-9]
+        for _t_due, msg in due:
+            change = self.tmc.receive_incident_flag(msg, sim_time)
+            if change is not None:
+                change["flag_time"] = msg.timestamp
+                change["lanes_blocked"] = msg.lanes_blocked
+                change["n_lanes"] = msg.n_lanes
+                self.incident_changes.append(change)
+
+        for tid in sorted(self.rsus.keys()):
+            for msg in self.rsus[tid].detect_incidents(sim_time):
+                self.incident_flags_sent += 1
+                self.incident_backbone_queue.append((sim_time + self.backbone_delay_s, msg))
+
+    def pop_incident_changes(self) -> List[Dict[str, Any]]:
+        """Pop TMC incident-map changes (new flag, upgrade, cleared) since the last call."""
+        changes = self.incident_changes[:]
+        self.incident_changes.clear()
+        return changes
+
+    def get_incidents(self) -> Dict[str, str]:
+        """Return the TMC incident map: edge -> 'lane_blocked' | 'edge_blocked'."""
+        return self.tmc.get_incidents()
+
     def step(self, sim_time: float) -> None:
         """Execute one simulation second of the VANET emulation."""
         self.current_sim_time = float(sim_time)
@@ -246,6 +312,10 @@ class VanetNetwork:
         for rsu in self.rsus.values():
             speeds = rsu.estimate_edge_speeds(sim_time)
             self.tmc.receive_rsu_report(speeds)
+
+        # 5. Incident detection from beacons (Module 10)
+        if self.incident_detection:
+            self._step_incident_detection(sim_time)
 
     def get_rsu_queue_estimate(self, tls_id: str) -> Dict[str, int]:
         """Return RSU approach queue estimate for the requested junction."""

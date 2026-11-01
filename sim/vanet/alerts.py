@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sim.vanet.channel import WirelessChannel
 from sim.vanet.messages import EvAlertMessage
-from sim.vanet.nodes import RSUNode, is_vehicle_equipped
+from sim.vanet.nodes import RSUNode, build_edge_info, distance_along_route, is_vehicle_equipped
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,9 @@ class AlertManager:
         self.backbone_delay_ms = float(backbone_delay_ms)
         self.penetration = float(penetration)
         self.seed = int(seed)
+
+        # Static digital map for RSUs (edge -> downstream junction, length); built on first step
+        self.edge_info: Dict[str, Tuple[str, float]] = {}
 
         # Transmission state
         self.last_alert_time: Dict[str, float] = {}
@@ -100,6 +103,8 @@ class AlertManager:
         """Execute one simulation step for emergency alert broadcasting and relaying."""
         if not sumo_api:
             return
+        if not self.edge_info:
+            self.edge_info = build_edge_info(sumo_api)
 
         # 1. Discover active emergency vehicles
         try:
@@ -133,6 +138,11 @@ class AlertManager:
                 curr_edge = str(sumo_api.vehicle.getRoadID(ev_id))
             except Exception:
                 continue
+            try:
+                route_index = int(sumo_api.vehicle.getRouteIndex(ev_id))
+                lane_pos = float(sumo_api.vehicle.getLanePosition(ev_id))
+            except Exception:  # route progress unknown: RSUs fall back to straight-line distance
+                route_index, lane_pos = -1, 0.0
 
             # Check if EV has entered radio range of any RSU for delivery latency metric
             for tid, rsu in self.rsus.items():
@@ -158,6 +168,8 @@ class AlertManager:
                 speed=speed,
                 route_edges=route,
                 current_edge=curr_edge,
+                route_index=route_index,
+                lane_pos=lane_pos,
                 timestamp=sim_time,
                 ttl=self.max_hops,
                 hop_count=0,
@@ -219,6 +231,8 @@ class AlertManager:
                         speed=speed,
                         route_edges=route,
                         current_edge=curr_edge,
+                        route_index=route_index,
+                        lane_pos=lane_pos,
                         timestamp=sim_time,
                         ttl=alert_msg.ttl - 1,
                         hop_count=alert_msg.hop_count + 1,
@@ -325,6 +339,8 @@ class AlertManager:
                     speed=alert_msg.speed,
                     route_edges=alert_msg.route_edges,
                     current_edge=alert_msg.current_edge,
+                    route_index=alert_msg.route_index,
+                    lane_pos=alert_msg.lane_pos,
                     timestamp=alert_msg.timestamp,
                     ttl=alert_msg.ttl,
                     hop_count=alert_msg.hop_count,
@@ -350,14 +366,27 @@ class AlertManager:
             if alert_age > self.alert_timeout:
                 continue
 
-            # Extrapolate distance along route/approach to RSU stop line
-            d0 = math.hypot(alert.pos[0] - rsu.pos[0], alert.pos[1] - rsu.pos[1])
+            along = None
+            if alert.route_index >= 0 and self.edge_info:
+                # Distance along the EV's remaining route, from the static map (Module 12 fix)
+                along = distance_along_route(
+                    tls_id, list(alert.route_edges), alert.route_index, alert.current_edge,
+                    alert.lane_pos, self.edge_info, set(self.tls_ids),
+                )
+                if along is None:
+                    continue  # this junction is not ahead on the EV's route: nothing to prepare for
+                d0, incoming_edge, _ = along
+            else:
+                # Fallback without route progress or map (hand-built alerts in unit tests)
+                d0 = math.hypot(alert.pos[0] - rsu.pos[0], alert.pos[1] - rsu.pos[1])
+                incoming_edge = alert.current_edge
+
+            # Dead reckoning since the alert was sent; 0 = at or inside the junction
             extrapolated_dist = max(0.0, d0 - (alert.speed * alert_age))
 
-            # Determine approach direction (N, S, E, W)
-            approach = "N"
-            if alert.current_edge and alert.current_edge in rsu.edge_directions:
-                approach = rsu.edge_directions[alert.current_edge]
+            # Approach direction from the edge the EV will arrive on (N, S, E, W)
+            if incoming_edge and incoming_edge in rsu.edge_directions:
+                approach = rsu.edge_directions[incoming_edge]
             else:
                 dx = alert.pos[0] - rsu.pos[0]
                 dy = alert.pos[1] - rsu.pos[1]
@@ -366,8 +395,7 @@ class AlertManager:
                 else:
                     approach = "E" if dx > 0 else "W"
 
-            # Check clearance: if EV has passed junction, distance drops to 0
-            if extrapolated_dist <= 5.0 and alert_age > 1.0:
+            if along is None and extrapolated_dist <= 5.0 and alert_age > 1.0:
                 extrapolated_dist = 0.0
 
             # Cruising speed fallback for stopped/queued vehicle

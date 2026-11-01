@@ -1,0 +1,8 @@
+[
+  { "label": "Baseline: fixed-time signals", "scenario": "normal", "controller": "fixed", "nav": "none", "seed": 1 },
+  { "label": "VANET-sensed adaptive signals (50% equipped)", "scenario": "normal", "controller": "adaptive_vanet", "nav": "none", "seed": 1, "penetration": 0.5 },
+  { "label": "Ambulance with V2I/V2V preemption", "scenario": "emergency", "controller": "adaptive_ev_vanet", "nav": "none", "seed": 2, "loss": 0.1, "relay": "on" },
+  { "label": "Navigation with A*", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "astar", "seed": 3 },
+  { "label": "Navigation with ACO", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "aco", "seed": 3 },
+  { "label": "Road closure detected through VANET", "scenario": "incident", "controller": "adaptive_ev_vanet", "nav": "astar", "seed": 1 }
+]

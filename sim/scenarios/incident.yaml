@@ -1,34 +1,44 @@
 name: incident
-network: single
+network: grid2x2
 simulation:
   duration: 1000
   step_length: 1.0
 
+# Same demand as the navigation scenario: the two heavy diagonal flows use J0J1 by default
+# and have an equal-length alternative via J0J2 -> J2J3 (see results/route_alternatives.md).
 traffic:
   seed: 1
-  rates:
-    N: 360
-    S: 360
-    E: 300
-    W: 300
-  turn_ratios:
-    left: 0.15
-    straight: 0.70
-    right: 0.15
+  rate_per_od: 150
+  od_flows:
+    - {from: "bottom0J0", to: "top1J3", rate: 250}
+    - {from: "left0J0", to: "right1J3", rate: 250}
+    - {from: "bottom1J1", to: "top0J2", rate: 150}
+    - {from: "left1J2", to: "right0J1", rate: 150}
+    - {from: "top0J2", to: "bottom1J1", rate: 150}
+    - {from: "top1J3", to: "bottom0J0", rate: 150}
+    - {from: "right0J1", to: "left1J2", rate: 150}
+    - {from: "right1J3", to: "left0J0", rate: 150}
+    - {from: "bottom0J0", to: "top0J2", rate: 100}
+    - {from: "bottom1J1", to: "top1J3", rate: 100}
+    - {from: "left0J0", to: "right0J1", rate: 100}
+    - {from: "left1J2", to: "right1J3", rate: 100}
 
+# The ambulance's default route (bottom0J0 -> J0J1 -> J1J3 -> J3top1) crosses the incident edge.
 emergency:
   enabled: true
   vehicles:
     - id: amb1
-      depart: 180.0
-      from_edge: S2J0
-      to_edge: J02N
+      depart: 240.0
+      from_edge: bottom0J0
+      to_edge: top1J3
       approach_direction: S
 
 incident:
   enabled: true
-  type: lane_closure # or stop
-  edge: N2J0
-  lane: 0
+  type: closure        # closure (all lanes blocked) | stop (one stopped vehicle on `lane`)
+  edge: J0J1           # internal edge J0 -> J1, about 229 m long
+  lane: 0              # used by type "stop"
+  position_frac: 0.5   # where on the edge the blockage sits (or give `position` in metres)
   start_time: 150.0
   duration: 180.0
+  local_detour: true   # drivers reaching the edge before a closure see it and SUMO reroutes them

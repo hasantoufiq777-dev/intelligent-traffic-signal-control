@@ -41,6 +41,9 @@ class MockTrafficLightAPI:
     def setProgram(self, tls_id: str, program_id: str) -> None:
         pass
 
+    def setPhaseDuration(self, tls_id: str, duration: float) -> None:
+        self.phase_duration = duration
+
     def getControlledLanes(self, tls_id: str) -> list[str]:
         return ["N2J0_0", "N2J0_1", "S2J0_0", "S2J0_1", "E2J0_0", "E2J0_1", "W2J0_0", "W2J0_1"]
 

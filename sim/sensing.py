@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 
 class StateProvider(ABC):
@@ -44,6 +44,14 @@ class StateProvider(ABC):
         """Periodic update hook called every simulation step."""
         pass
 
+    def get_incidents(self) -> Dict[str, str]:
+        """Return known incidents as edge -> 'lane_blocked' | 'edge_blocked' (default: none)."""
+        return {}
+
+    def get_blocked_approaches(self, tls_id: str) -> Set[str]:
+        """Return approach directions of tls_id whose incoming edge is fully blocked."""
+        return set()
+
 
 class OracleStateProvider(StateProvider):
     """Ground-truth state provider reading directly from SUMO via TraCI/libsumo."""
@@ -52,10 +60,34 @@ class OracleStateProvider(StateProvider):
         self.sumo_api = sumo_api
         self._controlled_lanes_cache: Dict[str, List[str]] = {}
         self._lane_direction_cache: Dict[str, str] = {}
+        # Ground-truth incident source (Module 10), injected by the runner when an incident runs
+        self._incident_source: Optional[Callable[[], Dict[str, str]]] = None
+        # Static map for along-route EV distances (built on first use)
+        self._edge_info: Optional[Dict[str, Tuple[str, float]]] = None
+        self._tls_set: Optional[Set[str]] = None
 
     @property
     def name(self) -> str:
         return "oracle"
+
+    def set_incident_source(self, source: Optional[Callable[[], Dict[str, str]]]) -> None:
+        """Inject a callable returning the true incident map (oracle = ideal knowledge)."""
+        self._incident_source = source
+
+    def get_incidents(self) -> Dict[str, str]:
+        if self._incident_source is None:
+            return {}
+        return dict(self._incident_source())
+
+    def get_blocked_approaches(self, tls_id: str) -> Set[str]:
+        incidents = self.get_incidents()
+        if not incidents:
+            return set()
+        blocked: Set[str] = set()
+        for lane_id in self._get_controlled_lanes(tls_id):
+            if incidents.get(lane_id.rsplit("_", 1)[0]) == "edge_blocked":
+                blocked.add(self._resolve_lane_direction(lane_id, tls_id))
+        return blocked
 
     def _get_controlled_lanes(self, tls_id: str) -> List[str]:
         if tls_id not in self._controlled_lanes_cache:
@@ -151,6 +183,16 @@ class OracleStateProvider(StateProvider):
         return wait_times
 
     def get_ev_info(self, tls_id: str, lookahead: int = 2) -> List[Dict[str, Any]]:
+        """Emergency vehicles that will cross tls_id, from true SUMO state.
+
+        Only EVs that have tls_id among their next `lookahead` signalised junctions are
+        returned. dist is measured along the EV's route to the stop line (0 while the EV is
+        inside the junction); approach is the direction of the edge the EV arrives on.
+        An EV that has passed tls_id, or never crosses it, is not returned.
+        """
+        # Imported here: sim.vanet imports this module at package import time
+        from sim.vanet.nodes import build_edge_info, distance_along_route
+
         ev_list: List[Dict[str, Any]] = []
         if not self.sumo_api:
             return ev_list
@@ -160,66 +202,48 @@ class OracleStateProvider(StateProvider):
         except Exception:
             return ev_list
 
+        if self._edge_info is None:
+            self._edge_info = build_edge_info(self.sumo_api)
+            try:
+                self._tls_set = set(self.sumo_api.trafficlight.getIDList())
+            except Exception:
+                self._tls_set = None
+
         for vid in active_vehs:
             try:
                 vtype = self.sumo_api.vehicle.getTypeID(vid)
-                if vtype == "emergency" or "amb" in vid.lower() or "ev" in vid.lower():
-                    speed = float(self.sumo_api.vehicle.getSpeed(vid))
-                    dist = 0.0
-                    target_tls = tls_id
-                    approach = "N"
+                if not (vtype == "emergency" or "amb" in vid.lower() or "ev" in vid.lower()):
+                    continue
+                along = distance_along_route(
+                    tls_id,
+                    list(self.sumo_api.vehicle.getRoute(vid)),
+                    int(self.sumo_api.vehicle.getRouteIndex(vid)),
+                    str(self.sumo_api.vehicle.getRoadID(vid)),
+                    float(self.sumo_api.vehicle.getLanePosition(vid)),
+                    self._edge_info,
+                    self._tls_set,
+                )
+                if along is None:
+                    continue
+                dist, incoming_edge, n_before = along
+                if n_before >= lookahead:
+                    continue
+                speed = float(self.sumo_api.vehicle.getSpeed(vid))
+                approach = self._resolve_lane_direction(f"{incoming_edge}_0", tls_id)
 
-                    tls_ahead = self.sumo_api.vehicle.getNextTLS(vid)
-                    matched_entry = None
-                    if tls_ahead:
-                        for entry in tls_ahead[:lookahead]:
-                            if entry[0] == tls_id:
-                                matched_entry = entry
-                                break
+                # For queued/halting EV, use cruising speed to avoid infinite ETA in stopped queue
+                calc_speed = 15.0 if speed < 1.0 and dist <= 150.0 else max(speed, 0.1)
+                eta = round(dist / calc_speed, 1)
 
-                    lane_id = str(self.sumo_api.vehicle.getLaneID(vid))
-                    if matched_entry:
-                        target_tls = matched_entry[0]
-                        dist = float(matched_entry[2])
-                        if not lane_id.startswith(":"):
-                            approach = self._resolve_lane_direction(lane_id, tls_id)
-                        else:
-                            dist = 0.0
-                            route = list(self.sumo_api.vehicle.getRoute(vid))
-                            for r_edge in route:
-                                if tls_id in r_edge:
-                                    approach = self._resolve_lane_direction(r_edge, tls_id)
-                                    break
-                    elif tls_ahead:
-                        target_tls = tls_ahead[0][0]
-                        dist = float(tls_ahead[0][2])
-                        if not lane_id.startswith(":"):
-                            approach = self._resolve_lane_direction(lane_id, target_tls)
-                        else:
-                            dist = 0.0
-                    else:
-                        pos = self.sumo_api.vehicle.getPosition(vid)
-                        try:
-                            tls_pos = self.sumo_api.junction.getPosition(tls_id)
-                            dist = math.hypot(pos[0] - tls_pos[0], pos[1] - tls_pos[1])
-                        except Exception:
-                            dist = math.hypot(pos[0], pos[1])
-                        if not lane_id.startswith(":"):
-                            approach = self._resolve_lane_direction(lane_id, tls_id)
-
-                    # For queued/halting EV, use cruising speed to avoid infinite ETA in stopped queue
-                    calc_speed = 15.0 if speed < 1.0 and dist <= 150.0 else max(speed, 0.1)
-                    eta = round(dist / calc_speed, 1)
-
-                    ev_list.append({
-                        "id": vid,
-                        "tls": target_tls,
-                        "eta": eta,
-                        "dist": round(dist, 1),
-                        "speed": round(speed, 1),
-                        "approach": approach,
-                        "alert_age": 0.0,
-                    })
+                ev_list.append({
+                    "id": vid,
+                    "tls": tls_id,
+                    "eta": eta,
+                    "dist": round(dist, 1),
+                    "speed": round(speed, 1),
+                    "approach": approach,
+                    "alert_age": 0.0,
+                })
             except Exception:
                 continue
 

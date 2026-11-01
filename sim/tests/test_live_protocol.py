@@ -74,6 +74,7 @@ def validate_schema_v2(line_data: Dict[str, Any], expected_run_id: str) -> None:
             "preempt_start",
             "preempt_end",
             "incident_start",
+            "incident_detected",
             "incident_end",
             "alert_sent",
             "alert_delivered",
@@ -127,15 +128,64 @@ def test_real_sim_live_protocol_v2() -> None:
         validate_schema_v2(data, run_id)
 
 
-def test_cli_flags_not_implemented() -> None:
-    """Verify that unbuilt features like --nav aco_tuned raise clean NotImplementedError."""
+def _event_kinds(stdout: str, run_id: str) -> List[str]:
+    kinds = []
+    for line in stdout.strip().splitlines():
+        if not line.strip():
+            continue
+        data = json.loads(line)
+        validate_schema_v2(data, run_id)
+        if data["type"] == "event":
+            kinds.append(data["kind"])
+    return kinds
+
+
+def test_mock_sim_incident_events() -> None:
+    run_id = "test_mock_inc"
+    proc = run_cli_subprocess([
+        "sim/mock_sim.py", "--run-id", run_id, "--scenario", "incident", "--controller", "adaptive_vanet",
+        "--live", "--max-steps", "50", "--step-delay", "0",
+    ])
+    assert proc.returncode == 0
+    kinds = _event_kinds(proc.stdout, run_id)
+    assert [k for k in kinds if k.startswith("incident")] == ["incident_start", "incident_detected", "incident_end"]
+
+
+def test_real_sim_incident_events() -> None:
+    """Oracle-sensed controller: the VANET still runs for incident detection."""
+    run_id = "test_real_inc"
+    proc = run_cli_subprocess([
+        "sim/main.py", "--run-id", run_id, "--scenario", "incident", "--controller", "adaptive",
+        "--seed", "1", "--live", "--max-steps", "190",
+    ])
+    assert proc.returncode == 0, f"Sim failed: {proc.stderr[-2000:]}"
+    kinds = _event_kinds(proc.stdout, run_id)
+    assert "incident_start" in kinds and "incident_detected" in kinds
+
+
+def test_real_sim_vanet_alert_and_reroute_events_follow_protocol() -> None:
+    """VANET alerts and navigation reroutes are emitted with "kind", "tls" and "detail"."""
+    run_id = "test_real_vanet_ev"
+    proc = run_cli_subprocess([
+        "sim/main.py", "--run-id", run_id, "--scenario", "incident", "--controller", "adaptive_ev_vanet",
+        "--nav", "astar", "--seed", "1", "--live", "--max-steps", "260",
+    ])
+    assert proc.returncode == 0, f"Sim failed: {proc.stderr[-2000:]}"
+    kinds = set(_event_kinds(proc.stdout, run_id))
+    assert {"alert_sent", "alert_delivered", "reroute"} <= kinds
+
+
+def test_cli_aco_tuned_missing_params_file_is_clear_error() -> None:
+    """--nav aco_tuned with a missing tuned file fails cleanly and says how to create it."""
     proc = run_cli_subprocess([
         "sim/main.py",
         "--run-id", "test_flags",
         "--scenario", "normal",
         "--controller", "fixed",
         "--nav", "aco_tuned",
+        "--aco-params", "results/ga/does_not_exist.yaml",
     ])
     assert proc.returncode != 0
-    lines = [line.strip() for line in proc.stdout.strip().splitlines() if line.strip()]
-    assert any("NotImplementedError" in l for l in lines)
+    lines = [json.loads(l) for l in proc.stdout.strip().splitlines() if l.strip()]
+    errors = [l for l in lines if l.get("type") == "status" and l.get("status") == "error"]
+    assert errors and "ga_tuner.py --target aco" in errors[-1]["message"]

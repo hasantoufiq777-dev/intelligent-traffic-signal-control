@@ -777,14 +777,200 @@ def _plot_navigation_results(records: List[Dict[str, Any]], plots_dir: Path) -> 
     logger.info("Saved navigation plots: %s, %s, %s", p1, p2, p3)
 
 
+INCIDENT_FIELDS = [
+    "incident_type", "nav_mode", "penetration", "seed",
+    "incident_detected", "incident_detection_delay", "incident_detected_kind", "incident_false_flags",
+    "incident_local_detours", "incident_rerouted_vehicles",
+    "incident_nav_entries_after_detection", "incident_nonnav_entries_after_detection",
+    "avg_travel_time", "baseline_avg_travel_time", "incident_added_delay",
+    "nav_avg_travel_time", "nonnav_avg_travel_time", "ev_travel_time",
+]
+
+
+def _incident_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """One run of the incident scenario (worker-safe: unique run id and metrics CSV)."""
+    import tempfile
+
+    tag = f"incx_{job['type']}_{job['nav']}_{job['pen']}_{job['seed']}_{int(job['enabled'])}"
+    with tempfile.TemporaryDirectory() as tmp:
+        res = run_simulation(
+            scenario="incident",
+            controller=job["controller"],
+            seed=job["seed"],
+            run_id=tag,
+            nav=job["nav"],
+            nav_fraction=job["nav_fraction"],
+            penetration=job["pen"],
+            max_steps=job["max_steps"],
+            params={"incident": {"type": job["type"], "enabled": job["enabled"]}},
+            metrics_csv_path=Path(tmp) / "m.csv",
+        )
+    return {"job": job, "res": res}
+
+
+def run_incident_experiments(
+    types: Optional[List[str]] = None,
+    penetrations: Optional[List[float]] = None,
+    nav_modes: Optional[List[str]] = None,
+    seeds: Optional[List[int]] = None,
+    nav_fraction: float = 0.3,
+    controller: str = "adaptive_vanet",
+    max_steps: Optional[int] = None,
+    workers: int = 1,
+    output_csv: Optional[Path] = None,
+    plots_dir: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """Module 10: incident detection through VANET and its effect on travel time.
+
+    Every incident run is paired with the same configuration and seed without the incident,
+    so incident_added_delay = avg_travel_time(incident) - avg_travel_time(no incident).
+    """
+    types = types or ["closure", "stop"]
+    penetrations = penetrations or [0.2, 0.5, 1.0]
+    nav_modes = nav_modes or ["none", "astar"]
+    seeds = seeds or [1, 2, 3, 4, 5]
+    output_csv = output_csv or (PROJECT_ROOT / "results" / "incident_experiments.csv")
+    plots_dir = plots_dir or (PROJECT_ROOT / "results")
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+
+    base = {"controller": controller, "nav_fraction": nav_fraction, "max_steps": max_steps}
+    jobs: List[Dict[str, Any]] = []
+    for nav in nav_modes:
+        for pen in penetrations:
+            for s in seeds:
+                jobs.append({**base, "type": types[0], "nav": nav, "pen": pen, "seed": s, "enabled": False})
+                for typ in types:
+                    jobs.append({**base, "type": typ, "nav": nav, "pen": pen, "seed": s, "enabled": True})
+
+    logger.info("Incident experiments: %d runs with %d worker(s)", len(jobs), workers)
+    if workers > 1:
+        from multiprocessing import Pool
+
+        with Pool(workers) as pool:
+            outputs = pool.map(_incident_job, jobs)
+    else:
+        outputs = [_incident_job(j) for j in jobs]
+
+    baselines = {
+        (o["job"]["nav"], o["job"]["pen"], o["job"]["seed"]): o["res"]["avg_travel_time"]
+        for o in outputs if not o["job"]["enabled"]
+    }
+    records: List[Dict[str, Any]] = []
+    for o in outputs:
+        job, res = o["job"], o["res"]
+        if not job["enabled"]:
+            continue
+        b = baselines.get((job["nav"], job["pen"], job["seed"]))
+        rec = {k: res.get(k) for k in INCIDENT_FIELDS}
+        rec.update({
+            "incident_type": job["type"],
+            "nav_mode": job["nav"],
+            "penetration": job["pen"],
+            "seed": job["seed"],
+            "baseline_avg_travel_time": b,
+            "incident_added_delay": round(res["avg_travel_time"] - b, 2) if b is not None else None,
+        })
+        records.append(rec)
+
+    with open(output_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=INCIDENT_FIELDS)
+        writer.writeheader()
+        writer.writerows(records)
+    logger.info("Saved %s", output_csv)
+
+    _write_incident_summary(records, output_csv.with_suffix(".md"))
+    _plot_incident_detection(records, plots_dir)
+    return records
+
+
+def _mean_or_none(vals: List[Any]) -> Optional[float]:
+    vals = [float(v) for v in vals if v is not None]
+    return round(float(np.mean(vals)), 1) if vals else None
+
+
+def _write_incident_summary(records: List[Dict[str, Any]], path: Path) -> None:
+    """Markdown table: one row per (type, nav, penetration), averaged over seeds."""
+    groups: Dict[tuple, List[Dict[str, Any]]] = {}
+    for r in records:
+        groups.setdefault((r["incident_type"], r["nav_mode"], r["penetration"]), []).append(r)
+
+    lines = [
+        "# Incident experiments (Module 10)",
+        "",
+        "Means over seeds. Detection rate = share of seeds where the TMC learned of the incident",
+        "while it was active. Added delay = mean travel time with the incident minus the same run without it.",
+        "Entries = vehicles that drove onto the incident edge more than 5 s after detection.",
+        "",
+        "| Type | Nav | Penetration | Detection rate | Detection delay (s) | False flags | Rerouted veh | "
+        "Entries nav / non-nav | Added delay (s) |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for (typ, nav, pen), rs in sorted(groups.items()):
+        rate = sum(1 for r in rs if r["incident_detected"]) / len(rs)
+        lines.append(
+            f"| {typ} | {nav} | {pen} | {rate:.0%} | {_mean_or_none([r['incident_detection_delay'] for r in rs])} | "
+            f"{_mean_or_none([r['incident_false_flags'] for r in rs])} | "
+            f"{_mean_or_none([r['incident_rerouted_vehicles'] for r in rs])} | "
+            f"{_mean_or_none([r['incident_nav_entries_after_detection'] for r in rs])} / "
+            f"{_mean_or_none([r['incident_nonnav_entries_after_detection'] for r in rs])} | "
+            f"{_mean_or_none([r['incident_added_delay'] for r in rs])} |"
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info("Saved %s", path)
+
+
+def _plot_incident_detection(records: List[Dict[str, Any]], plots_dir: Path) -> None:
+    """Detection delay and detection rate versus penetration, one line per incident type."""
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+    for typ, marker in (("closure", "o"), ("stop", "s")):
+        rs = [r for r in records if r["incident_type"] == typ]
+        if not rs:
+            continue
+        pens = sorted({r["penetration"] for r in rs})
+        delays = [_mean_or_none([r["incident_detection_delay"] for r in rs if r["penetration"] == p]) for p in pens]
+        rates = [
+            np.mean([1.0 if r["incident_detected"] else 0.0 for r in rs if r["penetration"] == p]) for p in pens
+        ]
+        ax1.plot(pens, [d if d is not None else np.nan for d in delays], marker=marker, label=typ)
+        ax2.plot(pens, rates, marker=marker, label=typ)
+    ax1.set_xlabel("OBU penetration")
+    ax1.set_ylabel("Mean detection delay (s)")
+    ax1.set_title("Incident detection delay")
+    ax2.set_xlabel("OBU penetration")
+    ax2.set_ylabel("Share of runs detected")
+    ax2.set_ylim(-0.05, 1.05)
+    ax2.set_title("Incident detection rate")
+    for ax in (ax1, ax2):
+        ax.grid(True, linestyle="--", alpha=0.6)
+        ax.legend()
+    fig.tight_layout()
+    p = plots_dir / "plot_incident_detection.png"
+    fig.savefig(p, dpi=200)
+    plt.close(fig)
+    logger.info("Saved %s", p)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="VANET sensing sensitivity experiments")
     parser.add_argument("--scenario", type=str, default="congested", help="Scenario name")
     parser.add_argument("--quick", action="store_true", help="Run quick 1-seed test")
     parser.add_argument("--preemption", action="store_true", help="Run Module 8 emergency preemption experiments")
     parser.add_argument("--navigation", action="store_true", help="Run Module 9 A* and ACO navigation experiments")
+    parser.add_argument("--incident", action="store_true", help="Run Module 10 incident detection experiments")
+    parser.add_argument("--workers", type=int, default=1, help="Parallel SUMO runs (incident experiments)")
     parser.add_argument("--max-steps", type=int, default=None, help="Maximum simulation steps")
     args = parser.parse_args()
+
+    if args.incident:
+        if args.quick:
+            run_incident_experiments(
+                types=["closure"], penetrations=[0.5, 1.0], nav_modes=["none", "astar"],
+                seeds=[1], max_steps=args.max_steps or 600, workers=args.workers,
+            )
+        else:
+            run_incident_experiments(max_steps=args.max_steps, workers=args.workers)
+        return
 
     if args.navigation:
         seeds = [1] if args.quick else [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

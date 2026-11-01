@@ -99,7 +99,7 @@ def main() -> None:
                     network = sc_data.get("network", "single")
             except Exception:
                 network = "single"
-        elif args.scenario == "navigation":
+        elif args.scenario in ("navigation", "incident"):
             network = "grid2x2"
         else:
             network = "single"
@@ -219,6 +219,24 @@ def main() -> None:
                             "detail": "Emergency vehicle amb1 cleared intersection; preemption ended",
                         })
 
+            # Module 10: incident lifecycle events (start -> VANET detection -> end)
+            if args.scenario == "incident" and args.live:
+                inc_events = {
+                    15: ("incident_start", "J1", "Incident on J0J1: closed (all lanes blocked) at 115 m for 30s"),
+                    20: ("incident_detected", "J0", "TMC marked J0J1 as edge_blocked via RSU J0 (detection delay 5.0s)"),
+                    45: ("incident_end", "J1", "Incident on J0J1 cleared; edge reopened"),
+                }
+                if t in inc_events and not (t == 20 and args.penetration < 0.3):
+                    kind, tls_ev, detail = inc_events[t]
+                    emit_json({
+                        "type": "event",
+                        "run_id": args.run_id,
+                        "t": t,
+                        "kind": kind,
+                        "tls": tls_ev,
+                        "detail": detail,
+                    })
+
             n_vehicles = max(10, int(20 + 5 * rng.random() + (q_n + q_s + q_e + q_w)))
             avg_wait = round(float(8.0 + (t / 10.0) % 6 + rng.random()), 1)
             throughput = round(float(950.0 + (t * 5.0) + rng.randint(0, 50)), 1)
@@ -298,6 +316,23 @@ def main() -> None:
         "route_search_ms": 2.1 if args.nav != "none" else None,
         "reroute_count": 8 if args.nav != "none" else None,
     }
+
+    # Module 10 incident fields (null outside the incident scenario)
+    is_inc = args.scenario == "incident"
+    inc_detected = is_inc and args.penetration >= 0.3
+    result_metrics.update({
+        "incident_type": "closure" if is_inc else None,
+        "incident_edge": "J0J1" if is_inc else None,
+        "incident_detected": inc_detected if is_inc else None,
+        "incident_detection_delay": 5.0 if inc_detected else None,
+        "incident_detected_kind": "edge_blocked" if inc_detected else None,
+        "incident_false_flags": 0 if is_inc else None,
+        "incident_local_detours": 12 if is_inc else None,
+        "incident_rerouted_vehicles": 18 if is_inc else None,
+        "incident_nav_entries_after_detection": (0 if args.nav != "none" else None) if inc_detected else None,
+        "incident_nonnav_entries_after_detection": 6 if inc_detected else None,
+        "incident_added_delay": None,
+    })
 
     if args.live:
         if _STOP_REQUESTED:

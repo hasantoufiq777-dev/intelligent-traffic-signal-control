@@ -46,6 +46,13 @@ vanet:
   penetration: 1.0
   relay: false
   max_hops: 3
+  # Incident detection from beacons (Module 10)
+  incident_detection: "auto"          # auto (only when the scenario has an incident) | on | off
+  incident_detect_time: 30.0          # s a vehicle must be stopped on the same edge
+  incident_stopline_exclusion_m: 30.0 # ignore stopped vehicles this close to the edge end (red-light queues)
+  incident_min_vehicles: 1            # stopped vehicles needed to raise a flag
+  incident_clear_time: 10.0           # s without evidence before the RSU clears its flag
+  incident_speed: 1.0                 # m/s used as edge speed for "lane_blocked" edges (very high cost)
 
 navigation:
   mode: "none" # none | astar | aco | aco_tuned
@@ -69,5 +76,82 @@ ga:
   generations: 12
   crossover_rate: 0.8
   mutation_rate: 0.2
+  mutation_sigma: 0.15        # Gaussian sigma as a fraction of each gene's range
+  blend_alpha: 0.5            # BLX-alpha crossover
+  tournament_size: 3
   elitism: 2
+  ga_seed: 42                 # seeds the GA itself (init, selection, crossover, mutation)
+  workers: 4                  # parallel SUMO runs (each worker its own SUMO instance)
+  network: grid2x2
+  eval_max_steps: 600         # simulated seconds per fitness run (null = full scenario)
   tuning_seeds: [101, 102, 103]
+  eval_seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]   # held-out seeds for the final comparison
+  # Communication condition used while tuning, and other conditions to test the tuned params on
+  condition: {penetration: 0.5, loss: 0.1, range: 300.0}
+  cross_conditions:
+    - {penetration: 0.8, loss: 0.3, range: 300.0}
+  signals_params_file: "results/ga/best_params_signals.yaml"   # read by *_tuned controllers
+  aco_params_file: "results/ga/best_params_aco.yaml"           # read by --nav aco_tuned
+  penalty: 1000.0             # added for each unit of constraint violation
+
+  signals:
+    controller: adaptive_ev_vanet
+    scenarios: [emergency, congested]
+    w_ev_travel_time: 0.5     # w1
+    w_missed_preemptions: 20.0  # w2
+    # gene: [low, high, type]; vanet genes go to the vanet config
+    bounds:
+      min_green: [5, 30, float]
+      max_green: [20, 90, float]
+      queue_threshold: [1, 15, int]
+      decision_interval: [1, 10, float]
+      eta_threshold: [6, 40, float]
+      alert_interval: [0.25, 2.0, float]
+      beacon_interval: [0.5, 3.0, float]
+
+  aco:
+    controller: adaptive_vanet
+    scenario: navigation
+    nav_fraction: 0.3
+    w_edge_load_cv: 20.0      # w
+    max_search_ms: 2000.0     # route-search time per run above this is penalised
+    w_search_time: 0.01       # penalty per ms above max_search_ms
+    bounds:
+      alpha: [0.2, 3.0, float]
+      beta: [0.5, 5.0, float]
+      rho: [0.02, 0.6, float]
+      n_ants: [3, 30, int]
+      n_iterations: [3, 30, int]
+      Q: [10.0, 500.0, float]
+      elite_k: [1, 6, int]
+
+# Module 12: evaluation suites (sim/analytics/evaluate.py)
+evaluation:
+  seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  network: grid2x2
+  max_steps: null            # null = full scenario duration
+  workers: 8
+  default_seconds_per_run: 30.0   # runtime estimate before any run has been timed
+  signals:
+    scenarios: [normal, congested]
+    penetrations: [0.2, 0.5, 0.8, 1.0]
+  ev:
+    scenario: emergency
+    losses: [0.0, 0.1, 0.3, 0.5]
+    relays: ["on", "off"]
+    range: 300.0
+    penetration: 1.0
+    tuned_loss: 0.1
+  nav:
+    scenarios: [navigation, incident]
+    controller: adaptive_vanet
+    penetrations: [1.0, 0.5]
+    modes: [astar, aco, aco_tuned]
+    fractions: [0.1, 0.3, 0.5]
+  quick:
+    seeds: [1, 2]
+    max_steps: 400
+    signals_penetrations: [0.5, 1.0]
+    ev_losses: [0.0, 0.3]
+    nav_penetrations: [1.0]
+    nav_fractions: [0.3]

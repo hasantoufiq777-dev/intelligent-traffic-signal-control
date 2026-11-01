@@ -226,3 +226,124 @@ On a 2x2 signalized grid network:
 - Straight-through movements along an avenue (e.g. `bottom0J0` to `top0J2`) have only one direct route. Any detour incurs two extra turning penalties and crosses perpendicular signal phases.
 - Thus, the benefits of dynamic navigation are concentrated primarily on diagonal high-volume OD flows, while the total number of feasible topological alternatives remains naturally constrained compared to large-scale city grids.
 
+
+---
+
+## 7. Incidents Detected Through VANET (Module 10)
+
+### 7.1 Simulated incidents (ground truth)
+`sim/scenarios/incident.py` creates two incident types on the 2x2 grid (default: edge `J0J1`, 150 s to 330 s):
+
+- **stop**: one vehicle breaks down in one lane. Other lanes stay open.
+- **closure**: every lane is blocked (a crash). Vehicles already on the edge behind the blockage wait until it reopens.
+
+Blocking vehicles are inserted with `traci.vehicle.add`, held with `setStop`, and removed when the incident ends. They are excluded from trip metrics. Lane permissions are not changed, because SUMO aborts when a running vehicle's route becomes invalid.
+
+**Baseline behaviour (`local_detour`)**: a driver who reaches the edge just before a closure sees it, and SUMO reroutes that vehicle. This applies to every vehicle, so navigation is compared with "drivers react only when they see the blockage".
+
+### 7.2 Detection rule (RSU)
+Each RSU tracks, from the beacons it receives, how long each equipped vehicle has been stopped (speed <= `queue_speed_threshold`) on the same edge. It raises an `INCIDENT_FLAG` for an edge when at least `incident_min_vehicles` vehicles have been stopped there for `incident_detect_time` (30 s) and are more than `incident_stopline_exclusion_m` (30 m) from the edge's downstream end.
+
+The distance rule separates incidents from red-light queues. At a red light the vehicles that wait longest are at the stop line. In grid runs with adaptive control, no vehicle more than 30 m from the stop line stayed stopped longer than 27 s. Fixed-time control on the congested grid can keep vehicles stopped for up to 66 s through spillback, which would produce false flags, so `incident_false_flags` is reported.
+
+If stopped vehicles are seen in every lane, the flag is `edge_blocked`; otherwise it is `lane_blocked`. The RSU clears its flag after `incident_clear_time` (10 s) without evidence. Lane counts and edge end points come from the static map, not from live sensing.
+
+### 7.3 Message flow
+```mermaid
+sequenceDiagram
+    participant V as Equipped vehicles
+    participant R as RSU
+    participant T as TMC
+    participant N as Navigation / signals
+    V->>R: BEACON (speed ~0, same edge) every 1 s, lossy V2I
+    Note over R: stopped >= 30 s and > 30 m from stop line
+    R->>T: INCIDENT_FLAG (edge, lane_blocked | edge_blocked), wired backbone
+    T->>N: incident map: closed edge = infinite cost, blocked lane = very slow
+    N->>V: setRoute for navigating vehicles and EVs whose route uses the edge
+    R->>T: INCIDENT_FLAG (cleared) after 10 s without evidence
+```
+
+### 7.4 How the system reacts
+- **Navigation**: A* and ACO read the TMC incident map. A navigating vehicle whose remaining route uses a flagged edge is re-checked immediately, without waiting for its next reroute interval.
+- **Emergency vehicles** (always equipped) are rerouted with A* around TMC-closed edges. Their EV_ALERTs carry the new route, so preemption follows it.
+- **Signals**: the adaptive controller treats an approach whose incoming edge is fully blocked as having no demand, so it gives no green and no starvation credit to traffic that cannot move. VANET controllers learn this from the TMC map; oracle controllers use the true incident (ideal baseline).
+
+### 7.5 Limits
+- At 1 Hz beacons the detection delay is at least `incident_detect_time` + about 3 s. Lowering the threshold detects faster but raises false flags at long reds.
+- At low penetration the blocked vehicles may be unequipped. A closure can then be seen as only a lane blockage, and a single stopped car can be missed entirely (seen at penetration 0.2 and 0.3, seed 1).
+- An incident within 30 m of the stop line is not detected by this rule.
+- Signal masking covers only the blocked edge's own approach. Movements at the upstream junction that lead into the blocked edge are not masked.
+
+---
+
+## 8. Offline Parameter Tuning with a Genetic Algorithm (Module 11)
+
+`sim/optimizer/ga_tuner.py` tunes parameters offline by running SUMO. The online controllers only read the resulting YAML file.
+
+### 8.1 Two targets
+| Target | Chromosome | Fitness (minimise) | Evaluated on |
+|---|---|---|---|
+| `signals` | min_green, max_green, queue_threshold, decision_interval, eta_threshold, alert_interval, beacon_interval | avg_waiting_time + w1 · ev_travel_time + w2 · missed_preemptions (+ penalty) | `adaptive_ev_vanet`, scenarios emergency and congested on grid2x2 |
+| `aco` | alpha, beta, rho, n_ants, n_iterations, Q, elite_k | nav_avg_travel_time + w · edge_load_cv + penalty for route-search time above a limit | `adaptive_vanet` with `--nav aco`, nav-fraction 0.3, navigation scenario |
+
+Both targets are tuned at one communication condition (penetration 0.5, loss 0.1, range 300 m), averaged over tuning seeds 101-103. Each run lasts `ga.eval_max_steps` (600 s) to keep tuning affordable.
+
+**Constraints and guards**:
+- `max_green` must exceed `min_green`, and `elite_k` must not exceed `n_ants`. A chromosome that breaks either gets `penalty × (1 + violation)` and is not simulated.
+- A run in which the ambulance does not arrive gets a penalty. Otherwise its missing travel time would count as 0 and reward blocking it.
+- A crashed run gets 10 × penalty.
+
+### 8.2 Operators
+- **Initial population**: the hand-set defaults from `config.yaml` plus random chromosomes. The GA therefore never returns something worse than the defaults on the tuning seeds.
+- **Tournament selection** (size 3). **BLX-α blend crossover** (α = 0.5): each child gene is drawn uniformly from the parents' interval widened by α on each side.
+- **Bounded Gaussian mutation**: σ = 0.15 × the gene's range, then clipped. Integer genes are rounded.
+- **Elitism**: the best 2 survive unchanged.
+- **Cache**: identical chromosomes are simulated once. The cache is saved to disk with the settings that produced it, so a rerun with the same settings resumes.
+- **Parallelism**: a process pool in which each worker starts its own SUMO, with a private output directory.
+- **Reproducibility**: all GA randomness comes from `ga.ga_seed`, and every simulation is seeded.
+
+### 8.3 Avoiding overfitting
+The GA optimises on seeds 101-103, which may simply fit those traffic samples. The tuned parameters are therefore compared with the defaults on **held-out seeds 1-10**, at the tuning condition and at other conditions (`ga.cross_conditions`, default penetration 0.8, loss 0.3). The report gives mean ± std fitness, percent improvement, how many seeds improved, and a paired Wilcoxon signed-rank p-value (`results/ga/ga_<target>_evaluation.md`).
+
+### 8.4 Limits
+- Fitness uses shortened runs (600 s), so tuned values are tuned for that horizon.
+- The full evaluation (section 9) uses full-length runs, so tuned parameters are checked on a horizon they were not tuned for.
+- `avg_waiting_time` counts finished trips only. A setting that holds vehicles until after the run ends is not fully penalised. The held-out table reports throughput so this can be checked.
+- 12 × 12 is a small search for 7 genes. The result is an improvement over the defaults, not an optimum.
+
+---
+
+## 9. Evaluation Protocol (Module 12)
+
+`sim/analytics/evaluate.py --suite signals|ev|nav|all` runs every configuration on the 2x2 grid over seeds 1-10, with full-length runs (1000 s). The factors are listed under `evaluation:` in `config.yaml`.
+
+| Suite | Scenarios | Configurations | Baseline |
+|---|---|---|---|
+| signals | normal, congested | fixed, adaptive (oracle), adaptive_vanet at penetration 0.2 / 0.5 / 0.8 / 1.0 | fixed |
+| ev | emergency | fixed, adaptive, adaptive_ev (oracle), adaptive_ev_vanet at loss 0 / 0.1 / 0.3 / 0.5 x relay on/off (range 300), adaptive_ev_vanet_tuned at loss 0.1 | adaptive |
+| nav | navigation, incident | adaptive_vanet with nav none, astar, aco, aco_tuned at fraction 0.1 / 0.3 / 0.5, penetration 1.0 and 0.5 | nav none at the same penetration |
+
+**Pairing.** The same seed produces the same traffic demand in every configuration, so each configuration is compared with its baseline seed by seed.
+
+**Statistics.** For each scenario, configuration and metric the summary gives:
+- mean, standard deviation, and a 95% confidence interval (t-distribution, n-1 degrees of freedom);
+- the percent improvement over the baseline, signed so that positive is better (lower times; higher throughput and PDR);
+- a two-sided paired p-value: Wilcoxon signed-rank with at least 6 paired seeds, otherwise a paired t-test.
+
+With 10 seeds the smallest possible Wilcoxon p-value is about 0.002. Many comparisons are made, so treat single p-values near 0.05 with caution; no multiple-comparison correction is applied.
+
+**Bookkeeping.** Each run appends one row to `results/raw.csv`. A rerun skips finished rows and retries failed ones, so a long evaluation can be stopped and resumed. Configurations that need GA output are skipped with a warning until the tuned files exist. `--quick` uses 2 seeds, fewer factors and 400 s runs, and writes to `results/quick/`.
+
+---
+
+## 10. Corrections Made After Module 12
+
+The quick evaluation showed EV preemption slowing the ambulance on the 2x2 grid. Three bugs caused it; all are fixed:
+
+1. **EV distance and approach.** Both the oracle provider and the RSUs now measure the EV's distance **along its remaining route** to the junction's stop line, using static map data (edge lengths and end junctions). The approach is the direction of the edge the EV will **arrive on**. A junction that is not ahead on the route receives no EV information. Before the fix, junctions ahead used the EV's *current* lane for the approach (so they greened the wrong axis), and RSUs used straight-line distance (so a junction off the route, or one the EV had already passed, kept preempting). EV_ALERTs now carry the EV's route index and lane position, which the OBU knows.
+2. **Inside a junction.** While the EV crosses junction J, SUMO may already report the next route edge. The junction being crossed is now read from the internal lane id. Before, the next junction wrongly concluded the EV had passed and ended its preemption early.
+3. **SUMO advancing phases by itself.** The controllers set phases with `setPhase` but SUMO's static program kept running. After the net-file duration (30 s single junction, 42 s grid) SUMO switched to yellow and the next green behind the controller's back. Every controller-set phase is now held (`setPhaseDuration`) until the controller changes it.
+
+`missed_preemptions` is now measured: the signalised junctions an EV drove through without that junction's preemption having triggered for it. It was previously always 0.
+
+**Effect.** Fixed-time results are unchanged. Adaptive control improves (normal single junction, seed 1: waiting time 8.3 s to 3.8 s) because its greens are no longer cut at 30 s. The Module 4b regression baseline (`sim/tests/regression_baseline.json`) was re-recorded for this reason. On the grid, oracle and VANET preemption now cut EV travel time from 81.6 s to about 63 s (mean of seeds 1-5, 500 s runs), with 0 missed preemptions. **Results produced before this fix are out of date and should be regenerated**: the VANET experiments, both GA targets and the evaluation.
