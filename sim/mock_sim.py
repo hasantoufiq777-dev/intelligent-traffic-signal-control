@@ -65,6 +65,7 @@ def main() -> None:
     parser.add_argument("--range", type=float, default=300.0, dest="range_m", help="Wireless communication range")
     parser.add_argument("--relay", type=str, default="off", choices=["on", "off"], help="V2V multi-hop relaying")
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
+    parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
 
     args = parser.parse_args()
 
@@ -105,6 +106,12 @@ def main() -> None:
             network = "single"
 
     tls_ids = ["J0", "J1", "J2", "J3"] if network == "grid2x2" else ["J0"]
+    try:
+        from sim.mock_traffic import MockTraffic, mock_spat
+    except ImportError:  # run as a script from sim/
+        from mock_traffic import MockTraffic, mock_spat  # type: ignore
+    traffic = MockTraffic(network, random.Random(args.seed + 7), args.penetration, args.eco_fraction, args.nav,
+                          with_ev=args.scenario in ("emergency", "incident"))
 
     if args.live:
         emit_json({
@@ -113,6 +120,7 @@ def main() -> None:
             "status": "started",
             "message": f"Mock simulation started for scenario '{args.scenario}' with controller '{args.controller}' on network '{network}'",
         })
+        emit_json(traffic.network_message(args.run_id))
 
     t = 0
     phase_name = "NS_GREEN"
@@ -248,13 +256,19 @@ def main() -> None:
             total_lost += step_lost
             pdr = round(float((total_sent - total_lost) / max(total_sent, 1)), 2)
 
+            spat = mock_spat(t, preempted=preempt_active)
+            traffic.step(t, spat)
             tls_data: Dict[str, Any] = {}
-            for jid in tls_ids:
+            for j_idx, jid in enumerate(tls_ids):
+                # Vary the fake queues per junction so charts show distinct series
+                d = (j_idx * 2 + t // 7) % 4 - 1
                 tls_data[jid] = {
                     "phase": phase_name,
-                    "queues": {"N": q_n, "S": q_s, "E": q_e, "W": q_w},
-                    "queues_est": {"N": q_est_n, "S": q_est_s, "E": q_est_e, "W": q_est_w},
+                    "queues": {"N": max(0, q_n + d), "S": max(0, q_s - d), "E": max(0, q_e + j_idx), "W": q_w},
+                    "queues_est": {"N": max(0, q_est_n + d), "S": max(0, q_est_s - d), "E": max(0, q_est_e + j_idx),
+                                   "W": q_est_w},
                     "signal": signals,
+                    "spat": spat,
                 }
 
             if args.live:
@@ -284,7 +298,20 @@ def main() -> None:
                         "max_edge_load": 12,
                         "edge_load_cv": 0.35,
                     },
+                    "eco": {
+                        "eco_fraction": args.eco_fraction,
+                        "eco_active": int(n_vehicles * args.penetration * args.eco_fraction),
+                        "advised_now": int(n_vehicles * args.penetration * args.eco_fraction * 0.2),
+                        "co2_g_per_km_eco": round(228.0 + rng.uniform(0, 6), 1) if args.eco_fraction > 0 and t > 20 else None,
+                        "co2_g_per_km_non": round(252.0 + rng.uniform(0, 6), 1) if t > 20 else None,
+                        "fuel_l_100km_eco": round(9.9 + rng.uniform(0, 0.3), 2) if args.eco_fraction > 0 and t > 20 else None,
+                        "fuel_l_100km_non": round(10.9 + rng.uniform(0, 0.3), 2) if t > 20 else None,
+                        "stops_eco": round(0.6 + rng.uniform(0, 0.1), 2) if args.eco_fraction > 0 and t > 20 else None,
+                        "stops_non": round(1.5 + rng.uniform(0, 0.1), 2) if t > 20 else None,
+                        "spat_pdr": 0.9 if args.eco_fraction > 0 else None,
+                    },
                 })
+                emit_json(traffic.vehicles_message(args.run_id, t))
 
             if args.step_delay > 0:
                 time.sleep(args.step_delay)
@@ -316,6 +343,20 @@ def main() -> None:
         "route_search_ms": 2.1 if args.nav != "none" else None,
         "reroute_count": 8 if args.nav != "none" else None,
     }
+
+    # Eco-driving / emission fields
+    eco_on = args.eco_fraction > 0
+    result_metrics.update({
+        "eco_fraction": args.eco_fraction,
+        "co2_total_kg": 412.5, "fuel_total_l": 177.2, "co2_g_per_km": 238.0 if eco_on else 252.0,
+        "fuel_l_per_100km": 10.3 if eco_on else 10.9, "stops_per_vehicle": 0.9 if eco_on else 1.5,
+        "co2_g_per_km_eco": 228.0 if eco_on else None, "co2_g_per_km_non": 252.0 if eco_on else None,
+        "fuel_l_per_100km_eco": 9.9 if eco_on else None, "fuel_l_per_100km_non": 10.9 if eco_on else None,
+        "stops_per_vehicle_eco": 0.6 if eco_on else None, "stops_per_vehicle_non": 1.5 if eco_on else None,
+        "travel_time_eco": 95.0 if eco_on else None, "travel_time_non": 99.0 if eco_on else None,
+        "eco_advised_vehicles": 120 if eco_on else None, "eco_advice_share_slow": 0.2 if eco_on else None,
+        "eco_advice_share_stop": 0.1 if eco_on else None, "spat_pdr": 0.9 if eco_on else None,
+    })
 
     # Module 10 incident fields (null outside the incident scenario)
     is_inc = args.scenario == "incident"

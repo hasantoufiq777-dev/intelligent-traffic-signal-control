@@ -55,6 +55,14 @@ def main() -> None:
     parser.add_argument("--relay", type=str, default="off", choices=["on", "off"], help="V2V multi-hop relaying")
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO parameters YAML file")
     parser.add_argument(
+        "--eco-fraction", type=float, default=0.0,
+        help="Fraction of equipped vehicles that follow GLOSA eco-driving advice (0 = off)",
+    )
+    parser.add_argument(
+        "--network", type=str, default=None, choices=["single", "grid2x2"],
+        help="Override the scenario's network (default: the scenario YAML's network)",
+    )
+    parser.add_argument(
         "--step-delay", type=float, default=0.0,
         help="Wall-clock seconds to wait per simulated second (live demo pacing; 0 = as fast as possible)",
     )
@@ -80,6 +88,11 @@ def main() -> None:
                 flush=True,
             )
             sys.exit(1)
+
+    if args.network:
+        # Run a scenario on another network than its YAML default (e.g. emergency on the 2x2 grid)
+        param_overrides = dict(param_overrides or {})
+        param_overrides["network"] = args.network
 
     try:
         logger.info(
@@ -109,6 +122,7 @@ def main() -> None:
             relay=args.relay,
             aco_params=args.aco_params,
             step_delay=max(0.0, args.step_delay),
+            eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
         )
 
         # In non-live mode, output result at the end as JSON on stdout

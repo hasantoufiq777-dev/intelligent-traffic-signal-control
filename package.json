@@ -1,0 +1,27 @@
+{
+  "name": "vanet-traffic-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VANET-based intelligent traffic signal control: SUMO + Python simulation, Node gateway, React dashboard",
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "concurrently -n server,client -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "dev:mock": "concurrently -n server,client -c blue,green \"npm --prefix server run dev:mock\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix client run build && npm --prefix server start",
+    "test": "npm run test:py && npm run test:server && npm run test:client",
+    "test:py": "node scripts/py.mjs -m pytest -q",
+    "test:server": "npm --prefix server test",
+    "test:client": "npm --prefix client test",
+    "test:e2e": "cross-env E2E_REAL=1 npm --prefix server test -- test/e2e.real.test.js",
+    "sim:experiments": "node scripts/py.mjs sim/analytics/evaluate.py --suite all",
+    "sim:experiments:quick": "node scripts/py.mjs sim/analytics/evaluate.py --suite all --quick",
+    "sim:report": "node scripts/py.mjs sim/analytics/report.py",
+    "sim:tune": "node scripts/py.mjs sim/optimizer/ga_tuner.py --target signals && node scripts/py.mjs sim/optimizer/ga_tuner.py --target aco"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3"
+  }
+}

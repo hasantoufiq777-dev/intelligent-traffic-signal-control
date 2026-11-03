@@ -60,11 +60,17 @@ class PreemptionController(BaseController):
         # EVs this junction has triggered preemption for (used for the missed_preemptions metric)
         self.triggered_evs: Set[str] = set()
 
+        # EV-only green: custom signal states [(state, seconds), ...] shown in order
+        self._custom_steps: List[Any] = []
+        self._custom_timer: float = 0.0
+        self._ev_only_active: bool = False
+        self._exit_phase: int = self.PHASE_NS_GREEN
+
     def get_phase_name(self) -> str:
         """Return semantic name of the active signal phase."""
         if self.preempt_state == "EV_GREEN":
             return "EV_GREEN"
-        elif self.preempt_state == "TRANSITION":
+        elif self.preempt_state in ("TRANSITION", "EXIT"):
             return "TRANSITION"
         elif self.preempt_state == "RECOVERY":
             return "RECOVERY"
@@ -78,6 +84,18 @@ class PreemptionController(BaseController):
         """Return waiting times from provider."""
         return self.adaptive_controller.get_waiting_times()
 
+    def get_spat(self) -> Dict[str, Any]:
+        """Normal operation: the adaptive controller's timing. During a preemption the timing
+        cannot be predicted, so only the current signals are published (marked preempted)."""
+        if self.preempt_state == "NORMAL":
+            return self.adaptive_controller.get_spat()
+        signals = self.get_approach_signals()
+        return {
+            d: {"signal": signals.get(d, "r"), "min_s": None, "max_s": None,
+                "next_green_min_s": None, "next_green_max_s": None, "preempted": True}
+            for d in ("N", "S", "E", "W")
+        }
+
     def pop_events(self) -> List[Dict[str, Any]]:
         """Pop all pending preemption events."""
         events = self.events_queue[:]
@@ -89,6 +107,81 @@ class PreemptionController(BaseController):
         if approach in ("N", "S"):
             return self.PHASE_NS_GREEN
         return self.PHASE_EW_GREEN
+
+    # ------------------------------------------------------------------ EV-only green
+    # During preemption only the EV's approach gets green, for all its movements (straight, left,
+    # right). With a whole-axis green, left-turners ahead of the EV must wait for gaps in opposing
+    # traffic and block it; with an approach-only green the queue in front of the EV clears at once.
+    # Every change is built from the current signal state: links losing green show yellow first,
+    # then an all-red interval before any link gains green, so no conflicting greens can appear.
+
+    def _ev_target_state(self, approach: str) -> Optional[str]:
+        if not self.sumo_api:
+            return None
+        if not getattr(self, "_link_directions", None):
+            self._cache_link_directions()
+        dirs = getattr(self, "_link_directions", None)
+        n = len(self.get_phase_state())
+        if not dirs or len(dirs) != n:
+            return None
+        return "".join("G" if d == approach else "r" for d in dirs)
+
+    def _set_state(self, state: str) -> None:
+        self.sumo_api.trafficlight.setRedYellowGreenState(self.tls_id, state)
+        if self.has_conflicting_greens(state):
+            msg = f"SAFETY VIOLATION on {self.tls_id}: conflicting greens in EV state {state}"
+            logger.error(msg)
+            raise RuntimeError(msg)
+
+    def _start_ev_only_green(self, approach: str) -> bool:
+        """Plan current state -> (yellow) -> (all-red) -> EV-only green. False if not possible."""
+        target = self._ev_target_state(approach)
+        if target is None:
+            return False
+        cur = self.get_phase_state()
+        green = set("Gg")
+        steps = []
+        yellow = "".join("y" if c in green and t == "r" else c for c, t in zip(cur, target))
+        if yellow != cur or "y" in cur:
+            # A yellow already showing (normal control was mid-change) also gets a full yellow time
+            steps.append((yellow, self.yellow_time))
+        if any(t == "G" and c not in green for c, t in zip(cur, target)) or "y" in cur:
+            all_red = "".join("G" if c in green and t == "G" else "r" for c, t in zip(cur, target))
+            steps.append((all_red, self.all_red_time))
+        steps.append((target, 0.0))
+        self._custom_steps = steps
+        self._custom_timer = 0.0
+        self._ev_only_active = True
+        # The base phase machine is not used while custom states are shown
+        self.transition_state = "STABLE"
+        self.pending_target_phase = None
+        self._set_state(steps[0][0])
+        self._custom_timer = steps[0][1]
+        return True
+
+    def _start_exit_to_phase(self, phase: int) -> None:
+        cur = self.get_phase_state()
+        yellow = "".join("y" if c in "Gg" else "r" for c in cur)
+        self._custom_steps = [(yellow, self.yellow_time), ("r" * len(cur), self.all_red_time)]
+        self._exit_phase = phase
+        self._set_state(yellow)
+        self._custom_timer = self.yellow_time
+
+    def _advance_custom(self) -> bool:
+        """Count down the current custom state; True when the last step has been reached/finished."""
+        self._custom_timer -= 1.0
+        if self._custom_timer > 0:
+            return False
+        self._custom_steps.pop(0)
+        if not self._custom_steps:
+            return True
+        state, duration = self._custom_steps[0]
+        self._set_state(state)
+        self._custom_timer = duration
+        if duration <= 0 and len(self._custom_steps) == 1:
+            self._custom_steps = [(state, 0.0)]
+            return True
+        return False
 
     def step(self, sim_time: float) -> None:
         """Execute one simulation second of preemption control."""
@@ -140,10 +233,11 @@ class PreemptionController(BaseController):
                     self.eta_at_trigger,
                 )
 
-                if self.current_phase == target_phase and self.transition_state == "STABLE":
-                    self.preempt_state = "EV_GREEN"
-                    self.clearance_timer = 0.0
+                self.clearance_timer = 0.0
+                if self._start_ev_only_green(self.active_ev_approach):
+                    self.preempt_state = "TRANSITION"
                 else:
+                    # No link information (no SUMO connection): fall back to the program phase
                     self.preempt_state = "TRANSITION"
                     self.set_phase_safe(target_phase)
             else:
@@ -152,21 +246,22 @@ class PreemptionController(BaseController):
                 self.current_phase = self.adaptive_controller.current_phase
 
         # -------------------------------------------------------------
-        # STATE 2: TRANSITION (Yellow -> All-Red -> Green)
+        # STATE 2: TRANSITION (yellow -> all-red -> EV-only green)
         # -------------------------------------------------------------
         elif self.preempt_state == "TRANSITION":
-            target_phase = self._get_target_phase_for_approach(self.active_ev_approach or "N")
-            if self.current_phase == target_phase and self.transition_state == "STABLE":
-                self.preempt_state = "EV_GREEN"
-                self.clearance_timer = 0.0
+            if self._custom_steps:
+                if self._advance_custom():
+                    self.preempt_state = "EV_GREEN"
+            else:
+                target_phase = self._get_target_phase_for_approach(self.active_ev_approach or "N")
+                if self.current_phase == target_phase and self.transition_state == "STABLE":
+                    self.preempt_state = "EV_GREEN"
 
         # -------------------------------------------------------------
-        # STATE 3: EV_GREEN (Hold green until EV clears stop line)
+        # STATE 3: EV_GREEN (hold the EV approach green until the EV has cleared)
         # -------------------------------------------------------------
         elif self.preempt_state == "EV_GREEN":
             target_phase = self._get_target_phase_for_approach(self.active_ev_approach or "N")
-            if self.current_phase != target_phase and self.transition_state == "STABLE":
-                self._apply_phase(target_phase)
 
             # Check if EV has completed clearance
             active_rec = next((e for e in ev_info_list if e.get("id") == self.active_ev_id), None)
@@ -181,16 +276,30 @@ class PreemptionController(BaseController):
             if ev_cleared:
                 self.clearance_timer += 1.0
                 if self.clearance_timer >= self.clearance_time:
-                    # Clearance complete; enter RECOVERY
-                    self.preempt_state = "RECOVERY"
-                    self.recovery_timer = self.recovery_time
-                    # Give green to the starved opposing movement
+                    # Clearance complete: give green to the starved opposing movement, then RECOVERY
                     opposing_phase = (
                         self.PHASE_EW_GREEN
                         if target_phase == self.PHASE_NS_GREEN
                         else self.PHASE_NS_GREEN
                     )
-                    self.set_phase_safe(opposing_phase)
+                    self.recovery_timer = self.recovery_time
+                    if self._ev_only_active:
+                        self._start_exit_to_phase(opposing_phase)
+                        self.preempt_state = "EXIT"
+                    else:
+                        self.preempt_state = "RECOVERY"
+                        self.set_phase_safe(opposing_phase)
+
+        # -------------------------------------------------------------
+        # STATE 3b: EXIT (EV-only green -> yellow -> all-red -> opposing program phase)
+        # -------------------------------------------------------------
+        elif self.preempt_state == "EXIT":
+            if self._advance_custom():
+                self._apply_phase(self._exit_phase)  # back to the normal signal program
+                self.transition_state = "STABLE"
+                self.pending_target_phase = None
+                self._ev_only_active = False
+                self.preempt_state = "RECOVERY"
 
         # -------------------------------------------------------------
         # STATE 4: RECOVERY (Discharge starved opposing movements)
@@ -221,8 +330,12 @@ class PreemptionController(BaseController):
                     duration,
                 )
 
-                # Reset adaptive controller and restore NORMAL operation
+                # Reset adaptive controller and restore NORMAL operation. It was not stepped during the
+                # preemption, so any transition it had in progress is void: hand it a stable green.
                 self.adaptive_controller.current_phase = self.current_phase
+                self.adaptive_controller.transition_state = "STABLE"
+                self.adaptive_controller.transition_timer = 0.0
+                self.adaptive_controller.pending_target_phase = None
                 self.adaptive_controller.time_in_current_green = 0.0
                 self.adaptive_controller.decision_timer = 0.0
 

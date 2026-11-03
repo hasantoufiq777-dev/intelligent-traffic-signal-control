@@ -49,6 +49,7 @@ class VehicleNavigator:
         aco_config: Optional[Dict[str, Any]] = None,
         heuristic: str = "euclid",
         seed: int = 1,
+        speed_smoothing_s: float = 0.0,
     ) -> None:
         """Initialize navigation engine."""
         self.sumo_api = sumo_api
@@ -61,6 +62,12 @@ class VehicleNavigator:
         self.heuristic = heuristic
         self.seed = int(seed)
         self.rng = random.Random(self.seed + 777)
+        # Edge speeds are smoothed over about one signal cycle (time constant in s, 0 = off). A queue
+        # waiting at a red light makes the raw speed drop near 0 for a few seconds; unsmoothed, every
+        # red light looks like a jam and navigating cars detour around it.
+        self.speed_smoothing_s = max(0.0, float(speed_smoothing_s))
+        self._speed_ema: Dict[str, float] = {}
+        self._ema_time: Optional[float] = None
 
         # ACO router instance
         self.aco_router = AcoRouter(
@@ -90,6 +97,32 @@ class VehicleNavigator:
         self.events_queue: List[Dict[str, Any]] = []
         self._last_event_sec: int = -1
         self._event_sec_count: int = 0
+
+    def smoothed_speeds(
+        self, sim_time: float, speed_map: Optional[Dict[str, float]], keep_raw: Optional[Set[str]] = None
+    ) -> Optional[Dict[str, float]]:
+        """Exponentially smoothed edge speeds; edges without a report relax towards free-flow speed.
+
+        keep_raw: edges whose raw value is used as is (incident edges must take effect at once).
+        """
+        if self.speed_smoothing_s <= 0.0 or speed_map is None:
+            return speed_map
+        dt = 1.0 if self._ema_time is None else max(0.0, sim_time - self._ema_time)
+        if dt <= 0.0 and self._speed_ema:
+            out = dict(self._speed_ema)
+        else:
+            a = 1.0 - math.exp(-dt / self.speed_smoothing_s) if dt > 0.0 else 1.0
+            for eid, node in self.graph.edges.items():
+                obs = speed_map.get(eid)
+                target = obs if (obs is not None and obs > 0.0) else node.free_flow_speed
+                prev = self._speed_ema.get(eid)
+                self._speed_ema[eid] = target if prev is None else prev + a * (target - prev)
+            self._ema_time = sim_time
+            out = dict(self._speed_ema)
+        for eid in keep_raw or ():
+            if eid in speed_map:
+                out[eid] = speed_map[eid]
+        return out
 
     def pop_events(self) -> List[Dict[str, Any]]:
         """Pop all pending navigation events."""
@@ -179,6 +212,8 @@ class VehicleNavigator:
         if self.mode == "none":
             return
 
+        speed_map = self.smoothed_speeds(sim_time, speed_map, keep_raw=incident_edges)
+
         # 3. Dynamic Rerouting Evaluation
         for vid in active_vids:
             if not self.is_nav_vehicle.get(vid, False):
@@ -230,10 +265,12 @@ class VehicleNavigator:
             if curr_road == goal_edge:
                 continue
 
-            # Evaluate remaining cost of current route
+            # Remaining cost of the current route. The edge the car is on is left out: it is the same
+            # for every alternative, and A* and ACO do not count their start edge either. Counting it
+            # here only made every alternative look cheaper by that edge's cost.
             remaining_route = current_route[route_index:] if route_index >= 0 else [curr_road, goal_edge]
             curr_route_cost = 0.0
-            for r_edge in remaining_route:
+            for r_edge in remaining_route[1:]:
                 c = self.graph.get_edge_cost(r_edge, speed_map=speed_map, closed_edges=closed_edges)
                 curr_route_cost += c
 

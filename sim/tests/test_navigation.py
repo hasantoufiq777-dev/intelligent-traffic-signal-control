@@ -179,3 +179,88 @@ def test_navigator_simulation_execution() -> None:
     assert res["reroute_count"] >= 1
     assert res["edge_load_cv"] >= 0.0
     assert res["max_edge_load"] >= 1
+
+
+# --------------------------------------------------------------------------- cost-model fixes
+class _FakeVehicleApi:
+    def __init__(self, road: str, route: list) -> None:
+        self.road, self.route, self.set_routes = road, list(route), []
+
+    def getIDList(self):
+        return ["car1"]
+
+    def getRoadID(self, vid):
+        return self.road
+
+    def getRoute(self, vid):
+        return list(self.route)
+
+    def getRouteIndex(self, vid):
+        return self.route.index(self.road)
+
+    def setRoute(self, vid, path):
+        self.set_routes.append(list(path))
+        self.route = list(path)
+
+
+class _FakeSumo:
+    def __init__(self, road: str, route: list) -> None:
+        self.vehicle = _FakeVehicleApi(road, route)
+
+
+def test_junction_delay_is_added_only_for_signalised_edges(grid_graph: EdgeGraph) -> None:
+    """Edges into a traffic light carry the expected signal wait; exit edges do not."""
+    assert grid_graph.edges["bottom0J0"].signalized_end
+    assert not grid_graph.edges["J3top1"].signalized_end
+    base_in = grid_graph.get_edge_cost("bottom0J0")
+    base_out = grid_graph.get_edge_cost("J3top1")
+    grid_graph.junction_delay_s = 8.0
+    try:
+        assert grid_graph.get_edge_cost("bottom0J0") == pytest.approx(base_in + 8.0)
+        assert grid_graph.get_edge_cost("J3top1") == pytest.approx(base_out)
+    finally:
+        grid_graph.junction_delay_s = 0.0
+
+
+def test_slow_current_edge_does_not_force_a_reroute(grid_graph: EdgeGraph) -> None:
+    """A car queued on its current edge keeps an equally good route.
+
+    Both routes J0->J1->J3 and J0->J2->J3 cost the same. The current edge is slow (red-light queue),
+    but it is the same for every alternative, so it must not make the other route look cheaper.
+    """
+    from sim.navigation.navigator import VehicleNavigator
+
+    route = ["bottom0J0", "J0J1", "J1J3", "J3top1"]
+    sumo = _FakeSumo("bottom0J0", route)
+    nav = VehicleNavigator(sumo_api=sumo, graph=grid_graph, mode="astar", nav_fraction=1.0, hysteresis=0.05)
+    nav.step(100.0, speed_map={"bottom0J0": 0.5})
+    assert sumo.vehicle.set_routes == []
+
+
+def test_reroute_still_happens_when_the_route_ahead_is_jammed(grid_graph: EdgeGraph) -> None:
+    """A slow edge further along the route still triggers a reroute to the free alternative."""
+    from sim.navigation.navigator import VehicleNavigator
+
+    route = ["bottom0J0", "J0J1", "J1J3", "J3top1"]
+    sumo = _FakeSumo("bottom0J0", route)
+    nav = VehicleNavigator(sumo_api=sumo, graph=grid_graph, mode="astar", nav_fraction=1.0, hysteresis=0.05)
+    nav.step(100.0, speed_map={"J1J3": 1.0})
+    assert sumo.vehicle.set_routes == [["bottom0J0", "J0J2", "J2J3", "J3top1"]]
+
+
+def test_speed_smoothing_ignores_short_red_light_queues(grid_graph: EdgeGraph) -> None:
+    """With smoothing, one slow report barely moves the edge speed; incident edges stay raw."""
+    from sim.navigation.navigator import VehicleNavigator
+
+    nav = VehicleNavigator(sumo_api=None, graph=grid_graph, mode="astar", speed_smoothing_s=60.0)
+    free = grid_graph.edges["J0J1"].free_flow_speed
+    nav.smoothed_speeds(0.0, {})
+    out = nav.smoothed_speeds(1.0, {"J0J1": 0.5, "J0J2": 0.5}, keep_raw={"J0J2"})
+    assert out["J0J1"] > 0.95 * free
+    assert out["J0J2"] == 0.5
+    # A jam that lasts several minutes does show up
+    t = 1.0
+    for _ in range(300):
+        t += 1.0
+        out = nav.smoothed_speeds(t, {"J0J1": 0.5})
+    assert out["J0J1"] < 1.0

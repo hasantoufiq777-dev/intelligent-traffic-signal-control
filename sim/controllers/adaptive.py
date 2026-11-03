@@ -8,7 +8,7 @@ and safe yellow/all-red transitions. Reads traffic state strictly through a Stat
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from sim.controllers.base import BaseController
 from sim.sensing import StateProvider
@@ -69,6 +69,15 @@ class AdaptiveController(BaseController):
                 self._apply_phase(self.PHASE_NS_GREEN)  # also holds the phase (no SUMO auto-advance)
             except Exception:
                 pass
+
+    def _green_remaining_bounds(self) -> Tuple[Optional[float], Optional[float]]:
+        """Adaptive timing: the green cannot end before min_green and must end by max_green
+        (a switch happens at a decision tick, so up to one decision_interval later)."""
+        t = self.time_in_current_green
+        return max(0.0, self.min_green - t), max(0.0, self.max_green - t) + self.decision_interval
+
+    def _green_length_bounds(self, group: str) -> Tuple[Optional[float], Optional[float]]:
+        return self.min_green, self.max_green + self.decision_interval
 
     def _update_starvation_trackers(self, dt: float, queues: Dict[str, int]) -> None:
         """Track how long approaches with waiting vehicles are kept on red."""

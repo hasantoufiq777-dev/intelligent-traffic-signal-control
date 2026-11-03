@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS runs (
   penetration REAL,
   loss        REAL,
   relay       TEXT,
+  eco_fraction REAL DEFAULT 0,
   source      TEXT NOT NULL,            -- admin | playlist
   status      TEXT NOT NULL,            -- running | finished | stopped | error | interrupted
   message     TEXT,
@@ -52,10 +53,13 @@ export function openDatabase(dbPath) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  // Migration for databases created before eco-driving existed
+  const runCols = db.prepare('PRAGMA table_info(runs)').all().map((c) => c.name);
+  if (!runCols.includes('eco_fraction')) db.exec('ALTER TABLE runs ADD COLUMN eco_fraction REAL DEFAULT 0');
 
   const stmts = {
-    insertRun: db.prepare(`INSERT INTO runs (id, scenario, controller, nav, seed, penetration, loss, relay, source, status, started_at)
-      VALUES (@id, @scenario, @controller, @nav, @seed, @penetration, @loss, @relay, @source, 'running', @started_at)`),
+    insertRun: db.prepare(`INSERT INTO runs (id, scenario, controller, nav, seed, penetration, loss, relay, eco_fraction, source, status, started_at)
+      VALUES (@id, @scenario, @controller, @nav, @seed, @penetration, @loss, @relay, @eco_fraction, @source, 'running', @started_at)`),
     endRun: db.prepare(`UPDATE runs SET status = @status, message = @message, ended_at = @ended_at WHERE id = @id AND status = 'running'`),
     markInterrupted: db.prepare(`UPDATE runs SET status = 'interrupted', message = 'gateway restarted while running', ended_at = ? WHERE status = 'running'`),
     upsertResult: db.prepare(`INSERT INTO results (run_id, metrics, created_at) VALUES (?, ?, ?)
@@ -75,7 +79,7 @@ export function openDatabase(dbPath) {
     raw: db,
     /** Runs left "running" by a previous gateway process cannot be resumed. */
     markInterruptedRuns: () => stmts.markInterrupted.run(now()).changes,
-    insertRun: (run) => stmts.insertRun.run({ ...run, started_at: now() }),
+    insertRun: (run) => stmts.insertRun.run({ eco_fraction: 0, ...run, started_at: now() }),
     endRun: (id, status, message = null) => stmts.endRun.run({ id, status, message, ended_at: now() }).changes,
     saveResult: (runId, metrics) => stmts.upsertResult.run(runId, JSON.stringify(metrics ?? {}), now()),
     saveEvent: (runId, ev) =>

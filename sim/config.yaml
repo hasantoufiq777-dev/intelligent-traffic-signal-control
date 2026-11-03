@@ -61,6 +61,21 @@ navigation:
   v_min: 1.0
   min_reroute_gap: 15.0
   heuristic: "euclid" # euclid | zero
+  speed_smoothing_s: 60.0   # time constant (s) for smoothing TMC edge speeds, about one signal cycle; 0 = off
+  junction_delay_s: 8.0     # expected wait (s) added per traffic light on a route (mean wait per signal
+                            # measured in the navigation scenario: about 16 s per trip over 2 signals)
+
+eco:
+  # GLOSA eco-driving (RSU SPaT broadcast -> speed advice); enabled per run with --eco-fraction
+  spat_interval: 1.0        # s between SPaT broadcasts per RSU
+  spat_timeout: 2.5         # s; older SPaT is not used
+  advisory_range_m: 300.0   # advice only within this distance of the stop line
+  update_interval: 1.0      # s between advice updates per car
+  v_min_advice: 5.0         # m/s; if arriving on green needs less, advice is "stop" (drive normally, stop at line)
+  margin_s: 1.0             # s; aim to arrive this long after the green starts
+  max_uncertainty_s: 5.0    # s; no slow-down advice when the next green start is known less precisely
+  queue_lookahead_m: 60.0   # no advice when a vehicle within this distance ahead ...
+  queue_speed: 3.0          # ... is slower than this (m/s): the queue, not the signal, sets the arrival time
 
 aco:
   alpha: 1.0
@@ -148,9 +163,16 @@ evaluation:
     penetrations: [1.0, 0.5]
     modes: [astar, aco, aco_tuned]
     fractions: [0.1, 0.3, 0.5]
+  eco:
+    scenarios: [normal, congested]
+    controllers: [fixed, adaptive_vanet]
+    fractions: [0.0, 0.3, 0.6, 1.0]
+    penetration: 1.0
   quick:
     seeds: [1, 2]
     max_steps: 400
+    eco_fractions: [0.0, 1.0]
+    eco_scenarios: [normal]
     signals_penetrations: [0.5, 1.0]
     ev_losses: [0.0, 0.3]
     nav_penetrations: [1.0]

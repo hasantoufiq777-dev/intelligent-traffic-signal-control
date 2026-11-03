@@ -210,6 +210,7 @@ def generate_routes(
         minGap="2.5",
         maxSpeed="15.0",
         guiShape="passenger",
+        emissionClass="HBEFA4/PC_petrol_Euro-4",  # pinned (SUMO 1.28 default) for fuel/CO2 results
     )
     ET.SubElement(
         root,
@@ -225,6 +226,7 @@ def generate_routes(
         speedFactor="1.3",
         color="255,0,0",
         guiShape="emergency",
+        emissionClass="HBEFA4/PC_petrol_Euro-4",
     )
 
     for veh in vehicles:

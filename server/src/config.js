@@ -29,6 +29,8 @@ const EnvSchema = z.object({
   // Real-time pacing of the live simulation (wall-clock seconds per simulated second)
   SIM_STEP_DELAY: z.coerce.number().min(0).default(0.25),
   SIM_MAX_STEPS: z.coerce.number().int().positive().optional(),
+  // Open the live run in the SUMO-GUI window too (only useful when the gateway runs on a desktop)
+  SIM_GUI: bool.default(false),
   MOCK_STEP_DELAY: z.coerce.number().min(0).default(0.5),
   MOCK_MAX_STEPS: z.coerce.number().int().positive().default(300),
   STATE_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
@@ -50,6 +52,11 @@ export function loadConfig(overrides = {}) {
   }
   const cfg = parsed.data;
   cfg.SUMMARY_PATH ??= path.join(cfg.PROJECT_ROOT, 'results', 'summary.json');
+  // A relative interpreter path (e.g. ../.venv/Scripts/python.exe) is relative to server/, where .env lives,
+  // not to the project root the simulation runs in. A bare command name (python, python3) stays on PATH.
+  if (/[\\/]/.test(cfg.PYTHON_BIN) && !path.isAbsolute(cfg.PYTHON_BIN)) {
+    cfg.PYTHON_BIN = path.resolve(SERVER_ROOT, cfg.PYTHON_BIN);
+  }
   return cfg;
 }
 

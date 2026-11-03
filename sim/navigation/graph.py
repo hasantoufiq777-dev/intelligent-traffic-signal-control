@@ -26,6 +26,7 @@ class EdgeNode:
     start_coord: Tuple[float, float]
     end_coord: Tuple[float, float]
     successors: List[str] = field(default_factory=list)
+    signalized_end: bool = False  # the edge ends at a traffic-light junction
 
 
 class EdgeGraph:
@@ -35,6 +36,9 @@ class EdgeGraph:
         """Initialize empty edge graph."""
         self.edges: Dict[str, EdgeNode] = {}
         self.max_network_speed: float = 13.89  # Default ~50 km/h
+        # Expected wait at a traffic light, added to every edge that ends at one (navigation.junction_delay_s).
+        # Without it a detour through extra signals looks as cheap as its driving time alone.
+        self.junction_delay_s: float = 0.0
 
     @classmethod
     def from_net_file(cls, net_path: Union[str, Path]) -> EdgeGraph:
@@ -77,6 +81,7 @@ class EdgeGraph:
                 start_coord=start_coord,
                 end_coord=end_coord,
                 successors=outgoing_edges,
+                signalized_end=(edge.getToNode().getType() == "traffic_light"),
             )
 
         graph.max_network_speed = max_speed
@@ -104,7 +109,7 @@ class EdgeGraph:
     ) -> float:
         """Compute the dynamic travel time cost of traversing edge_id in seconds.
 
-        Cost = length / max(speed, v_min).
+        Cost = length / max(speed, v_min), plus junction_delay_s if the edge ends at a traffic light.
         Closed edges (due to incidents or road closures) incur infinite cost.
         """
         if closed_edges and edge_id in closed_edges:
@@ -122,4 +127,7 @@ class EdgeGraph:
                 speed = obs_speed
 
         effective_speed = max(speed, float(v_min))
-        return node.length / effective_speed
+        cost = node.length / effective_speed
+        if node.signalized_end:
+            cost += self.junction_delay_s
+        return cost

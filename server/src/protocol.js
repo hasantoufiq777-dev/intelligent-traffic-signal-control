@@ -6,7 +6,9 @@ export const OPTIONS = {
   controllers: ['fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
-  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 1.0, loss: 0.0, relay: 'off' },
+  networks: ['single', 'grid2x2'],
+  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 1.0, loss: 0.0, relay: 'off',
+    eco_fraction: 0.0 },
 };
 
 /** A live run request (admin start body, playlist entry). Unknown keys are rejected. */
@@ -19,13 +21,18 @@ export const RunEntrySchema = z
     penetration: z.coerce.number().min(0).max(1).default(1.0),
     loss: z.coerce.number().min(0).max(1).default(0.0),
     relay: z.enum(OPTIONS.relay).default('off'),
+    eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
+    network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
     label: z.string().max(120).optional(),
   })
   .strict();
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 
-const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result']) }).passthrough();
+const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles']) }).passthrough();
+
+/** Vehicle ids a viewer may follow (also used as a Socket.io room name suffix). */
+export const VehicleIdSchema = z.string().min(1).max(64).regex(/^[\w.:#-]+$/);
 
 /**
  * Parse one stdout line. Returns the message object, or null for blank/invalid lines.
@@ -52,7 +59,8 @@ export function parseLine(line) {
 }
 
 /** Command-line arguments for sim/main.py or sim/mock_sim.py (args array, never a shell string). */
-export function buildSimArgs(entry, runId, cfg) {
+export function buildSimArgs(entry, runId, cfg, opts = {}) {
+  const gui = opts.gui ?? cfg.SIM_GUI;
   const args = [
     cfg.USE_MOCK ? cfg.MOCK_ENTRY : cfg.SIM_ENTRY,
     '--run-id', runId,
@@ -63,13 +71,16 @@ export function buildSimArgs(entry, runId, cfg) {
     '--penetration', String(entry.penetration),
     '--loss', String(entry.loss),
     '--relay', entry.relay,
+    '--eco-fraction', String(entry.eco_fraction ?? 0),
     '--live',
   ];
+  if (entry.network) args.push('--network', entry.network);
   if (cfg.USE_MOCK) {
     args.push('--step-delay', String(cfg.MOCK_STEP_DELAY), '--max-steps', String(cfg.MOCK_MAX_STEPS));
   } else {
     if (cfg.SIM_STEP_DELAY > 0) args.push('--step-delay', String(cfg.SIM_STEP_DELAY));
     if (cfg.SIM_MAX_STEPS) args.push('--max-steps', String(cfg.SIM_MAX_STEPS));
+    if (gui) args.push('--gui');
   }
   return args;
 }

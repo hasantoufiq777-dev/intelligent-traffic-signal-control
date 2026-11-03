@@ -265,7 +265,14 @@ class OracleStateProvider(StateProvider):
         return speeds
 
 
-# Import VanetStateProvider for unified sensing package interface
-from sim.vanet.sensing_vanet import VanetStateProvider  # noqa: E402
-
 __all__ = ["StateProvider", "OracleStateProvider", "VanetStateProvider"]
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy re-export of VanetStateProvider. A top-level import here made sim.sensing and
+    sim.vanet import each other, which failed whenever sim.vanet was imported first."""
+    if name == "VanetStateProvider":
+        from sim.vanet.sensing_vanet import VanetStateProvider
+
+        return VanetStateProvider
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

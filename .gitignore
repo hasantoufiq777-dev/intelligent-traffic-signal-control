@@ -70,3 +70,8 @@ Thumbs.db
 server/data/
 server/loadtest/last-result.json
 server/loadtest/last-run.log
+server/loadtest/last-stdout.json
+
+# GA fitness caches (reproducible, resume only)
+results/ga/*_cache.json
+results/preemption_example/

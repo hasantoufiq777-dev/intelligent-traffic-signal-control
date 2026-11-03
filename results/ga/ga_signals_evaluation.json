@@ -1,0 +1,141 @@
+{
+  "target": "signals",
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "conditions": [
+    {
+      "condition": {
+        "penetration": 0.5,
+        "loss": 0.1,
+        "range": 300.0
+      },
+      "is_tuning_condition": true,
+      "default_fitness_mean": 34.144,
+      "tuned_fitness_mean": 32.84,
+      "default_fitness_std": 2.731,
+      "tuned_fitness_std": 2.241,
+      "improvement_pct": 3.82,
+      "seeds_tuned_better": 6,
+      "p_value_wilcoxon": 0.193359375,
+      "gain_holds": true,
+      "metrics_mean": {
+        "default": {
+          "congested.avg_travel_time": 105.706,
+          "congested.avg_waiting_time": 18.768,
+          "congested.edge_load_cv": 0.824,
+          "congested.ev_travel_time": 0.0,
+          "congested.missed_preemptions": 0.0,
+          "congested.nav_avg_travel_time": 103.686,
+          "congested.nonnav_avg_travel_time": 106.056,
+          "congested.pdr": 0.852,
+          "congested.route_search_ms": 0.0,
+          "congested.throughput_veh_per_hr": 2119.2,
+          "emergency.avg_travel_time": 97.257,
+          "emergency.avg_waiting_time": 17.019,
+          "emergency.edge_load_cv": 0.717,
+          "emergency.ev_travel_time": 65.0,
+          "emergency.missed_preemptions": 0.0,
+          "emergency.nav_avg_travel_time": 92.804,
+          "emergency.nonnav_avg_travel_time": 98.098,
+          "emergency.pdr": 0.853,
+          "emergency.route_search_ms": 0.0,
+          "emergency.throughput_veh_per_hr": 1077.6
+        },
+        "tuned": {
+          "congested.avg_travel_time": 108.065,
+          "congested.avg_waiting_time": 18.894,
+          "congested.edge_load_cv": 0.851,
+          "congested.ev_travel_time": 0.0,
+          "congested.missed_preemptions": 0.0,
+          "congested.nav_avg_travel_time": 106.71,
+          "congested.nonnav_avg_travel_time": 108.28,
+          "congested.pdr": 0.852,
+          "congested.route_search_ms": 0.0,
+          "congested.throughput_veh_per_hr": 2110.8,
+          "emergency.avg_travel_time": 93.851,
+          "emergency.avg_waiting_time": 13.186,
+          "emergency.edge_load_cv": 0.69,
+          "emergency.ev_travel_time": 67.2,
+          "emergency.missed_preemptions": 0.0,
+          "emergency.nav_avg_travel_time": 90.843,
+          "emergency.nonnav_avg_travel_time": 94.4,
+          "emergency.pdr": 0.853,
+          "emergency.route_search_ms": 0.0,
+          "emergency.throughput_veh_per_hr": 1096.2
+        }
+      }
+    },
+    {
+      "condition": {
+        "penetration": 0.8,
+        "loss": 0.3,
+        "range": 300.0
+      },
+      "is_tuning_condition": false,
+      "default_fitness_mean": 33.022,
+      "tuned_fitness_mean": 32.533,
+      "default_fitness_std": 1.923,
+      "tuned_fitness_std": 2.811,
+      "improvement_pct": 1.48,
+      "seeds_tuned_better": 5,
+      "p_value_wilcoxon": 0.556640625,
+      "gain_holds": true,
+      "metrics_mean": {
+        "default": {
+          "congested.avg_travel_time": 107.347,
+          "congested.avg_waiting_time": 19.326,
+          "congested.edge_load_cv": 0.861,
+          "congested.ev_travel_time": 0.0,
+          "congested.missed_preemptions": 0.0,
+          "congested.nav_avg_travel_time": 107.418,
+          "congested.nonnav_avg_travel_time": 107.274,
+          "congested.pdr": 0.698,
+          "congested.route_search_ms": 0.0,
+          "congested.throughput_veh_per_hr": 2111.4,
+          "emergency.avg_travel_time": 94.623,
+          "emergency.avg_waiting_time": 14.117,
+          "emergency.edge_load_cv": 0.699,
+          "emergency.ev_travel_time": 65.2,
+          "emergency.missed_preemptions": 0.0,
+          "emergency.nav_avg_travel_time": 93.284,
+          "emergency.nonnav_avg_travel_time": 95.035,
+          "emergency.pdr": 0.698,
+          "emergency.route_search_ms": 0.0,
+          "emergency.throughput_veh_per_hr": 1096.8
+        },
+        "tuned": {
+          "congested.avg_travel_time": 109.14,
+          "congested.avg_waiting_time": 19.1,
+          "congested.edge_load_cv": 0.876,
+          "congested.ev_travel_time": 0.0,
+          "congested.missed_preemptions": 0.0,
+          "congested.nav_avg_travel_time": 109.793,
+          "congested.nonnav_avg_travel_time": 108.834,
+          "congested.pdr": 0.698,
+          "congested.route_search_ms": 0.0,
+          "congested.throughput_veh_per_hr": 2094.0,
+          "emergency.avg_travel_time": 92.075,
+          "emergency.avg_waiting_time": 11.366,
+          "emergency.edge_load_cv": 0.699,
+          "emergency.ev_travel_time": 69.2,
+          "emergency.missed_preemptions": 0.0,
+          "emergency.nav_avg_travel_time": 91.913,
+          "emergency.nonnav_avg_travel_time": 92.136,
+          "emergency.pdr": 0.698,
+          "emergency.route_search_ms": 0.0,
+          "emergency.throughput_veh_per_hr": 1096.2
+        }
+      }
+    }
+  ]
+}

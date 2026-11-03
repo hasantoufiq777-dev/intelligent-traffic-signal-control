@@ -7,7 +7,7 @@ via an injected StateProvider.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sim.sensing import OracleStateProvider, StateProvider
 
@@ -197,6 +197,68 @@ class BaseController:
                 signals[d] = "r"
 
         return signals
+
+    # ------------------------------------------------------------------ SPaT (eco-driving)
+    def _green_remaining_bounds(self) -> Tuple[Optional[float], Optional[float]]:
+        """Seconds until the current green ends: (earliest, latest). None = unknown."""
+        return None, None
+
+    def _green_length_bounds(self, group: str) -> Tuple[Optional[float], Optional[float]]:
+        """Length of a future green for group 'NS' or 'EW': (shortest, longest). None = unknown."""
+        return None, None
+
+    def get_spat(self) -> Dict[str, Any]:
+        """Signal Phase and Timing per approach, as an RSU would broadcast it.
+
+        {"N": {"signal": "G|y|r", "min_s", "max_s", "next_green_min_s", "next_green_max_s"}, ...}
+        min_s/max_s: earliest/latest seconds until this approach's signal changes.
+        next_green_*: earliest/latest seconds until the next green that starts in the future (for an
+        approach that is green now: the green after the coming red).
+        Values are None when the controller cannot predict them.
+        """
+        signals = self.get_approach_signals()
+        groups = {"NS": ("N", "S"), "EW": ("E", "W")}
+        t_y, t_ar = float(self.yellow_time), float(self.all_red_time)
+
+        def add(*xs: Optional[float]) -> Optional[float]:
+            return None if any(x is None for x in xs) else float(sum(xs))  # type: ignore[arg-type]
+
+        timing: Dict[str, Tuple[Optional[float], ...]] = {}
+        if self.transition_state == "STABLE":
+            serving = {self.PHASE_NS_GREEN: "NS", self.PHASE_EW_GREEN: "EW"}.get(self.current_phase)
+            if serving is not None:
+                other = "EW" if serving == "NS" else "NS"
+                rmin, rmax = self._green_remaining_bounds()
+                omin, omax = self._green_length_bounds(other)
+                to_other_min, to_other_max = add(rmin, t_y, t_ar), add(rmax, t_y, t_ar)
+                timing[serving] = (rmin, rmax, add(to_other_min, omin, t_y, t_ar), add(to_other_max, omax, t_y, t_ar))
+                timing[other] = (to_other_min, to_other_max, to_other_min, to_other_max)
+        else:
+            target = self.pending_target_phase if self.pending_target_phase is not None else self.target_phase
+            tgt = "NS" if target == self.PHASE_NS_GREEN else "EW"
+            other = "EW" if tgt == "NS" else "NS"
+            rem = max(0.0, float(self.transition_timer))
+            to_tgt_green = rem + t_ar if self.transition_state == "YELLOW" else rem
+            gmin, gmax = self._green_length_bounds(tgt)
+            timing[tgt] = (to_tgt_green, to_tgt_green, to_tgt_green, to_tgt_green)
+            other_change = rem if self.transition_state == "YELLOW" else add(to_tgt_green, gmin, t_y, t_ar)
+            other_change_max = rem if self.transition_state == "YELLOW" else add(to_tgt_green, gmax, t_y, t_ar)
+            timing[other] = (other_change, other_change_max,
+                             add(to_tgt_green, gmin, t_y, t_ar), add(to_tgt_green, gmax, t_y, t_ar))
+
+        spat: Dict[str, Any] = {}
+        for group, dirs in groups.items():
+            tmin, tmax, ngmin, ngmax = timing.get(group, (None, None, None, None))
+            for d in dirs:
+                sig = signals.get(d, "r")
+                spat[d] = {
+                    "signal": sig,
+                    "min_s": None if tmin is None else round(tmin, 1),
+                    "max_s": None if tmax is None else round(tmax, 1),
+                    "next_green_min_s": None if ngmin is None else round(ngmin, 1),
+                    "next_green_max_s": None if ngmax is None else round(ngmax, 1),
+                }
+        return spat
 
     def get_queue_lengths(self) -> Dict[str, int]:
         """Return number of halting vehicles per approach direction (N, S, E, W) via StateProvider."""

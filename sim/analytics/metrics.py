@@ -167,3 +167,91 @@ def parse_tripinfo(
         "max_queue": float(max_queue),
         "throughput_veh_per_hr": throughput,
     }
+
+
+PETROL_DENSITY_G_PER_L = 745.0
+
+
+def parse_tripinfo_emissions(
+    xml_path: Union[str, Path],
+    group_fn: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Fuel, CO2 and stops from tripinfo with SUMO's emission device (CO2_abs, fuel_abs in mg).
+
+    group_fn(vehicle_id, vtype) -> "eco" | "non" | None splits finished trips into groups;
+    None leaves a trip out of the groups (it still counts in the totals). Incident blockers
+    are excluded everywhere. Returns totals for all trips and per-group averages.
+    """
+    out: Dict[str, Any] = {
+        "co2_total_kg": None, "fuel_total_l": None, "co2_g_per_km": None, "fuel_l_per_100km": None,
+        "stops_per_vehicle": None,
+    }
+    path = Path(xml_path)
+    if not path.exists():
+        return out
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return out
+
+    def new_acc() -> Dict[str, float]:
+        return {"co2": 0.0, "fuel": 0.0, "dist": 0.0, "stops": 0.0, "dur": 0.0, "wait": 0.0, "n": 0.0}
+
+    total = new_acc()
+    groups: Dict[str, Dict[str, float]] = {"eco": new_acc(), "non": new_acc()}
+    for trip in root.findall("tripinfo"):
+        vid = trip.attrib.get("id", "")
+        vtype = trip.attrib.get("vType", "")
+        if vid.startswith("incblk_") or vtype == "incident_blocker":
+            continue
+        em = trip.find("emissions")
+        if em is None:
+            continue
+        rec = {
+            "co2": float(em.attrib.get("CO2_abs", 0.0)),
+            "fuel": float(em.attrib.get("fuel_abs", 0.0)),
+            "dist": float(trip.attrib.get("routeLength", 0.0)),
+            "stops": float(trip.attrib.get("waitingCount", 0.0)),
+            "dur": float(trip.attrib.get("duration", 0.0)),
+            "wait": float(trip.attrib.get("waitingTime", 0.0)),
+            "n": 1.0,
+        }
+        targets = [total]
+        g = group_fn(vid, vtype) if group_fn is not None else None
+        if g in groups:
+            targets.append(groups[g])
+        for acc in targets:
+            for k, v in rec.items():
+                acc[k] += v
+
+    def per_km(acc: Dict[str, float]) -> Dict[str, Optional[float]]:
+        if acc["n"] <= 0 or acc["dist"] <= 0:
+            return {"co2_g_per_km": None, "fuel_l_per_100km": None, "stops_per_vehicle": None,
+                    "travel_time": None, "waiting_time": None, "n": int(acc["n"])}
+        km = acc["dist"] / 1000.0
+        return {
+            "co2_g_per_km": round(acc["co2"] / 1000.0 / km, 2),
+            "fuel_l_per_100km": round(acc["fuel"] / 1000.0 / PETROL_DENSITY_G_PER_L / km * 100.0, 3),
+            "stops_per_vehicle": round(acc["stops"] / acc["n"], 3),
+            "travel_time": round(acc["dur"] / acc["n"], 2),
+            "waiting_time": round(acc["wait"] / acc["n"], 2),
+            "n": int(acc["n"]),
+        }
+
+    t = per_km(total)
+    out.update({
+        "co2_total_kg": round(total["co2"] / 1e6, 3),
+        "fuel_total_l": round(total["fuel"] / 1000.0 / PETROL_DENSITY_G_PER_L, 3),
+        "co2_g_per_km": t["co2_g_per_km"],
+        "fuel_l_per_100km": t["fuel_l_per_100km"],
+        "stops_per_vehicle": t["stops_per_vehicle"],
+    })
+    if group_fn is not None:
+        for name, acc in groups.items():
+            g = per_km(acc)
+            out[f"co2_g_per_km_{name}"] = g["co2_g_per_km"]
+            out[f"fuel_l_per_100km_{name}"] = g["fuel_l_per_100km"]
+            out[f"stops_per_vehicle_{name}"] = g["stops_per_vehicle"]
+            out[f"travel_time_{name}"] = g["travel_time"]
+            out[f"n_trips_{name}"] = g["n"]
+    return out

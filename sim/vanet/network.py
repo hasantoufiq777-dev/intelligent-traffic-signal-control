@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sim.vanet.alerts import AlertManager
 from sim.vanet.channel import WirelessChannel
-from sim.vanet.messages import BeaconMessage, EvAlertMessage
+from sim.vanet.messages import BeaconMessage, EvAlertMessage, SpatMessage
 from sim.vanet.nodes import RSUNode, TMC, is_vehicle_equipped
 
 logger = logging.getLogger(__name__)
@@ -169,6 +169,11 @@ class VanetNetwork:
             seed=self.seed,
         )
 
+        # Eco-driving (SPaT, I2V): vehicle id -> tls id -> latest SpatMessage received
+        self.spat_inbox: Dict[str, Dict[str, SpatMessage]] = {}
+        self.spat_sent: int = 0
+        self.spat_delivered: int = 0
+
         # Incident detection (Module 10): RSU flags -> wired backbone -> TMC incident map
         self.backbone_delay_s = backbone_delay_ms / 1000.0
         self.incident_backbone_queue: List[Tuple[float, Any]] = []
@@ -223,6 +228,24 @@ class VanetNetwork:
             for msg in self.rsus[tid].detect_incidents(sim_time):
                 self.incident_flags_sent += 1
                 self.incident_backbone_queue.append((sim_time + self.backbone_delay_s, msg))
+
+    def broadcast_spat(self, tls_id: str, approaches: Dict[str, Any], receivers: List[Tuple[str, Tuple[float, float]]],
+                       sim_time: float) -> None:
+        """RSU tls_id sends one SPaT message to each receiver (vehicle id, position) in radio range."""
+        rsu = self.rsus.get(tls_id)
+        if rsu is None:
+            return
+        msg = SpatMessage(msg_id=f"spat_{tls_id}_{sim_time:.1f}", tls_id=tls_id, approaches=approaches,
+                          timestamp=sim_time)
+        for vid, pos in receivers:
+            if math.hypot(pos[0] - rsu.pos[0], pos[1] - rsu.pos[1]) <= self.channel.range_m:
+                self.spat_sent += 1
+                self.channel.transmit(message=msg, sender_pos=rsu.pos, receiver_pos=pos, receiver_id=vid,
+                                      current_time=sim_time)
+
+    def forget_vehicle(self, vid: str) -> None:
+        """Drop a departed vehicle's SPaT inbox."""
+        self.spat_inbox.pop(vid, None)
 
     def pop_incident_changes(self) -> List[Dict[str, Any]]:
         """Pop TMC incident-map changes (new flag, upgrade, cleared) since the last call."""
@@ -302,6 +325,11 @@ class VanetNetwork:
         # 3. Deliver messages scheduled for or before sim_time
         due_transmissions = self.channel.get_due_messages(sim_time)
         for msg, rsu_id, latency_ms in due_transmissions:
+            if isinstance(msg, SpatMessage):
+                # I2V: the receiver is a vehicle OBU; keep its latest SPaT per junction
+                self.spat_inbox.setdefault(rsu_id, {})[msg.tls_id] = msg
+                self.spat_delivered += 1
+                continue
             if rsu_id in self.rsus:
                 if isinstance(msg, BeaconMessage):
                     self.rsus[rsu_id].receive_beacon(msg, sim_time)

@@ -49,7 +49,7 @@ import yaml
 
 logger = logging.getLogger("evaluate")
 
-SUITES = ("signals", "ev", "nav")
+SUITES = ("signals", "ev", "nav", "eco")
 
 # Metrics summarised per suite (raw.csv keeps every field of the results dict)
 SUITE_METRICS: Dict[str, List[str]] = {
@@ -60,13 +60,19 @@ SUITE_METRICS: Dict[str, List[str]] = {
     "nav": ["avg_travel_time", "avg_waiting_time", "nav_avg_travel_time", "nonnav_avg_travel_time",
             "edge_load_cv", "max_edge_load", "route_search_ms", "route_search_expansions", "reroute_count",
             "incident_detection_delay", "incident_rerouted_vehicles"],
+    "eco": ["co2_g_per_km", "fuel_l_per_100km", "stops_per_vehicle", "avg_travel_time", "avg_waiting_time",
+            "co2_g_per_km_eco", "co2_g_per_km_non", "stops_per_vehicle_eco", "stops_per_vehicle_non",
+            "eco_advice_share_slow", "spat_pdr"],
 }
 HIGHER_IS_BETTER = {"throughput_veh_per_hr", "pdr"}
 # Metrics where "improvement" has no meaning (descriptive only)
-NO_IMPROVEMENT = {"route_search_expansions", "reroute_count", "avg_hops", "incident_rerouted_vehicles"}
+NO_IMPROVEMENT = {"route_search_expansions", "reroute_count", "avg_hops", "incident_rerouted_vehicles",
+                  "eco_advice_share_slow", "spat_pdr", "co2_g_per_km_eco", "co2_g_per_km_non",
+                  "stops_per_vehicle_eco", "stops_per_vehicle_non"}
 
 RAW_ID_FIELDS = ["run_key", "suite", "scenario", "label", "baseline", "seed", "controller", "nav",
-                 "nav_fraction", "penetration", "loss", "range", "relay", "max_steps", "wall_s", "error"]
+                 "nav_fraction", "penetration", "loss", "range", "relay", "eco_fraction", "max_steps", "wall_s",
+                 "error"]
 RESULT_FIELDS = [
     "avg_waiting_time", "avg_time_loss", "avg_travel_time", "ev_travel_time", "max_queue",
     "throughput_veh_per_hr", "pdr", "avg_latency_ms", "avg_hops", "missed_preemptions",
@@ -74,6 +80,10 @@ RESULT_FIELDS = [
     "nonnav_avg_travel_time", "edge_load_cv", "max_edge_load", "route_search_expansions",
     "route_search_ms", "reroute_count", "incident_detected", "incident_detection_delay",
     "incident_false_flags", "incident_rerouted_vehicles",
+    "co2_total_kg", "fuel_total_l", "co2_g_per_km", "fuel_l_per_100km", "stops_per_vehicle",
+    "co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
+    "stops_per_vehicle_eco", "stops_per_vehicle_non", "travel_time_eco", "travel_time_non",
+    "eco_advised_vehicles", "eco_advice_share_slow", "eco_advice_share_stop", "spat_pdr",
 ]
 RAW_FIELDS = RAW_ID_FIELDS + RESULT_FIELDS
 
@@ -94,6 +104,7 @@ class RunSpec:
     loss: float = 0.0
     range: float = 300.0
     relay: str = "off"
+    eco_fraction: float = 0.0
     requires: Optional[str] = None  # tuned file this config needs
     description: str = ""
 
@@ -177,6 +188,19 @@ def build_plan(cfg: Dict[str, Any], suites: Iterable[str], quick: bool) -> Plan:
                             nav_fraction=float(f), penetration=float(p),
                             requires=aco_file if mode == "aco_tuned" else None,
                             description=f"{mode} navigation, fraction {f}, penetration {p}"))
+
+    if "eco" in suites:
+        e = ev_cfg["eco"]
+        fracs = q.get("eco_fractions", [0.0, 1.0]) if quick else e["fractions"]
+        scens = q.get("eco_scenarios", e["scenarios"]) if quick else e["scenarios"]
+        for scen in scens:
+            for ctrl in e["controllers"]:
+                base = f"{ctrl}@eco0"
+                for f in fracs:
+                    plan.specs.append(RunSpec(
+                        "eco", scen, f"{ctrl}@eco{_fmt(f)}", base, ctrl, penetration=float(e.get("penetration", 1.0)),
+                        eco_fraction=float(f),
+                        description=f"{ctrl}, {int(round(float(f) * 100))}% of cars follow GLOSA advice"))
     return plan
 
 
@@ -196,6 +220,7 @@ def run_one(job: Dict[str, Any]) -> Dict[str, Any]:
                 max_steps=job["max_steps"], metrics_csv_path=Path(tmp) / "m.csv", output_dir=Path(tmp),
                 nav=job["nav"], nav_fraction=float(job["nav_fraction"]), penetration=float(job["penetration"]),
                 loss=float(job["loss"]), range_m=float(job["range"]), relay=job["relay"],
+                eco_fraction=float(job.get("eco_fraction") or 0.0),
             )
             row.update({k: res.get(k) for k in RESULT_FIELDS})
         except Exception as e:  # keep going; the row records the failure
@@ -242,7 +267,8 @@ def execute(plan: Plan, raw_path: Path, workers: int, default_s: float) -> None:
                 "run_key": key, "suite": spec.suite, "scenario": spec.scenario, "label": spec.label,
                 "baseline": spec.baseline, "seed": seed, "controller": spec.controller, "nav": spec.nav,
                 "nav_fraction": spec.nav_fraction, "penetration": spec.penetration, "loss": spec.loss,
-                "range": spec.range, "relay": spec.relay, "max_steps": plan.max_steps, "network": plan.network,
+                "range": spec.range, "relay": spec.relay, "eco_fraction": spec.eco_fraction,
+                "max_steps": plan.max_steps, "network": plan.network,
             })
     for s in skipped_specs:
         logger.warning("Skipping %s. Run the GA tuner first (Module 11).", s)
@@ -400,7 +426,8 @@ def write_markdown(summary: Dict[str, Any], path: Path) -> None:
         "",
     ]
     titles = {"signals": "Signal control (baseline: fixed)", "ev": "Emergency vehicles (baseline: adaptive)",
-              "nav": "Navigation (baseline: no navigation, same penetration)"}
+              "nav": "Navigation (baseline: no navigation, same penetration)",
+              "eco": "Eco-driving / GLOSA (baseline: same controller without eco cars)"}
     for suite in SUITES:
         if suite not in summary["suites"]:
             continue

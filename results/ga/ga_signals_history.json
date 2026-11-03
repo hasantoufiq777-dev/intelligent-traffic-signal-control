@@ -1,0 +1,251 @@
+{
+  "target": "signals",
+  "generated_at": "2026-11-03T16:33:14+00:00",
+  "settings": {
+    "target": "signals",
+    "seeds": [
+      101,
+      102,
+      103
+    ],
+    "max_steps": 600,
+    "scenarios": [
+      "emergency",
+      "congested"
+    ],
+    "controller": "adaptive_ev_vanet",
+    "network": "grid2x2",
+    "condition": {
+      "penetration": 0.5,
+      "loss": 0.1,
+      "range": 300.0
+    },
+    "weights": {
+      "controller": "adaptive_ev_vanet",
+      "scenarios": [
+        "emergency",
+        "congested"
+      ],
+      "w_ev_travel_time": 0.5,
+      "w_missed_preemptions": 20.0
+    },
+    "penalty": 1000.0,
+    "population": 12,
+    "generations": 12
+  },
+  "default_chromosome": {
+    "min_green": 10.0,
+    "max_green": 50.0,
+    "queue_threshold": 5.0,
+    "decision_interval": 5.0,
+    "eta_threshold": 18.0,
+    "alert_interval": 0.5,
+    "beacon_interval": 1.0
+  },
+  "default_fitness": 32.3183,
+  "best_chromosome": {
+    "min_green": 5.0,
+    "max_green": 24.9969,
+    "queue_threshold": 4.0,
+    "decision_interval": 1.0,
+    "eta_threshold": 10.4461,
+    "alert_interval": 0.3971,
+    "beacon_interval": 0.5061
+  },
+  "best_fitness": 29.805,
+  "n_simulations": 684,
+  "generations": [
+    {
+      "generation": 0,
+      "best_fitness": 31.8417,
+      "generation_best_fitness": 31.8417,
+      "mean_fitness": 39.1339,
+      "n_feasible": 11,
+      "best_chromosome": {
+        "min_green": 7.1735,
+        "max_green": 49.5345,
+        "queue_threshold": 1.0,
+        "decision_interval": 2.9677,
+        "eta_threshold": 23.1821,
+        "alert_interval": 0.2964,
+        "beacon_interval": 0.9971
+      }
+    },
+    {
+      "generation": 1,
+      "best_fitness": 31.8417,
+      "generation_best_fitness": 31.8417,
+      "mean_fitness": 33.4892,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 7.1735,
+        "max_green": 49.5345,
+        "queue_threshold": 1.0,
+        "decision_interval": 2.9677,
+        "eta_threshold": 23.1821,
+        "alert_interval": 0.2964,
+        "beacon_interval": 0.9971
+      }
+    },
+    {
+      "generation": 2,
+      "best_fitness": 31.15,
+      "generation_best_fitness": 31.15,
+      "mean_fitness": 32.9915,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.9765,
+        "max_green": 49.6236,
+        "queue_threshold": 4.0,
+        "decision_interval": 2.4216,
+        "eta_threshold": 17.379,
+        "alert_interval": 0.3722,
+        "beacon_interval": 1.0003
+      }
+    },
+    {
+      "generation": 3,
+      "best_fitness": 31.15,
+      "generation_best_fitness": 31.15,
+      "mean_fitness": 32.0978,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.9765,
+        "max_green": 49.6236,
+        "queue_threshold": 4.0,
+        "decision_interval": 2.4216,
+        "eta_threshold": 17.379,
+        "alert_interval": 0.3722,
+        "beacon_interval": 1.0003
+      }
+    },
+    {
+      "generation": 4,
+      "best_fitness": 31.15,
+      "generation_best_fitness": 31.15,
+      "mean_fitness": 32.0442,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.9765,
+        "max_green": 49.6236,
+        "queue_threshold": 4.0,
+        "decision_interval": 2.4216,
+        "eta_threshold": 17.379,
+        "alert_interval": 0.3722,
+        "beacon_interval": 1.0003
+      }
+    },
+    {
+      "generation": 5,
+      "best_fitness": 31.15,
+      "generation_best_fitness": 31.15,
+      "mean_fitness": 31.7179,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.9765,
+        "max_green": 49.6236,
+        "queue_threshold": 4.0,
+        "decision_interval": 2.4216,
+        "eta_threshold": 17.379,
+        "alert_interval": 0.3722,
+        "beacon_interval": 1.0003
+      }
+    },
+    {
+      "generation": 6,
+      "best_fitness": 30.64,
+      "generation_best_fitness": 30.64,
+      "mean_fitness": 31.8705,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 6.1344,
+        "max_green": 45.5799,
+        "queue_threshold": 5.0,
+        "decision_interval": 1.0,
+        "eta_threshold": 17.3057,
+        "alert_interval": 0.2791,
+        "beacon_interval": 0.8701
+      }
+    },
+    {
+      "generation": 7,
+      "best_fitness": 30.4117,
+      "generation_best_fitness": 30.4117,
+      "mean_fitness": 31.3427,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.0,
+        "max_green": 46.3969,
+        "queue_threshold": 4.0,
+        "decision_interval": 1.0,
+        "eta_threshold": 17.4115,
+        "alert_interval": 0.3313,
+        "beacon_interval": 0.9231
+      }
+    },
+    {
+      "generation": 8,
+      "best_fitness": 30.4117,
+      "generation_best_fitness": 30.4117,
+      "mean_fitness": 31.0924,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.0,
+        "max_green": 46.3969,
+        "queue_threshold": 4.0,
+        "decision_interval": 1.0,
+        "eta_threshold": 17.4115,
+        "alert_interval": 0.3313,
+        "beacon_interval": 0.9231
+      }
+    },
+    {
+      "generation": 9,
+      "best_fitness": 30.3133,
+      "generation_best_fitness": 30.3133,
+      "mean_fitness": 30.8611,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.0,
+        "max_green": 46.334,
+        "queue_threshold": 4.0,
+        "decision_interval": 1.0,
+        "eta_threshold": 10.4741,
+        "alert_interval": 0.25,
+        "beacon_interval": 0.5638
+      }
+    },
+    {
+      "generation": 10,
+      "best_fitness": 30.3033,
+      "generation_best_fitness": 30.3033,
+      "mean_fitness": 30.5431,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.0,
+        "max_green": 24.7633,
+        "queue_threshold": 4.0,
+        "decision_interval": 1.0,
+        "eta_threshold": 28.1392,
+        "alert_interval": 0.3313,
+        "beacon_interval": 0.7245
+      }
+    },
+    {
+      "generation": 11,
+      "best_fitness": 29.805,
+      "generation_best_fitness": 29.805,
+      "mean_fitness": 30.466,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "min_green": 5.0,
+        "max_green": 24.9969,
+        "queue_threshold": 4.0,
+        "decision_interval": 1.0,
+        "eta_threshold": 10.4461,
+        "alert_interval": 0.3971,
+        "beacon_interval": 0.5061
+      }
+    }
+  ]
+}

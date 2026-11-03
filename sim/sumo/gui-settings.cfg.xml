@@ -1,5 +1,10 @@
 <viewsettings>
-    <scheme name="real world"/>
+    <!-- Drawing only: roads 1.6x wider and vehicles 1.3x larger than real. Junctions are always drawn at real size, so wider roads would run past the stop lines and queued cars would look as if they were inside the junction.
+         The simulation itself uses the real lane widths and vehicle sizes. -->
+    <scheme name="real world">
+        <edges widthExaggeration="1.6"/>
+        <vehicles vehicleQuality="2" vehicle_exaggeration="1.3" vehicle_minSize="6"/>
+    </scheme>
     <viewport zoom="180" x="300" y="280"/>
     <delay value="80"/>
 </viewsettings>

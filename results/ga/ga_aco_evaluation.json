@@ -1,0 +1,101 @@
+{
+  "target": "aco",
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "conditions": [
+    {
+      "condition": {
+        "penetration": 0.5,
+        "loss": 0.1,
+        "range": 300.0
+      },
+      "is_tuning_condition": true,
+      "default_fitness_mean": 163.429,
+      "tuned_fitness_mean": 118.842,
+      "default_fitness_std": 14.286,
+      "tuned_fitness_std": 3.205,
+      "improvement_pct": 27.28,
+      "seeds_tuned_better": 10,
+      "p_value_wilcoxon": 0.001953125,
+      "gain_holds": true,
+      "metrics_mean": {
+        "default": {
+          "navigation.avg_travel_time": 105.762,
+          "navigation.avg_waiting_time": 17.532,
+          "navigation.edge_load_cv": 0.826,
+          "navigation.ev_travel_time": 103.7,
+          "navigation.missed_preemptions": 0.0,
+          "navigation.nav_avg_travel_time": 101.262,
+          "navigation.nonnav_avg_travel_time": 106.515,
+          "navigation.pdr": 0.853,
+          "navigation.route_search_ms": 6563.7,
+          "navigation.throughput_veh_per_hr": 1525.8
+        },
+        "tuned": {
+          "navigation.avg_travel_time": 106.131,
+          "navigation.avg_waiting_time": 17.703,
+          "navigation.edge_load_cv": 0.836,
+          "navigation.ev_travel_time": 102.3,
+          "navigation.missed_preemptions": 0.0,
+          "navigation.nav_avg_travel_time": 102.122,
+          "navigation.nonnav_avg_travel_time": 106.815,
+          "navigation.pdr": 0.853,
+          "navigation.route_search_ms": 1282.46,
+          "navigation.throughput_veh_per_hr": 1518.6
+        }
+      }
+    },
+    {
+      "condition": {
+        "penetration": 0.8,
+        "loss": 0.3,
+        "range": 300.0
+      },
+      "is_tuning_condition": false,
+      "default_fitness_mean": 198.852,
+      "tuned_fitness_mean": 119.536,
+      "default_fitness_std": 18.183,
+      "tuned_fitness_std": 6.694,
+      "improvement_pct": 39.89,
+      "seeds_tuned_better": 10,
+      "p_value_wilcoxon": 0.001953125,
+      "gain_holds": true,
+      "metrics_mean": {
+        "default": {
+          "navigation.avg_travel_time": 104.286,
+          "navigation.avg_waiting_time": 16.377,
+          "navigation.edge_load_cv": 0.783,
+          "navigation.ev_travel_time": 101.9,
+          "navigation.missed_preemptions": 0.0,
+          "navigation.nav_avg_travel_time": 101.786,
+          "navigation.nonnav_avg_travel_time": 105.026,
+          "navigation.pdr": 0.698,
+          "navigation.route_search_ms": 10140.58,
+          "navigation.throughput_veh_per_hr": 1512.6
+        },
+        "tuned": {
+          "navigation.avg_travel_time": 104.454,
+          "navigation.avg_waiting_time": 16.313,
+          "navigation.edge_load_cv": 0.794,
+          "navigation.ev_travel_time": 108.5,
+          "navigation.missed_preemptions": 0.0,
+          "navigation.nav_avg_travel_time": 102.388,
+          "navigation.nonnav_avg_travel_time": 105.046,
+          "navigation.pdr": 0.698,
+          "navigation.route_search_ms": 2022.74,
+          "navigation.throughput_veh_per_hr": 1521.0
+        }
+      }
+    }
+  ]
+}

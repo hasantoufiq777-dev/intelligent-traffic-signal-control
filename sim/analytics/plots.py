@@ -302,6 +302,43 @@ def plot_preemption_timeseries(out_dir: Path, max_steps: Optional[int] = None, s
     return _save(fig, out_dir / "plot_preemption_queues.png")
 
 
+def plot_eco_vs_fraction(eco: Dict[str, Dict[str, Any]], path: Path) -> Optional[Path]:
+    """CO2 per km and stops per vehicle vs eco-car share; colour = controller, line style = scenario."""
+    if not eco:
+        return None
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.3))
+    controllers: List[str] = []
+    for cfgs in eco.values():
+        for lab in cfgs:
+            ctrl = lab.split("@")[0]
+            if ctrl not in controllers:
+                controllers.append(ctrl)
+    styles = ["-", "--", ":"]
+    drawn = False
+    for ax, metric, ylabel in ((axes[0], "co2_g_per_km", "CO2 (g/km, all vehicles)"),
+                               (axes[1], "stops_per_vehicle", "Stops per vehicle")):
+        for si, (scen, cfgs) in enumerate(eco.items()):
+            for ci, ctrl in enumerate(controllers):
+                pts = []
+                for lab, c in cfgs.items():
+                    if lab.startswith(f"{ctrl}@eco"):
+                        mean, err = _stat(c.get(metric))
+                        if mean is not None:
+                            pts.append((_param(lab, "eco"), mean, err))
+                pts.sort()
+                if pts:
+                    drawn = True
+                    ax.errorbar([p[0] * 100 for p in pts], [p[1] for p in pts], yerr=[p[2] for p in pts],
+                                color=SERIES[ci % len(SERIES)], linestyle=styles[si % len(styles)], linewidth=2,
+                                marker="o", markersize=5, capsize=3, label=f"{scen}, {ctrl}")
+        _style(ax, ylabel.split(" (")[0] + " vs eco-car share", "Eco cars following GLOSA advice (%)", ylabel)
+        ax.legend(frameon=False, fontsize=8)
+    if not drawn:
+        plt.close(fig)
+        return None
+    return _save(fig, path)
+
+
 def make_evaluation_plots(summary: Dict[str, Any], out_dir: Union[str, Path],
                           max_steps: Optional[int] = None) -> List[Path]:
     """All Module 12 plots for the suites present in the summary."""
@@ -321,5 +358,7 @@ def make_evaluation_plots(summary: Dict[str, Any], out_dir: Union[str, Path],
         made.append(plot_grouped_bars(s["nav"], "avg_travel_time", "Navigation suite: average travel time (95% CI)",
                                       "Average travel time, all vehicles (s)", out_dir / "plot_nav_bars.png"))
         made.append(plot_nav_travel_times(s["nav"], out_dir / "plot_nav_travel_times.png"))
-        made.append(plot_nav_edge_load_cv(s["nav"], out_dir / "plot_nav_edge_load_cv.png"))
+        made.append(plot_nav_edge_load_cv(s["nav"], out_dir / "plot_eval_nav_edge_load_cv.png"))
+    if "eco" in s:
+        made.append(plot_eco_vs_fraction(s["eco"], out_dir / "plot_eco_vs_fraction.png"))
     return [p for p in made if p is not None]

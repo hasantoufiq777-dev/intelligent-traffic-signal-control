@@ -55,6 +55,17 @@ graph TD
     RSU3 --> CTRL
 ```
 
+
+### 1.1 Signal controllers in plain language
+
+- **Fixed-time** (`fixed`): north-south green 30 s, yellow 3 s, all-red 2 s, then east-west green 30 s, and so on.
+- **Adaptive** (`adaptive`, `adaptive_vanet`): every `decision_interval` (5 s) the controller compares the queues of the two directions, as reported by its StateProvider.
+  - A green lasts at least `min_green` (10 s) and at most `max_green` (50 s).
+  - It switches early when the waiting direction's queue is larger by at least `queue_threshold` (5 vehicles), when the served direction is empty, or when a waiting approach has been red for `starvation_limit` (60 s).
+  - An approach whose incoming road is fully blocked by an incident counts as having no demand.
+  - The two versions run the same rule. `adaptive` reads true queues from SUMO; `adaptive_vanet` reads queues the RSU estimated from beacons.
+- **Safety, all controllers:** a change of green always goes green, then yellow, then all-red, then the new green. Every phase the controller sets is held until the controller changes it, so SUMO's own program never switches behind it. Every applied state is checked for conflicting greens.
+
 ---
 
 ## 2. Wireless Channel Model
@@ -194,12 +205,39 @@ sequenceDiagram
     Controller->>Controller: Phase State: EV_GREEN -> RECOVERY (Discharge Starved Queues)
 ```
 
+
+### 5.4 Preemption state machine (ambulance-only green)
+
+```mermaid
+stateDiagram-v2
+    [*] --> NORMAL
+    NORMAL --> TRANSITION: EV heading here with ETA <= eta_threshold (18 s)
+    TRANSITION --> EV_GREEN: yellow (3 s) for lights losing green, then all-red (2 s)
+    EV_GREEN --> EXIT: EV passed the junction + clearance_time (5 s)
+    EXIT --> RECOVERY: yellow (3 s), all-red (2 s), then green for the cross traffic
+    RECOVERY --> NORMAL: recovery_time (10 s), adaptive control resumes
+```
+
+- **Trigger.** An EV that will cross this junction within the next two signalised junctions on its route, with ETA below `eta_threshold`. ETA is the distance along the route divided by its speed. Several EVs: the lowest ETA is served first.
+- **EV_GREEN.** Only the EV's approach is green, for all its movements: straight, left and right. Every other approach is red. With a whole-direction green, cars ahead of the EV that turn left must wait for gaps in oncoming traffic and block the EV. On the grid this held an ambulance for about 16 s at a green light in the road-closure scenario. With an approach-only green the queue in front of the EV clears at once. Across 12 runs (road closure, heavy navigation demand, single junction), the ambulance did not stop once after this change.
+- **Safe changes.** Every change is computed from the current signal state. Lights losing green show yellow, an all-red interval comes before any light gains green, and a yellow already showing also gets its full yellow time. The unit test `sim/tests/test_ev_only_green.py` checks this sequence and that no conflicting greens appear.
+- **Information source.**
+  - `adaptive_ev` uses true EV positions (oracle).
+  - `adaptive_ev_vanet` uses only EV_ALERTs received by the junction's RSU. It dead-reckons the distance along the route, and an alert older than `alert_timeout` (2 s) means "no EV".
+- **Missed preemption.** An EV drove through a junction whose preemption never triggered for it.
+
 ---
 
 ## 6. Vehicular Navigation: A* and Ant Colony Optimization (Module 9)
 
 Module 9 implements dynamic route navigation over the SUMO edge-connectivity graph (`sim/navigation/graph.py`), where dynamic edge costs are derived from TMC traffic speed maps built by the VANET layer:
-$$\text{Cost}(e) = \frac{\text{length}(e)}{\max(\text{speed}(e), v_{\min})}$$
+$$\text{Cost}(e) = \frac{\text{length}(e)}{\max(\bar{v}(e), v_{\min})} + d_J \cdot [e \text{ ends at a traffic light}]$$
+
+- $\bar{v}(e)$ is the TMC speed of edge $e$, **smoothed** with an exponential filter (time constant `navigation.speed_smoothing_s` = 60 s, about one signal cycle). An edge without reports relaxes towards its free-flow speed. Edges in the TMC incident map use the raw value, so incidents take effect at once.
+- $d_J$ (`navigation.junction_delay_s` = 8 s) is the expected wait at a traffic light. It is the mean wait per signal measured in the navigation scenario (about 16 s per trip over two signals). Without it a detour through extra signals looks as cheap as its driving time alone. Because $d_J \ge 0$, the A\* heuristic still never overestimates the remaining cost (it stays admissible).
+- A vehicle switches route only if the new route is at least 5% cheaper (hysteresis) than the rest of its current route. Both costs leave out the edge the vehicle is on, since it is the same for every alternative.
+
+Section 10.1 explains why these three rules were added.
 
 ### 6.1 Equivalence of A* with Zero Heuristic to Dijkstra
 In $A^*$ search, the priority evaluation function is:
@@ -315,13 +353,14 @@ The GA optimises on seeds 101-103, which may simply fit those traffic samples. T
 
 ## 9. Evaluation Protocol (Module 12)
 
-`sim/analytics/evaluate.py --suite signals|ev|nav|all` runs every configuration on the 2x2 grid over seeds 1-10, with full-length runs (1000 s). The factors are listed under `evaluation:` in `config.yaml`.
+`sim/analytics/evaluate.py --suite signals|ev|nav|eco|all` runs every configuration on the 2x2 grid over seeds 1-10, with full-length runs (1000 s). The factors are listed under `evaluation:` in `config.yaml`.
 
 | Suite | Scenarios | Configurations | Baseline |
 |---|---|---|---|
 | signals | normal, congested | fixed, adaptive (oracle), adaptive_vanet at penetration 0.2 / 0.5 / 0.8 / 1.0 | fixed |
 | ev | emergency | fixed, adaptive, adaptive_ev (oracle), adaptive_ev_vanet at loss 0 / 0.1 / 0.3 / 0.5 x relay on/off (range 300), adaptive_ev_vanet_tuned at loss 0.1 | adaptive |
 | nav | navigation, incident | adaptive_vanet with nav none, astar, aco, aco_tuned at fraction 0.1 / 0.3 / 0.5, penetration 1.0 and 0.5 | nav none at the same penetration |
+| eco | normal, congested | fixed and adaptive_vanet with 0 / 30 / 60 / 100% eco cars (GLOSA), penetration 1.0 | the same controller with 0% eco cars |
 
 **Pairing.** The same seed produces the same traffic demand in every configuration, so each configuration is compared with its baseline seed by seed.
 
@@ -346,4 +385,61 @@ The quick evaluation showed EV preemption slowing the ambulance on the 2x2 grid.
 
 `missed_preemptions` is now measured: the signalised junctions an EV drove through without that junction's preemption having triggered for it. It was previously always 0.
 
-**Effect.** Fixed-time results are unchanged. Adaptive control improves (normal single junction, seed 1: waiting time 8.3 s to 3.8 s) because its greens are no longer cut at 30 s. The Module 4b regression baseline (`sim/tests/regression_baseline.json`) was re-recorded for this reason. On the grid, oracle and VANET preemption now cut EV travel time from 81.6 s to about 63 s (mean of seeds 1-5, 500 s runs), with 0 missed preemptions. **Results produced before this fix are out of date and should be regenerated**: the VANET experiments, both GA targets and the evaluation.
+**Effect.** Fixed-time results are unchanged. Adaptive control improves (normal single junction, seed 1: waiting time 8.3 s to 3.8 s) because its greens are no longer cut at 30 s. The Module 4b regression baseline (`sim/tests/regression_baseline.json`) was re-recorded for this reason. On the grid, oracle and VANET preemption now cut EV travel time from 81.6 s to about 63 s (mean of seeds 1-5, 500 s runs), with 0 missed preemptions. All results in `results/` were regenerated after this fix: the VANET experiments, both GA targets and the evaluation. In the full evaluation (10 seeds, 1000 s runs, with ambulance-only green from section 5.4) the ambulance needs 65.2 s with oracle preemption and 64-69 s with VANET preemption, against 87.6 s with adaptive control alone.
+
+### 10.1 Navigation cost model (found in the full evaluation)
+
+The first full evaluation showed navigating vehicles **slower** than the others, even when only 10% of vehicles navigated, so herding could not explain it. On seed 1 with A\* at 10%, navigating cars drove 1140 m instead of 924 m, stopped 2.8 times instead of 2.1, and needed 135 s instead of 107 s. Three causes:
+
+1. **Unequal comparison.** The current route's cost included the edge the car was on, while A\* and ACO leave out their start edge. A car queued at a red light (edge speed near 1 m/s, so about 230 s for that edge) therefore saw every alternative as about 230 s cheaper and switched.
+2. **Red lights looked like jams.** The raw TMC speed of an approach drops near zero every red phase. Routes avoided whichever approach was red at that moment and chased greens around the block.
+3. **Signals cost nothing.** A detour crosses extra signals, but only driving time was counted.
+
+The fixes are in section 6: the current edge is left out of both costs, edge speeds are smoothed over about one cycle, and each signal on a route adds an expected wait. With them, on the same run, navigating cars drove 940 m and needed 100 s, against 106 s for the others. The ACO GA target and the navigation suite were rerun with the fixed model, and the earlier navigation numbers are superseded.
+
+---
+
+## 11. Eco-Driving with GLOSA (Green Light Optimal Speed Advisory)
+
+**Idea.** Each RSU broadcasts its junction's Signal Phase and Timing (SPaT) over the same emulated, lossy V2I channel. An equipped "eco" car that knows when the light will turn green can slow down early and arrive just as it does. It avoids braking to a stop, idling and accelerating again, which is where most urban fuel is spent.
+
+**SPaT from the controllers.** For each approach a controller publishes the current signal, the earliest and latest time until it changes, and the earliest and latest start of the next green.
+- Fixed-time control knows these exactly.
+- Adaptive control only knows bounds: a green cannot end before `min_green` and must end by `max_green` (plus one decision interval).
+- During an EV preemption the timing is unknown and is published as such.
+
+**Advice rule** (`sim/vanet/glosa.py`, every second, for the next signal within 300 m along the route):
+
+| Advice | When | Effect |
+|---|---|---|
+| go | the car reaches the line before the green surely ends, or after the next green starts | none |
+| slow | the next green start is known within 5 s | target speed = distance / (time to green + 1 s), at least 5 m/s |
+| stop | the red lasts too long to bridge at 5 m/s | none: the car stops at the line normally |
+| none | no fresh SPaT (older than 2.5 s), timing too uncertain, or preemption | none |
+
+The speed is set with `traci.vehicle.setSpeed`. SUMO still keeps safe gaps and its acceleration limits, so following cars are slowed too, which is realistic. An earlier version also let cars creep at 3 m/s on uncertain adaptive timing. That made trips 33% longer and CO2 14% higher, so speed advice is now limited to timing that is known precisely.
+
+**When no speed advice is given (added after testing in heavy traffic).**
+- **Lane change pending.** The car is not yet in a lane that continues on its route (SUMO best-lane offset is not 0). Slowing such a car makes it miss the gap it needs. In the navigation scenario, two eco cars reached the J0 stop line each in the lane the other needed. They deadlocked (teleporting is disabled), and the queue spilled back through the grid: max queue 60 and throughput -19%. With this rule: max queue 13, throughput unchanged.
+- **Queue ahead.** A vehicle within 60 m ahead is slower than 3 m/s. The queue, not the signal, then sets when the car reaches the line, and slowing it only wastes green time for the cars behind.
+
+**Measurement.** Fuel and CO2 come from SUMO's emission device (HBEFA4, petrol passenger car Euro 4) in tripinfo. Stops are tripinfo `waitingCount`. Results are split into eco and non-eco cars. Fuel in litres assumes 745 g/L petrol.
+
+**First results** (before the lane-change and queue rules; see below for the corrected seed-1 numbers) (normal demand, 2x2 grid, seeds 1-2, full runs):
+- With fixed-time signals and 100% eco cars: CO2 per km fell about 9%, stops per vehicle about 62%, and travel time did not increase (it fell, because cars cross on green without start-up loss).
+- With adaptive VANET signals, eco-driving has almost no effect either way: only about 1.5% of advice is "slow", because adaptive timing is rarely predictable to within 5 s.
+
+**Corrected results** (with the lane-change and queue rules, seed 1, full runs):
+- Normal demand, 100% eco cars: CO2 -3%, stops -35%, waiting time -28%, travel time -1%.
+- Heavy navigation demand, 60% eco cars: CO2 -1%, stops -21%, waiting time -20%, throughput unchanged.
+
+The CO2 saving is smaller than first measured because fewer cars get speed advice.
+
+**10-seed evaluation** (`results/summary.md`, eco suite): with fixed-time signals and normal demand, 100% eco cars cut stops per vehicle 40%, waiting time 31% and CO2 2.9%, with travel time unchanged. In congestion stops fall 10%. With adaptive VANET signals all changes stay within ±2%. Discussion: `docs/results_discussion.md` section 4.
+
+GLOSA and actuated control pull in different directions. One predicts the signal, the other changes it in response to traffic. Combining them (for example, an adaptive controller that commits to its next switch a few seconds ahead) is future work.
+
+**Limits.**
+- The emission model gives estimates, not measurements.
+- The advisor knows the car's own route and position (as a navigation unit would) and sees the vehicle ahead (as radar would). It does not know the length of the queue at the stop line, so a slowed car may still reach the back of a queue that forms after the advice.
+- Every advice update costs extra TraCI calls per eco car, so eco runs take several times longer to simulate.

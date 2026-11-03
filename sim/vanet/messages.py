@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class MessageType(str, Enum):
     BEACON = "BEACON"
     EV_ALERT = "EV_ALERT"
     INCIDENT_FLAG = "INCIDENT_FLAG"
+    SPAT = "SPAT"
 
 
 @dataclass
@@ -85,3 +86,18 @@ class IncidentFlagMessage(BaseMessage):
     def __post_init__(self) -> None:
         self.msg_type = MessageType.INCIDENT_FLAG
         self.ttl = 5
+
+
+@dataclass
+class SpatMessage(BaseMessage):
+    """Signal Phase and Timing broadcast by an RSU (I2V) for eco-driving (GLOSA).
+
+    approaches: {"N": {"signal", "min_s", "max_s", "next_green_min_s", "next_green_max_s"}, ...}
+    with times in seconds counted from `timestamp`.
+    """
+
+    tls_id: str = ""
+    approaches: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.msg_type = MessageType.SPAT

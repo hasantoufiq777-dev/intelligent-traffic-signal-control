@@ -120,6 +120,26 @@ export function createGateway(overrides = {}) {
       memory_mb: { rss: +(mem.rss / 1e6).toFixed(1), heapUsed: +(mem.heapUsed / 1e6).toFixed(1) }, live: live.stats });
   });
 
+  // ---- SUMO-GUI window (opens on the computer running the gateway) -------------
+  // Only for someone at that computer (direct loopback request, not via a proxy) or with the admin token.
+  const isLocal = (req) => !req.get('x-forwarded-for')
+    && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+  const guiAllowed = (req) => isLocal(req) || (cfg.ADMIN_TOKEN && tokenMatches(req.get('X-Admin-Token'), cfg.ADMIN_TOKEN));
+
+  app.get('/api/sumo/gui', (req, res) => {
+    res.json({ available: !cfg.USE_MOCK && guiAllowed(req), enabled: live.gui, mock: cfg.USE_MOCK,
+      running: Boolean(live.proc) });
+  });
+
+  app.post('/api/sumo/gui', async (req, res) => {
+    if (!guiAllowed(req)) {
+      return res.status(403).json({ error: 'SUMO-GUI can only be opened from the computer running the gateway (or with the admin token)' });
+    }
+    if (cfg.USE_MOCK) return res.status(409).json({ error: 'SUMO-GUI is not available with the mock simulation (USE_MOCK=true)' });
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Body must be {"enabled": true|false}' });
+    return res.json(await live.setGui(req.body.enabled));
+  });
+
   // ---- admin --------------------------------------------------------------
   app.post('/api/live/start', requireAdmin, async (req, res) => {
     const parsed = RunEntrySchema.safeParse(req.body ?? {});

@@ -123,6 +123,36 @@ def _reroute_evs_around(
             logger.debug("EV incident reroute failed for %s: %s", vid, e)
 
 
+# SUMO-GUI colours matching the dashboard legend (RGBA)
+GUI_COLORS = {
+    "plain": (128, 128, 128, 255),     # car without radio
+    "equipped": (42, 120, 214, 255),   # connected car (OBU)
+    "eco": (27, 175, 122, 255),        # eco car following GLOSA advice
+    "blocker": (40, 40, 40, 255),      # incident blocker
+}
+
+
+def _color_vehicle_for_gui(sumo_api: Any, vid: str, vtype: str, penetration: float, seed: int,
+                           eco_fraction: float) -> None:
+    """Colour a new vehicle in SUMO-GUI like the dashboard map (ambulances keep their red vType colour)."""
+    if vtype == "emergency":
+        return
+    from sim.vanet.glosa import is_eco_vehicle
+
+    if vid.startswith("incblk_"):
+        kind = "blocker"
+    elif is_eco_vehicle(vid, vtype, eco_fraction, penetration, seed):
+        kind = "eco"
+    elif is_vehicle_equipped(vid, vtype=vtype, penetration=penetration, seed=seed):
+        kind = "equipped"
+    else:
+        kind = "plain"
+    try:
+        sumo_api.vehicle.setColor(vid, GUI_COLORS[kind])
+    except Exception:
+        pass
+
+
 def _resolve_path(project_root: Path, path: Any) -> Path:
     p = Path(str(path))
     return p if p.is_absolute() else project_root / p
@@ -179,6 +209,7 @@ def run_simulation(
     aco_params: Optional[str] = None,
     output_dir: Optional[Path] = None,
     step_delay: float = 0.0,
+    eco_fraction: float = 0.0,
 ) -> Dict[str, Any]:
     """Run a single simulation run and return performance metrics.
 
@@ -257,14 +288,17 @@ def run_simulation(
     if params and isinstance(params.get("incident"), dict):
         incident_cfg.update(params["incident"])
     incident_enabled = bool(incident_cfg.get("enabled", False))
-    routes_path = project_root / "sim" / "sumo" / f"routes_{run_id}.rou.xml"
+    # The process id keeps parallel runs that share a run_id (for example the default "r1") from
+    # overwriting each other's route and tripinfo files.
+    file_tag = f"{run_id}_{os.getpid()}"
+    routes_path = project_root / "sim" / "sumo" / f"routes_{file_tag}.rou.xml"
     generate_routes(scenario_cfg, routes_path, override_seed=seed, network_override=network)
 
     # 3. Setup outputs
     results_dir = Path(output_dir) if output_dir is not None else project_root / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    tripinfo_path = results_dir / f"tripinfo_{run_id}.xml"
+    tripinfo_path = results_dir / f"tripinfo_{file_tag}.xml"
     if metrics_csv_path is None:
         metrics_csv_path = results_dir / f"metrics_{scenario_name}_{controller}_s{seed}.csv"
 
@@ -296,15 +330,22 @@ def run_simulation(
         "true",
         "--time-to-teleport",
         "-1",
+        # Fuel and CO2 per trip in tripinfo (HBEFA4 model); does not change vehicle behaviour
+        "--device.emissions.probability",
+        "1",
     ]
 
     decorations_file = project_root / "sim" / "sumo" / "decorations.add.xml"
     if network == "single" and decorations_file.exists():
         sumo_cmd.extend(["-a", str(decorations_file)])
 
-    gui_settings_file = project_root / "sim" / "sumo" / "gui-settings.cfg.xml"
-    if gui and gui_settings_file.exists():
-        sumo_cmd.extend(["--gui-settings-file", str(gui_settings_file)])
+    settings_name = "gui-settings-grid.cfg.xml" if network == "grid2x2" else "gui-settings.cfg.xml"
+    gui_settings_file = project_root / "sim" / "sumo" / settings_name
+    if gui:
+        if gui_settings_file.exists():
+            sumo_cmd.extend(["--gui-settings-file", str(gui_settings_file)])
+        # Start without pressing Play and close the window when the run ends (so live playlists continue)
+        sumo_cmd.extend(["--start", "--quit-on-end"])
 
     controllers_map: Dict[str, Any] = {}
     t = 0.0
@@ -314,6 +355,7 @@ def run_simulation(
     vanet_net: Optional[Any] = None
     vtype_cache: Dict[str, str] = {}
     ev_crossings: set = set()  # (ev id, signalised junction) pairs the EV drove through
+    eco_mgr: Optional[Any] = None
     queue_errors: List[float] = []
 
     if live:
@@ -336,7 +378,8 @@ def run_simulation(
         det_mode = str(vanet_cfg.get("incident_detection", "auto")).lower()
         incident_detection_on = det_mode == "on" or (det_mode == "auto" and incident_enabled)
 
-        if is_vanet_controller or incident_detection_on:
+        eco_on = float(eco_fraction or 0.0) > 0.0
+        if is_vanet_controller or incident_detection_on or eco_on:
             from sim.vanet.network import VanetNetwork
             from sim.vanet.sensing_vanet import VanetStateProvider
 
@@ -388,6 +431,7 @@ def run_simulation(
         nav_cfg = base_config.get("navigation", {}).copy()
         if params and "navigation" in params:
             nav_cfg.update(params["navigation"])
+        edge_graph.junction_delay_s = float(nav_cfg.get("junction_delay_s", 0.0))
         aco_cfg = base_config.get("aco", {}).copy()
         if aco_params:
             # Missing file = clear error; the "meta" block written by the GA is not an ACO parameter
@@ -407,7 +451,36 @@ def run_simulation(
             aco_config=aco_cfg,
             heuristic=str(nav_cfg.get("heuristic", "euclid")),
             seed=seed,
+            speed_smoothing_s=float(nav_cfg.get("speed_smoothing_s", 0.0)),
         )
+
+        # Eco-driving (GLOSA): RSUs broadcast SPaT, eco cars follow speed advice
+        if eco_on and vanet_net is not None:
+            from sim.vanet.glosa import EcoDrivingManager
+
+            eco_cfg = dict(base_config.get("eco", {}) or {})
+            if params and isinstance(params.get("eco"), dict):
+                eco_cfg.update(params["eco"])
+            eco_mgr = EcoDrivingManager(
+                sumo_api=sumo_api,
+                vanet_net=vanet_net,
+                tls_ids=tls_ids,
+                spat_source=lambda tid: controllers_map[tid].get_spat(),
+                config=eco_cfg,
+                eco_fraction=float(eco_fraction),
+                penetration=penetration,
+                seed=seed,
+                track_live_emissions=live,
+            )
+
+        # Live map data: road geometry once, then per-vehicle rows every emitted second
+        vehicle_tracker: Optional[Any] = None
+        if live:
+            from sim.live_vehicles import LiveVehicleTracker, build_network_message
+
+            emit_json_line(build_network_message(net_path, tls_ids, run_id))
+            vehicle_tracker = LiveVehicleTracker(sumo_api, tls_ids, penetration=penetration, seed=seed,
+                                                 eco_mgr=eco_mgr, navigator=navigator)
 
         while t < sim_duration:
             if _STOP_REQUESTED:
@@ -421,7 +494,7 @@ def run_simulation(
             if is_vanet_controller:
                 oracle_provider.update(t)
             elif vanet_net is not None:
-                # VANET used only for incident detection (oracle-sensed controller);
+                # VANET used only for incident detection / eco-driving (oracle-sensed controller);
                 # its EV-alert events are not used by this controller, so drop them.
                 vanet_net.step(t)
                 vanet_net.pop_events()
@@ -467,6 +540,9 @@ def run_simulation(
                         vtype_cache[vid] = sumo_api.vehicle.getTypeID(vid)
                     except Exception:
                         vtype_cache[vid] = "car"
+                    if gui:
+                        _color_vehicle_for_gui(sumo_api, vid, vtype_cache[vid], penetration, seed,
+                                               float(eco_fraction or 0.0))
             active_evs = [v for v in active_vehs if vtype_cache.get(v) == "emergency"]
             for vid in active_evs:
                 try:
@@ -530,6 +606,9 @@ def run_simulation(
                     "queues_est": est_q,
                     "signal": approach_signals,
                 }
+                if live and hasattr(ctrl, "get_spat"):
+                    # Signal Phase and Timing as broadcast by the RSU (countdowns in the dashboard)
+                    tls_state_dict[tid]["spat"] = ctrl.get_spat()
 
             # Step Navigation (Module 9)
             speed_map = provider.get_edge_speeds()
@@ -554,6 +633,10 @@ def run_simulation(
             if live:
                 for n_ev in navigator.pop_events():
                     emit_json_line(protocol_event(n_ev, run_id, t))
+
+            # Eco-driving step: after the controllers decided, so SPaT reflects this second
+            if eco_mgr is not None:
+                eco_mgr.step(t)
 
             # Emit live state if requested (protocol v2 schema)
             if live and (int(t) % emit_interval == 0):
@@ -592,7 +675,18 @@ def run_simulation(
                     },
                     "comm": comm_dict,
                     "nav": navigator.get_live_nav_state(),
+                    "eco": eco_mgr.get_live_block() if eco_mgr is not None else {
+                        "eco_fraction": 0.0, "eco_active": 0, "advised_now": 0,
+                        "co2_g_per_km_eco": None, "co2_g_per_km_non": None,
+                        "fuel_l_100km_eco": None, "fuel_l_100km_non": None,
+                        "stops_eco": None, "stops_non": None, "spat_pdr": None,
+                    },
                 })
+                if vehicle_tracker is not None:
+                    emit_json_line(vehicle_tracker.build(active_vehs, run_id, t))
+
+            if vehicle_tracker is not None:
+                vehicle_tracker.step(active_vehs)
 
             sumo_api.simulationStep()
             if step_delay > 0.0:
@@ -606,7 +700,11 @@ def run_simulation(
 
     except Exception as e:
         err_msg = str(e).lower()
-        if "connection closed" in err_msg or "closed by sumo" in err_msg or "fataltracierror" in type(e).__name__.lower():
+        closed = ("connection closed" in err_msg or "closed by sumo" in err_msg
+                  or "fataltracierror" in type(e).__name__.lower())
+        # Only a GUI window can be closed by the user. Headless, a closed connection means SUMO
+        # quit on an error (for example a bad route file), so the error is raised.
+        if gui and closed:
             logger.info("SUMO GUI window closed by user or connection closed.")
             was_interrupted = True
         else:
@@ -628,6 +726,19 @@ def run_simulation(
         xml_path=tripinfo_path,
         sim_duration=t,
         max_queue=logger_step.max_queue,
+    )
+
+    # Fuel and CO2 (all runs), split eco / non-eco cars when eco-driving is on
+    from sim.analytics.metrics import parse_tripinfo_emissions
+    from sim.vanet.glosa import is_eco_vehicle
+
+    def _eco_group(vid: str, vtype: str) -> Optional[str]:
+        if vtype == "emergency":
+            return None
+        return "eco" if is_eco_vehicle(vid, vtype, float(eco_fraction or 0.0), penetration, seed) else "non"
+
+    emission_metrics = parse_tripinfo_emissions(
+        tripinfo_path, group_fn=_eco_group if float(eco_fraction or 0.0) > 0.0 else None
     )
 
     if tripinfo_path.exists():
@@ -667,6 +778,16 @@ def run_simulation(
 
     nav_metrics = navigator.get_nav_metrics()
     result_payload.update(nav_metrics)
+
+    # Eco-driving and emission fields (eco-specific ones stay null when eco-driving is off)
+    result_payload["eco_fraction"] = float(eco_fraction or 0.0)
+    for key in ("co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
+                "stops_per_vehicle_eco", "stops_per_vehicle_non", "travel_time_eco", "travel_time_non",
+                "eco_advised_vehicles", "eco_advice_share_slow", "eco_advice_share_stop", "spat_pdr"):
+        result_payload[key] = None
+    result_payload.update({k: v for k, v in emission_metrics.items() if not k.startswith("n_trips_")})
+    if eco_mgr is not None:
+        result_payload.update(eco_mgr.get_metrics())
 
     # Incident fields (Module 10). incident_added_delay needs a paired no-incident run and is
     # filled by sim/analytics/vanet_experiments.py --incident.

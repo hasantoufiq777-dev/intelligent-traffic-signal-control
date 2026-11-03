@@ -1,0 +1,249 @@
+{
+  "target": "aco",
+  "generated_at": "2026-11-03T18:40:32+00:00",
+  "settings": {
+    "target": "aco",
+    "seeds": [
+      101,
+      102,
+      103
+    ],
+    "max_steps": 600,
+    "scenarios": [
+      "navigation"
+    ],
+    "controller": "adaptive_vanet",
+    "network": "grid2x2",
+    "condition": {
+      "penetration": 0.5,
+      "loss": 0.1,
+      "range": 300.0
+    },
+    "weights": {
+      "controller": "adaptive_vanet",
+      "scenario": "navigation",
+      "nav_fraction": 0.3,
+      "w_edge_load_cv": 20.0,
+      "max_search_ms": 2000.0,
+      "w_search_time": 0.01
+    },
+    "penalty": 1000.0,
+    "population": 12,
+    "generations": 12
+  },
+  "default_chromosome": {
+    "alpha": 1.0,
+    "beta": 2.0,
+    "rho": 0.1,
+    "n_ants": 10.0,
+    "n_iterations": 10.0,
+    "Q": 100.0,
+    "elite_k": 3.0
+  },
+  "default_fitness": 155.115,
+  "best_chromosome": {
+    "alpha": 0.6067,
+    "beta": 3.2026,
+    "rho": 0.1038,
+    "n_ants": 3.0,
+    "n_iterations": 3.0,
+    "Q": 132.8515,
+    "elite_k": 3.0
+  },
+  "best_fitness": 114.5067,
+  "n_simulations": 330,
+  "generations": [
+    {
+      "generation": 0,
+      "best_fitness": 120.258,
+      "generation_best_fitness": 120.258,
+      "mean_fitness": 257.5885,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 2.1169,
+        "beta": 4.2928,
+        "rho": 0.4701,
+        "n_ants": 9.0,
+        "n_iterations": 4.0,
+        "Q": 164.572,
+        "elite_k": 2.0
+      }
+    },
+    {
+      "generation": 1,
+      "best_fitness": 119.42,
+      "generation_best_fitness": 119.42,
+      "mean_fitness": 157.7681,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.5843,
+        "beta": 1.9358,
+        "rho": 0.0308,
+        "n_ants": 5.0,
+        "n_iterations": 3.0,
+        "Q": 129.077,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 2,
+      "best_fitness": 116.37,
+      "generation_best_fitness": 116.37,
+      "mean_fitness": 130.2819,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.524,
+        "beta": 4.7153,
+        "rho": 0.5411,
+        "n_ants": 3.0,
+        "n_iterations": 3.0,
+        "Q": 186.9098,
+        "elite_k": 2.0
+      }
+    },
+    {
+      "generation": 3,
+      "best_fitness": 114.74,
+      "generation_best_fitness": 114.74,
+      "mean_fitness": 119.2629,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.5076,
+        "beta": 3.1312,
+        "rho": 0.1521,
+        "n_ants": 6.0,
+        "n_iterations": 3.0,
+        "Q": 136.1371,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 4,
+      "best_fitness": 114.74,
+      "generation_best_fitness": 114.74,
+      "mean_fitness": 118.686,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.5076,
+        "beta": 3.1312,
+        "rho": 0.1521,
+        "n_ants": 6.0,
+        "n_iterations": 3.0,
+        "Q": 136.1371,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 5,
+      "best_fitness": 114.74,
+      "generation_best_fitness": 114.74,
+      "mean_fitness": 116.4073,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.5076,
+        "beta": 3.1312,
+        "rho": 0.1521,
+        "n_ants": 6.0,
+        "n_iterations": 3.0,
+        "Q": 136.1371,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 6,
+      "best_fitness": 114.74,
+      "generation_best_fitness": 114.74,
+      "mean_fitness": 116.1817,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.5076,
+        "beta": 3.1312,
+        "rho": 0.1521,
+        "n_ants": 6.0,
+        "n_iterations": 3.0,
+        "Q": 136.1371,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 7,
+      "best_fitness": 114.5067,
+      "generation_best_fitness": 114.5067,
+      "mean_fitness": 117.0461,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.6067,
+        "beta": 3.2026,
+        "rho": 0.1038,
+        "n_ants": 3.0,
+        "n_iterations": 3.0,
+        "Q": 132.8515,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 8,
+      "best_fitness": 114.5067,
+      "generation_best_fitness": 114.5067,
+      "mean_fitness": 118.4033,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.6067,
+        "beta": 3.2026,
+        "rho": 0.1038,
+        "n_ants": 3.0,
+        "n_iterations": 3.0,
+        "Q": 132.8515,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 9,
+      "best_fitness": 114.5067,
+      "generation_best_fitness": 114.5067,
+      "mean_fitness": 117.6038,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.6067,
+        "beta": 3.2026,
+        "rho": 0.1038,
+        "n_ants": 3.0,
+        "n_iterations": 3.0,
+        "Q": 132.8515,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 10,
+      "best_fitness": 114.5067,
+      "generation_best_fitness": 114.5067,
+      "mean_fitness": 122.1271,
+      "n_feasible": 11,
+      "best_chromosome": {
+        "alpha": 0.6067,
+        "beta": 3.2026,
+        "rho": 0.1038,
+        "n_ants": 3.0,
+        "n_iterations": 3.0,
+        "Q": 132.8515,
+        "elite_k": 3.0
+      }
+    },
+    {
+      "generation": 11,
+      "best_fitness": 114.5067,
+      "generation_best_fitness": 114.5067,
+      "mean_fitness": 117.2739,
+      "n_feasible": 12,
+      "best_chromosome": {
+        "alpha": 0.6067,
+        "beta": 3.2026,
+        "rho": 0.1038,
+        "n_ants": 3.0,
+        "n_iterations": 3.0,
+        "Q": 132.8515,
+        "elite_k": 3.0
+      }
+    }
+  ]
+}

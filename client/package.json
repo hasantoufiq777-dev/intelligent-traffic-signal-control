@@ -1,0 +1,25 @@
+{
+  "name": "itsc-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React dashboard for the VANET traffic signal simulation: user panel, live overview, results, admin",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.13.3",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

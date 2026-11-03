@@ -44,6 +44,7 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | `CORS_ORIGIN` | `*` | Comma-separated origins for REST and Socket.io |
 | `SIM_STEP_DELAY` | `0.25` | Wall-clock seconds per simulated second for the live run (0 = full speed) |
 | `SIM_MAX_STEPS` | scenario duration | Shorter live runs |
+| `SIM_GUI` | `false` | Also open each live run in the SUMO-GUI window (desktop only). It starts by itself and closes at the end of the run. |
 | `MOCK_STEP_DELAY`, `MOCK_MAX_STEPS` | `0.5`, `300` | Mock pacing and length |
 | `STATE_INTERVAL_MS` | `1000` | Minimum gap between broadcast states |
 | `HISTORY_SECONDS`, `EVENT_HISTORY` | `120`, `200` | History sent in `init` |
@@ -64,21 +65,30 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | GET | `/api/experiments/summary` | `results/summary.json`, or 404 with how to create it |
 | GET | `/api/runs?limit=&offset=` | Stored runs, newest first |
 | GET | `/api/runs/:id?samples=N` | Run, result, events (up to 500), state-sample count, optional samples |
+| GET | `/api/sumo/gui` | `{available, enabled, mock, running}`. `available` is true only for a browser on the gateway's computer (or with the admin token), with the real simulation |
+| POST | `/api/sumo/gui` | `{enabled: true\|false}`: show the live run in the SUMO-GUI window on the gateway's computer. The current run restarts with or without the window. Local requests or admin token only; 409 with the mock |
 | GET | `/api/metrics` | Process CPU/memory and broadcast counters (used by the load test) |
-| POST | `/api/live/start` | Admin. Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?}`; unknown keys are rejected. 202 `{run_id}` |
+| POST | `/api/live/start` | Admin. Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?}`; unknown keys are rejected. 202 `{run_id}` |
 | POST | `/api/live/stop` | Admin. Stops the run and pauses the playlist until the next start |
 
 ## Socket.io (viewers are read-only; everyone joins room `live`)
 
 | Event | Payload |
 |---|---|
-| `init` | `{now_playing, status, latest, states[], events[], result, history_seconds}` on connect |
+| `init` | `{network, vehicles, now_playing, status, latest, states[], events[], result, history_seconds}` on connect |
 | `state` | Protocol state message + `sent_at` (server ms timestamp), at most 1/s, volatile |
 | `event` | `{type, run_id, t, kind, tls, detail}` |
 | `status` | `{type, run_id, status: started/finished/stopped/error, message}` |
 | `result` | Final result message |
 | `now_playing` | `{running, current: {run_id, entry, source, started_at, status}, next, loop, viewers, mock}` |
 | `viewers` | `{count}`, at most every 5 s when it changes |
+| `network` | Road geometry of the current run (junctions, edge shapes, bounds) |
+| `vehicles` | Map frame `{run_id, t, rows: [[id, x, y, angle, flags]], sent_at}`, at most 1/s, volatile, sent 150 ms after the state |
+| `vehicle` | Full row of the followed car (next light, distance, fuel, CO2, advice), every map frame, only to its followers |
+
+Viewers can send `follow` (a vehicle id) and `unfollow`. This is a subscription to one car's details, not control of it.
+Volatile messages are dropped while a socket is still writing the previous one, so the map frame is kept out of the
+state broadcast's tick, and follower details are sent reliably.
 
 ## Production notes (1000+ viewers)
 

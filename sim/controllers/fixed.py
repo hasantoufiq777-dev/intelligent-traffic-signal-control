@@ -6,7 +6,7 @@ Transitions through yellow and all-red via BaseController.set_phase_safe().
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from sim.controllers.base import BaseController
 from sim.sensing import StateProvider
 
@@ -37,6 +37,16 @@ class FixedTimeController(BaseController):
                 self._apply_phase(self.PHASE_NS_GREEN)  # also holds the phase (no SUMO auto-advance)
             except Exception:
                 pass
+
+    def _green_remaining_bounds(self) -> Tuple[Optional[float], Optional[float]]:
+        """Fixed timing: the current green ends exactly when its fixed length is used up."""
+        g = self.green_ns if self.current_phase == self.PHASE_NS_GREEN else self.green_ew
+        r = max(0.0, g - self.time_in_current_green)
+        return r, r
+
+    def _green_length_bounds(self, group: str) -> Tuple[Optional[float], Optional[float]]:
+        g = self.green_ns if group == "NS" else self.green_ew
+        return g, g
 
     def step(self, sim_time: float) -> None:
         """Advance controller by one simulation step (1s)."""

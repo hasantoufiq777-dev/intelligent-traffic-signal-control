@@ -23,7 +23,18 @@ def validate_schema_v2(line_data: Dict[str, Any], expected_run_id: str) -> None:
     assert line_data["run_id"] == expected_run_id
 
     msg_type = line_data["type"]
-    assert msg_type in ("status", "state", "event", "result")
+    assert msg_type in ("status", "state", "event", "result", "network", "vehicles")
+
+    if msg_type == "network":
+        assert line_data["junctions"] and line_data["edges"] and len(line_data["bounds"]) == 4
+        for e in line_data["edges"]:
+            assert {"id", "from", "to", "lanes", "shape"} <= set(e)
+
+    elif msg_type == "vehicles":
+        fields = line_data["fields"]
+        assert fields[:6] == ["id", "x", "y", "angle", "speed", "flags"]
+        assert {"tls", "approach", "dist", "co2_g", "fuel_ml", "advice"} <= set(fields)
+        assert all(len(r) == len(fields) for r in line_data["rows"])
 
     if msg_type == "status":
         assert line_data["status"] in ("started", "finished", "stopped", "error")
@@ -36,6 +47,7 @@ def validate_schema_v2(line_data: Dict[str, Any], expected_run_id: str) -> None:
         assert "metrics" in line_data
         assert "comm" in line_data
         assert "nav" in line_data
+        assert "eco" in line_data
 
         # TLS validation
         for tls_id, tls_info in line_data["tls"].items():
@@ -61,6 +73,11 @@ def validate_schema_v2(line_data: Dict[str, Any], expected_run_id: str) -> None:
         comm = line_data["comm"]
         for key in ("pdr", "latency_ms", "penetration", "sent", "lost"):
             assert key in comm
+
+        # Eco-driving validation
+        eco = line_data["eco"]
+        for key in ("eco_fraction", "eco_active", "advised_now", "co2_g_per_km_eco", "co2_g_per_km_non", "spat_pdr"):
+            assert key in eco
 
         # Nav validation
         nav = line_data["nav"]

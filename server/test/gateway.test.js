@@ -6,7 +6,7 @@ import request from 'supertest';
 import { io as ioc } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createGateway } from '../src/app.js';
-import { parseLine } from '../src/protocol.js';
+import { buildSimArgs, parseLine } from '../src/protocol.js';
 
 const TOKEN = 'test-token';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-test-'));
@@ -136,6 +136,46 @@ describe('gateway with mock simulation', () => {
     await request(gw.app).get('/api/runs/does-not-exist').expect(404);
   });
 
+  it('streams the road map and car positions to everyone, and car details only to followers', async () => {
+    const a = viewer(url);
+    const b = viewer(url);
+    sockets.push(a.socket, b.socket);
+    const vehiclesA = [];
+    const detailA = [];
+    const detailB = [];
+    a.socket.on('vehicles', (m) => vehiclesA.push(m));
+    a.socket.on('vehicle', (m) => detailA.push(m));
+    b.socket.on('vehicle', (m) => detailB.push(m));
+    let network = null;
+    a.socket.on('network', (m) => (network = m));
+    await waitFor(() => a.got.init && b.got.init);
+
+    await request(gw.app).post('/api/live/start').set('X-Admin-Token', TOKEN)
+      .send({ scenario: 'normal', controller: 'fixed', eco_fraction: 0.6 }).expect(202);
+    await waitFor(() => network !== null && vehiclesA.some((m) => m.rows.length > 2));
+    expect(network.edges.length).toBeGreaterThan(0);
+    const row = vehiclesA.at(-1).rows[0];
+    expect(row).toHaveLength(5); // [id, x, y, angle, flags] only
+    expect(typeof row[1]).toBe('number');
+
+    const id = row[0];
+    a.socket.emit('follow', id);
+    await waitFor(() => detailA.some((d) => d.id === id && 'co2_g' in d && 'tls' in d));
+    // The detail keeps streaming (one per map frame), not just once on follow
+    const n0 = detailA.length;
+    await waitFor(() => detailA.length >= n0 + 3);
+    expect(new Set(detailA.map((d) => d.t)).size).toBeGreaterThan(2);
+    expect(detailB).toHaveLength(0); // B follows nobody
+    a.socket.emit('follow', '../etc/passwd'); // invalid ids are ignored
+    a.socket.emit('unfollow');
+    const late = viewer(url);
+    sockets.push(late.socket);
+    await waitFor(() => late.got.init !== null);
+    expect(late.got.init.network.edges.length).toBe(network.edges.length);
+    expect(late.got.init.vehicles.rows.length).toBeGreaterThan(0);
+    await request(gw.app).post('/api/live/stop').set('X-Admin-Token', TOKEN).expect(200);
+  }, 30_000);
+
   it('stops a running simulation on admin request', async () => {
     const v = viewer(url);
     sockets.push(v.socket);
@@ -148,6 +188,24 @@ describe('gateway with mock simulation', () => {
     const run = (await request(gw.app).get(`/api/runs/${res.body.run_id}`)).body.run;
     expect(run.status).toBe('stopped');
     expect((await request(gw.app).get('/api/live/status')).body.running).toBe(false);
+  });
+
+  it('guards the SUMO-GUI toggle and refuses it with the mock', async () => {
+    const info = (await request(gw.app).get('/api/sumo/gui').expect(200)).body;
+    expect(info).toMatchObject({ available: false, enabled: false, mock: true });
+    // A request that came through a proxy is not "local": without the admin token it is refused
+    await request(gw.app).post('/api/sumo/gui').set('X-Forwarded-For', '203.0.113.9').send({ enabled: true }).expect(403);
+    // Local, but the mock simulation has no SUMO window
+    const mock = await request(gw.app).post('/api/sumo/gui').send({ enabled: true }).expect(409);
+    expect(mock.body.error).toMatch(/mock/);
+  });
+
+  it('adds --gui to the simulation arguments only when the window is on', () => {
+    const entry = { scenario: 'normal', controller: 'fixed', nav: 'none', seed: 1, penetration: 1, loss: 0, relay: 'off', eco_fraction: 0 };
+    const real = { ...gw.cfg, USE_MOCK: false, SIM_GUI: false };
+    expect(buildSimArgs(entry, 'r1', real)).not.toContain('--gui');
+    expect(buildSimArgs(entry, 'r1', real, { gui: true })).toContain('--gui');
+    expect(buildSimArgs(entry, 'r1', { ...gw.cfg, USE_MOCK: true }, { gui: true })).not.toContain('--gui');
   });
 
   it('returns 404 until the experiment summary exists', async () => {
