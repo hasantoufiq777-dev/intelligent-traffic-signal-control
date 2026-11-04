@@ -26,6 +26,7 @@
   --junction: #7b7973;
   --map-bg: #e9e8e2;
   --car: #57554f;
+  --car-outline: rgba(0, 0, 0, 0.5);
   --driver: #8a44d6; /* the car a viewer drives (SUMO-GUI: purple too) */
   --accent: var(--series-1);
   --radius: 10px;
@@ -57,6 +58,7 @@
     --junction: #5a5955;
     --map-bg: #141413;
     --car: #b9b7af;
+    --car-outline: rgba(255, 255, 255, 0.55);
     --driver: #a66ef0;
   }
 }
@@ -84,6 +86,7 @@
   --junction: #5a5955;
   --map-bg: #141413;
   --car: #b9b7af;
+  --car-outline: rgba(255, 255, 255, 0.55);
   --driver: #a66ef0;
 }
 
@@ -270,3 +273,5 @@ label.field input, label.field select {
   padding: 10px 12px; border-radius: var(--radius); font-weight: 600;
   background: var(--surface-2); border-left: 4px solid var(--sig-red);
 }
+.map-legend .legend-cars svg { margin-right: 2px; }
+.map-legend .legend-cars svg:last-of-type { margin-right: 4px; }

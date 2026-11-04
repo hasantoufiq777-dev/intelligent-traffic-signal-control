@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef } from 'react';
 import { continuousAngle, FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
+import { CarBody, CarIcon } from './CarShape.jsx';
 
 const PAD = 8;
 // The map exaggerates road width so roads are easy to see. Each axis is mapped on its own: within a
@@ -18,14 +19,6 @@ const EXTRA_L = 1.5;
 const REAL_L = { emergency: 6.5 }; // m, as in the route file vTypes; everything else 5 m
 const carLength = (kind) => (REAL_L[kind] ?? 5.0) + EXTRA_L;
 
-const KIND_STYLE = {
-  plain: { fill: 'var(--car)' },
-  equipped: { fill: 'var(--series-1)' },
-  nav: { fill: 'var(--series-1)' },
-  eco: { fill: 'var(--series-3)', stroke: 'var(--surface-1)' },
-  emergency: { fill: 'var(--sig-red)', stroke: '#ffffff' },
-  driven: { fill: 'var(--driver)', stroke: 'var(--surface-1)' },
-};
 const SIG_FILL = { G: 'var(--sig-green)', y: 'var(--sig-yellow)', r: 'var(--sig-red)' };
 
 /** Direction an edge arrives from at its end junction (SUMO coordinates: y grows north). */
@@ -191,7 +184,6 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
         <g>
           {rows.map(([id, x, y, , flags]) => {
             const kind = vehicleKind(flags);
-            const st = KIND_STYLE[kind];
             const len = carLength(kind);
             const [wx, wy] = geo.widen(x, y);
             return (
@@ -204,19 +196,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
                 <title>{`${id} – ${KIND_LABEL[kind]}${has(flags, FLAG.ADVISED) ? ' (slowing for green)' : ''}`}</title>
                 {/* invisible larger hit area */}
                 <circle cy={len / 2} r={8} fill="transparent" />
-                <rect
-                  x={-CAR_W / 2}
-                  y={0}
-                  width={CAR_W}
-                  height={len}
-                  rx={1.2}
-                  fill={st.fill}
-                  stroke={st.stroke || 'none'}
-                  strokeWidth={st.stroke ? 0.9 : 0}
-                />
-                {kind === 'emergency' && (
-                  <path d={`M0 ${len / 2 - 2} V${len / 2 + 2} M-2 ${len / 2} H2`} stroke="#ffffff" strokeWidth={1.1} />
-                )}
+                <CarBody id={id} kind={kind} len={len} w={CAR_W} />
                 {has(flags, FLAG.ADVISED) && <circle cx={0} cy={-2} r={1.3} fill="var(--sig-yellow)" />}
               </g>
             );
@@ -231,11 +211,16 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
         )}
       </svg>
       <div className="map-legend" aria-label="Map legend">
-        <span><svg width="10" height="16"><rect x="2" y="1" width="6" height="14" rx="1.5" fill="var(--car)" /></svg>Car without radio</span>
-        <span><svg width="10" height="16"><rect x="2" y="1" width="6" height="14" rx="1.5" fill="var(--series-1)" /></svg>Connected car</span>
-        <span><svg width="10" height="16"><rect x="2" y="1" width="6" height="14" rx="1.5" fill="var(--series-3)" stroke="var(--surface-1)" /></svg>Eco car</span>
-        <span><svg width="12" height="18"><rect x="1" y="1" width="10" height="16" rx="2" fill="var(--sig-red)" /><path d="M6 6 V12 M3 9 H9" stroke="#fff" strokeWidth="1.5" /></svg>Ambulance</span>
-        <span><svg width="12" height="18"><rect x="1" y="1" width="10" height="16" rx="2" fill="var(--driver)" stroke="var(--surface-1)" /></svg>Driven by a viewer</span>
+        <span className="legend-cars">
+          <CarIcon style="sedan" paint="#c8302c" /><CarIcon style="suv" paint="#c4c7cb" />
+          <CarIcon style="pickup" paint="#2f6fd0" /><CarIcon style="hatchback" paint="#f0c419" />
+          <CarIcon style="sports" paint="#2a2c30" />
+          Cars (colour and body style only tell them apart)
+        </span>
+        <span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" fill="var(--series-1)" stroke="#fff" strokeWidth="1" /></svg>Roof dot: connected car (radio)</span>
+        <span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" fill="var(--series-3)" stroke="#fff" strokeWidth="1" /></svg>Roof dot: eco car</span>
+        <span><CarIcon kind="emergency" len={8} />Ambulance</span>
+        <span><CarIcon kind="driven" />Driven by a viewer</span>
         <span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="var(--sig-yellow)" /></svg>Slowing for green</span>
         <span><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--text-primary)" strokeWidth="1.5" /></svg>Your car</span>
       </div>
