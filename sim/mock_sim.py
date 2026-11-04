@@ -365,6 +365,7 @@ def main() -> None:
         "route_search_expansions": 14 if args.nav != "none" else None,
         "route_search_ms": 2.1 if args.nav != "none" else None,
         "reroute_count": 8 if args.nav != "none" else None,
+        "collisions": 0,
     }
 
     # Eco-driving / emission fields

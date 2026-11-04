@@ -57,6 +57,7 @@ def test_drive_stop_go_and_arrive_with_a_trip_report() -> None:
         165: [{"cmd": "drive", "mode": "go"}],
     }
     result, msgs = _live_run(plan)
+    assert result["collisions"] == 0  # stopping and easing off never make anyone crash
     drv = _driver_msgs(msgs)
     by_t = {m["t"]: m for m in drv if m["status"] == "driving"}
 

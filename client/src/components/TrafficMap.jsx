@@ -9,8 +9,14 @@ const PAD = 8;
 const ROAD_SCALE = 3;
 const LANE_W = 3.2;
 const ARM_M = 120; // how much of the entry roads beyond the outer junctions is shown (m)
-const CAR_W = 4.4; // drawn larger than real (2 m x 5 m) so cars are visible at map scale
-const CAR_L = 9.5;
+// Cars are drawn a little larger than real so they are visible at map scale, but never longer than the
+// space SUMO keeps for them: in a queue a follower's front is minGap (2.5 m) behind the leader's rear,
+// so a drawn length of real length + 1.5 m leaves a 1 m gap. SUMO's position is the FRONT bumper, so the
+// body is drawn from there backwards (drawing it centred made queued cars overlap the car ahead).
+const CAR_W = 4.2;
+const EXTRA_L = 1.5;
+const REAL_L = { emergency: 6.5 }; // m, as in the route file vTypes; everything else 5 m
+const carLength = (kind) => (REAL_L[kind] ?? 5.0) + EXTRA_L;
 
 const KIND_STYLE = {
   plain: { fill: 'var(--car)' },
@@ -179,7 +185,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
           {rows.map(([id, x, y, angle, flags]) => {
             const kind = vehicleKind(flags);
             const st = KIND_STYLE[kind];
-            const big = kind === 'emergency' || kind === 'driven' ? 1.35 : 1;
+            const len = carLength(kind);
             const [wx, wy] = geo.widen(x, y);
             return (
               <g
@@ -190,21 +196,21 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
               >
                 <title>{`${id} – ${KIND_LABEL[kind]}${has(flags, FLAG.ADVISED) ? ' (slowing for green)' : ''}`}</title>
                 {/* invisible larger hit area */}
-                <circle r={8} fill="transparent" />
+                <circle cy={len / 2} r={8} fill="transparent" />
                 <rect
-                  x={(-CAR_W * big) / 2}
-                  y={(-CAR_L * big) / 2}
-                  width={CAR_W * big}
-                  height={CAR_L * big}
+                  x={-CAR_W / 2}
+                  y={0}
+                  width={CAR_W}
+                  height={len}
                   rx={1.2}
                   fill={st.fill}
                   stroke={st.stroke || 'none'}
                   strokeWidth={st.stroke ? 0.9 : 0}
                 />
                 {kind === 'emergency' && (
-                  <path d="M0 -2.2 V2.2 M-2.2 0 H2.2" stroke="#ffffff" strokeWidth={1.1} />
+                  <path d={`M0 ${len / 2 - 2} V${len / 2 + 2} M-2 ${len / 2} H2`} stroke="#ffffff" strokeWidth={1.1} />
                 )}
-                {has(flags, FLAG.ADVISED) && <circle cx={0} cy={-CAR_L / 2 - 2} r={1.3} fill="var(--sig-yellow)" />}
+                {has(flags, FLAG.ADVISED) && <circle cx={0} cy={-2} r={1.3} fill="var(--sig-yellow)" />}
               </g>
             );
           })}

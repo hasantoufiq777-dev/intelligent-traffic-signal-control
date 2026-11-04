@@ -305,6 +305,12 @@ def run_simulation(
         # Fuel and CO2 per trip in tripinfo (HBEFA4 model); does not change vehicle behaviour
         "--device.emissions.probability",
         "1",
+        # Safety check: detect collisions on lanes and inside junctions and only report them
+        # ("warn" changes no vehicle behaviour); the count is the result field "collisions"
+        "--collision.check-junctions",
+        "true",
+        "--collision.action",
+        "warn",
     ]
 
     decorations_file = project_root / "sim" / "sumo" / "decorations.add.xml"
@@ -329,6 +335,7 @@ def run_simulation(
     ev_crossings: set = set()  # (ev id, signalised junction) pairs the EV drove through
     eco_mgr: Optional[Any] = None
     queue_errors: List[float] = []
+    collision_pairs: set = set()  # (collider, victim) pairs SUMO reported
 
     if live:
         emit_json_line({
@@ -714,6 +721,14 @@ def run_simulation(
                 vehicle_tracker.step(active_vehs, t)
 
             sumo_api.simulationStep()
+            try:
+                for col in sumo_api.simulation.getCollisions():
+                    if (col.collider, col.victim) not in collision_pairs:
+                        collision_pairs.add((col.collider, col.victim))
+                        logger.warning("Collision at %.0fs: %s hit %s (%s) on %s", t, col.collider, col.victim,
+                                       col.type, col.lane)
+            except Exception:
+                pass
             delay = step_delay
             if driver_mgr is not None and driver_mgr.active_step_delay() is not None:
                 delay = float(driver_mgr.active_step_delay())  # slower pacing while someone drives
@@ -810,6 +825,8 @@ def run_simulation(
         "route_search_expansions": None,
         "route_search_ms": None,
         "reroute_count": None,
+        # Distinct vehicle pairs that collided (lanes and junctions); 0 expected in every run
+        "collisions": len(collision_pairs),
     }
 
     nav_metrics = navigator.get_nav_metrics()
