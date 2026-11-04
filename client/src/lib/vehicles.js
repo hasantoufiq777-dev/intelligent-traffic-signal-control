@@ -22,3 +22,14 @@ export const KIND_LABEL = {
 };
 
 export const APPROACH_LABEL = { N: 'from the north', S: 'from the south', E: 'from the east', W: 'from the west' };
+
+/**
+ * Heading to draw, as the turn-the-short-way equivalent of the previous one. SUMO headings wrap at
+ * 0/360, and the CSS transition between frames rotates by the plain difference, so 10 -> 280 deg (a
+ * left turn) would spin 270 deg clockwise. Keeping a continuous angle per car makes it turn -90 deg.
+ */
+export function continuousAngle(prev, angle) {
+  if (prev === undefined) return angle;
+  const delta = ((((angle - prev) % 360) + 540) % 360) - 180; // in [-180, 180)
+  return prev + delta;
+}

@@ -1,5 +1,5 @@
-import { memo, useMemo } from 'react';
-import { FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
+import { memo, useMemo, useRef } from 'react';
+import { continuousAngle, FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
 
 const PAD = 8;
 // The map exaggerates road width so roads are easy to see. Each axis is mapped on its own: within a
@@ -129,12 +129,19 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
     };
   }, [network]);
 
+  // Last drawn (continuous) heading per car, so rotations between frames always go the short way
+  const headings = useRef(new Map());
+
   if (!geo) {
     return <div className="notice">Waiting for the road map from the simulation…</div>;
   }
 
   const rows = vehicles?.rows || [];
   const followed = rows.find((r) => r[0] === followId);
+  const prevHeadings = headings.current;
+  const nextHeadings = new Map();
+  for (const [id, , , angle] of rows) nextHeadings.set(id, continuousAngle(prevHeadings.get(id), angle));
+  headings.current = nextHeadings; // cars that left the map are dropped
 
   return (
     <div className="map-wrap">
@@ -182,7 +189,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
           })}
         </g>
         <g>
-          {rows.map(([id, x, y, angle, flags]) => {
+          {rows.map(([id, x, y, , flags]) => {
             const kind = vehicleKind(flags);
             const st = KIND_STYLE[kind];
             const len = carLength(kind);
@@ -191,7 +198,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
               <g
                 key={id}
                 className="car-g"
-                style={{ transform: `translate(${geo.tx(wx)}px, ${geo.ty(wy)}px) rotate(${angle}deg)` }}
+                style={{ transform: `translate(${geo.tx(wx)}px, ${geo.ty(wy)}px) rotate(${nextHeadings.get(id)}deg)` }}
                 onClick={() => onSelect?.(id)}
               >
                 <title>{`${id} – ${KIND_LABEL[kind]}${has(flags, FLAG.ADVISED) ? ' (slowing for green)' : ''}`}</title>
