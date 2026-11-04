@@ -106,8 +106,9 @@ class VehicleNavigator:
         return self._smoother.update(sim_time, speed_map, keep_raw=keep_raw)
 
     def _is_emergency(self, vid: str) -> bool:
+        """Ambulances (own router) and the dashboard driver's car (the viewer drives) are not navigated."""
         try:
-            return str(self.sumo_api.vehicle.getTypeID(vid)) == "emergency"
+            return str(self.sumo_api.vehicle.getTypeID(vid)) in ("emergency", "driven")
         except Exception:
             return False
 

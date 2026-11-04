@@ -57,4 +57,39 @@ describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
       await gw.close();
     }
   }, 200_000);
+
+  it('lets a viewer drive a car through the grid and stores the trip report', async () => {
+    const gw = createGateway({
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ADMIN_TOKEN: 'e2e', LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      SIM_STEP_DELAY: '0.02', DRIVER_STEP_DELAY: '0.02', SIM_MAX_STEPS: '320', STATE_INTERVAL_MS: '200',
+      LOG_LEVEL: 'warn', PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
+    });
+    const addr = await gw.listen(0, '127.0.0.1');
+    const socket = ioc(`http://127.0.0.1:${addr.port}`, { transports: ['websocket'], forceNew: true });
+    const drv = [];
+    const seat = [];
+    socket.on('driver', (m) => drv.push(m));
+    socket.on('driver_seat', (m) => seat.push(m));
+    const ask = (name, body) => new Promise((resolve) => socket.emit(name, body, resolve));
+    try {
+      await new Promise((r) => socket.on('init', r));
+      await request(gw.app).post('/api/live/start').set('X-Admin-Token', 'e2e')
+        .send({ scenario: 'emergency', network: 'grid2x2', controller: 'adaptive_ev_vanet', seed: 1 }).expect(202);
+      await waitFor(() => gw.live.network !== null && gw.live.driver.public().available, 60_000);
+      expect((await ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
+      await waitFor(() => drv.some((m) => m.status === 'driving'), 30_000);
+      expect((await ask('driver:cmd', { action: 'ease', speed_kmh: 25 })).ok).toBe(true);
+      await waitFor(() => drv.some((m) => m.mode === 'ease' && Math.abs(m.speed_kmh - 25) < 0.5), 30_000);
+      await waitFor(() => seat.some((s) => s.reason === 'finished'), 120_000);
+      const final = drv.find((m) => m.status === 'finished');
+      expect(final.report).toMatchObject({ finished: true, from: 'bottom0J0', to: 'J3top1' });
+      expect(final.report.compare).not.toBeNull();
+      const trip = (await request(gw.app).get('/api/driver')).body.trips[0];
+      expect(trip).toMatchObject({ status: 'finished', reason: 'finished', vid: 'drv1' });
+      expect(trip.report.distance_m).toBeGreaterThan(400);
+    } finally {
+      socket.close();
+      await gw.close();
+    }
+  }, 200_000);
 });

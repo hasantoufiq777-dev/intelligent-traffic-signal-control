@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import NowPlaying from '../components/NowPlaying.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
@@ -18,6 +18,63 @@ function saveToken(v) {
   } catch {
     /* storage unavailable: keep in memory only */
   }
+}
+
+const REASON = { finished: 'arrived', released: 'handed back', idle: 'idle', left: 'driver left', admin: 'admin',
+  time_limit: 'time limit', run_ended: 'run ended', error: 'error' };
+
+function DriverAdmin({ token, seat }) {
+  const [info, setInfo] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const load = useCallback(() => api.driver().then(setInfo).catch((e) => setMsg({ error: true, text: e.message })), []);
+  useEffect(() => { load(); }, [load, seat?.busy, seat?.enabled]);
+
+  async function act(fn, ok) {
+    setMsg(null);
+    try {
+      await fn();
+      setMsg({ text: ok });
+      load();
+    } catch (err) {
+      setMsg({ error: true, text: err.message });
+    }
+  }
+  const s = seat ?? info;
+  return (
+    <section className="card stack" aria-labelledby="drv-h">
+      <div className="card-head"><h2 id="drv-h">Driver mode</h2><span className="small muted">one viewer drives a car at a time</span></div>
+      <p style={{ margin: 0 }}>
+        {s ? (s.enabled ? 'On' : 'Off') : '…'}
+        {s?.busy ? ` · ${s.vid ?? 'a car'} is being driven since ${new Date(s.since).toLocaleTimeString()}` : ' · nobody is driving'}
+      </p>
+      <div className="row">
+        <button type="button" className="btn" disabled={!token || !s}
+          onClick={() => act(() => api.setDriver(token, !s.enabled), s.enabled ? 'Driver mode switched off.' : 'Driver mode switched on.')}>
+          {s?.enabled ? 'Switch driver mode off' : 'Switch driver mode on'}
+        </button>
+        <button type="button" className="btn danger" disabled={!token || !s?.busy}
+          onClick={() => act(() => api.releaseDriver(token), 'The drive was ended and the car handed back.')}>End current drive</button>
+      </div>
+      {msg && <div className={`notice${msg.error ? ' error' : ''}`} role="status">{msg.text}</div>}
+      <div className="table-wrap">
+        <table className="data">
+          <thead><tr><th>Started</th><th>Car</th><th>From → to</th><th>Ended</th><th>Time</th><th>CO₂ g/km</th><th>Stops</th></tr></thead>
+          <tbody>
+            {(info?.trips || []).map((t) => (
+              <tr key={t.id}>
+                <td>{new Date(t.started_at).toLocaleTimeString()}</td><td>{t.vid ?? '–'}</td><td>{t.from_edge} → {t.to_edge}</td>
+                <td>{t.status === 'driving' ? 'driving' : REASON[t.reason] ?? t.status}</td>
+                <td className="num">{t.report ? `${Math.round(t.report.travel_s)} s` : '–'}</td>
+                <td className="num">{t.report?.co2_g_per_km ?? '–'}</td>
+                <td className="num">{t.report ? t.report.stops : '–'}</td>
+              </tr>
+            ))}
+            {info && !info.trips.length && <tr><td colSpan={7} className="muted">No drives yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 export default function Admin() {
@@ -120,6 +177,8 @@ export default function Admin() {
         )}
         {msg && <div className={`notice${msg.error ? ' error' : ''}`} role="status">{msg.text}</div>}
       </section>
+
+      <DriverAdmin token={token} seat={live.driverSeat} />
 
       <section className="card" aria-labelledby="pl-h">
         <div className="card-head"><h2 id="pl-h">Playlist</h2><span className="small muted">read-only · edit server/playlist.json</span></div>

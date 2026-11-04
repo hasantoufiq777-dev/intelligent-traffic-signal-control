@@ -39,6 +39,13 @@ const EnvSchema = z.object({
   SAMPLE_EVERY_SIM_S: z.coerce.number().positive().default(2), // persist one state per N simulated seconds
   VIEWER_BROADCAST_MS: z.coerce.number().int().positive().default(5000),
   CRASH_RETRY_MS: z.coerce.number().int().min(0).default(5000),
+  // One-driver mode: one viewer at a time drives a car in the live run (the admin can switch it off)
+  DRIVER_MODE: bool.default(true),
+  DRIVER_IDLE_MS: z.coerce.number().int().positive().default(120_000), // no input this long: car handed back
+  DRIVER_MAX_MS: z.coerce.number().int().positive().default(600_000), // longest drive
+  DRIVER_RESUME_MS: z.coerce.number().int().min(0).default(15_000), // reconnect grace for the driver
+  DRIVER_CMDS_PER_S: z.coerce.number().positive().default(2), // command rate limit (burst: 2 x this)
+  DRIVER_STEP_DELAY: z.coerce.number().min(0).default(0.5), // live pacing while someone drives (real SUMO)
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
 });
 

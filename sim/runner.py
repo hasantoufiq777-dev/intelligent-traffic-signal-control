@@ -96,8 +96,9 @@ GUI_COLORS = {
 
 def _color_vehicle_for_gui(sumo_api: Any, vid: str, vtype: str, penetration: float, seed: int,
                            eco_fraction: float) -> None:
-    """Colour a new vehicle in SUMO-GUI like the dashboard map (ambulances keep their red vType colour)."""
-    if vtype == "emergency":
+    """Colour a new vehicle in SUMO-GUI like the dashboard map (ambulances and the driven car keep
+    their vType colour)."""
+    if vtype in ("emergency", "driven"):
         return
     from sim.vanet.glosa import is_eco_vehicle
 
@@ -173,8 +174,13 @@ def run_simulation(
     step_delay: float = 0.0,
     eco_fraction: float = 0.0,
     ev_routing: bool = False,
+    driver: bool = False,
+    driver_commands: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run a single simulation run and return performance metrics.
+
+    driver: one-driver mode (live only, sim/driver.py). Commands are read from driver_commands
+    (an object with poll() -> list of command dicts), by default JSON lines on stdin.
 
     ev_routing: ambulances choose and update their route with A* on the TMC map
     (sim/navigation/ev_router.py). Off: they keep the route from the scenario file.
@@ -463,6 +469,26 @@ def run_simulation(
             vehicle_tracker = LiveVehicleTracker(sumo_api, tls_ids, penetration=penetration, seed=seed,
                                                  eco_mgr=eco_mgr, navigator=navigator)
 
+        # One-driver mode: a dashboard viewer drives one car (live only)
+        driver_mgr: Optional[Any] = None
+        if driver and live:
+            from sim.driver import CommandReader, DriverManager
+
+            if driver_commands is None:
+                driver_commands = CommandReader(sys.stdin)
+            eco_cfg_drv = dict(base_config.get("eco", {}) or {})
+            driver_mgr = DriverManager(
+                sumo_api=sumo_api,
+                tls_ids=tls_ids,
+                spat_source=lambda tid: controllers_map[tid].get_spat() if hasattr(controllers_map[tid], "get_spat") else {},
+                tracker=vehicle_tracker,
+                vanet_net=vanet_net,
+                range_m=range_m,
+                eco_config=eco_cfg_drv,
+                seed=seed,
+                gui=gui,
+            )
+
         while t < sim_duration:
             if _STOP_REQUESTED:
                 was_interrupted = True
@@ -623,6 +649,16 @@ def run_simulation(
             if eco_mgr is not None:
                 eco_mgr.step(t)
 
+            # Driver commands and the driven car (advice, ambulance warning, trip report)
+            if driver_mgr is not None:
+                for cmd in driver_commands.poll():
+                    driver_mgr.handle(cmd, t)
+                driver_mgr.step(t, active_vehs)
+                for d_ev in driver_mgr.pop_events():
+                    emit_json_line(protocol_event(d_ev, run_id, t))
+                for notice in driver_mgr.pop_notices(run_id):
+                    emit_json_line(notice)
+
             # Emit live state if requested (protocol v2 schema)
             if live and (int(t) % emit_interval == 0):
                 active_waits = [
@@ -669,19 +705,34 @@ def run_simulation(
                 })
                 if vehicle_tracker is not None:
                     emit_json_line(vehicle_tracker.build(active_vehs, run_id, t))
+                if driver_mgr is not None:
+                    drv_msg = driver_mgr.build_message(run_id, t)
+                    if drv_msg is not None:
+                        emit_json_line(drv_msg)
 
             if vehicle_tracker is not None:
-                vehicle_tracker.step(active_vehs)
+                vehicle_tracker.step(active_vehs, t)
 
             sumo_api.simulationStep()
-            if step_delay > 0.0:
+            delay = step_delay
+            if driver_mgr is not None and driver_mgr.active_step_delay() is not None:
+                delay = float(driver_mgr.active_step_delay())  # slower pacing while someone drives
+            if delay > 0.0:
                 # Live demo pacing (wall-clock seconds per simulated second)
                 import time as _time
 
-                _time.sleep(step_delay)
+                _time.sleep(delay)
 
             if t > 60.0 and sumo_api.simulation.getMinExpectedNumber() <= 0:
                 break
+
+        if driver_mgr is not None and driver_mgr.active:
+            # The run ends with a car still being driven: close the drive with its report so far
+            driver_mgr.handle({"cmd": "drive_end", "reason": "run_ended"}, t)
+            for d_ev in driver_mgr.pop_events():
+                emit_json_line(protocol_event(d_ev, run_id, t))
+            for notice in driver_mgr.pop_notices(run_id):
+                emit_json_line(notice)
 
     except Exception as e:
         err_msg = str(e).lower()

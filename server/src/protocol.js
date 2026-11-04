@@ -31,7 +31,20 @@ export const RunEntrySchema = z
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 
-const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles']) }).passthrough();
+const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver']) }).passthrough();
+
+/** Road ids a driver may pick (normal edges: no ":" internal junction lanes). */
+const EdgeIdSchema = z.string().min(1).max(64).regex(/^[\w.#-]+$/);
+
+/** One-driver mode: take a car from one road to another. */
+export const DriverStartSchema = z.object({ from: EdgeIdSchema, to: EdgeIdSchema }).strict()
+  .refine((b) => b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
+
+/** One-driver mode: a driving command. speed_kmh only for "ease" (hold at most this speed). */
+export const DriverCommandSchema = z.object({
+  action: z.enum(['go', 'ease', 'stop']),
+  speed_kmh: z.coerce.number().min(5).max(60).optional(),
+}).strict();
 
 /** Vehicle ids a viewer may follow (also used as a Socket.io room name suffix). */
 export const VehicleIdSchema = z.string().min(1).max(64).regex(/^[\w.:#-]+$/);
@@ -76,6 +89,7 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--eco-fraction', String(entry.eco_fraction ?? 0),
     '--ev-routing', entry.ev_routing ?? 'off',
     '--live',
+    '--driver', // read drive commands on stdin (one-driver mode); harmless when nobody drives
   ];
   if (entry.network) args.push('--network', entry.network);
   if (cfg.USE_MOCK) {

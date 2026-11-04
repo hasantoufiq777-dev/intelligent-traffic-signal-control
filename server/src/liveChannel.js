@@ -1,5 +1,6 @@
 // The one shared live simulation: process lifecycle, broadcast to all viewers, history, playlist loop.
 import crypto from 'node:crypto';
+import { DriverSeat } from './driver.js';
 import { SimProcess } from './simProcess.js';
 import { buildSimArgs, VehicleIdSchema } from './protocol.js';
 
@@ -44,6 +45,8 @@ export class LiveChannel {
 
     this.stats = { started_at: Date.now(), lines_in: 0, bad_lines: 0, states_in: 0, states_broadcast: 0,
       events_broadcast: 0, bytes_broadcast: 0, runs_started: 0 };
+    // One-driver mode: the only thing a viewer can control (one at a time)
+    this.driver = new DriverSeat({ cfg, io, db, logger, live: this, room: ROOM });
   }
 
   // ------------------------------------------------------------------ viewers
@@ -51,8 +54,9 @@ export class LiveChannel {
     this.io.on('connection', (socket) => {
       socket.join(ROOM);
       socket.emit('init', this.snapshot());
-      // Viewers are read-only: nothing they send is acted on.
+      // Viewers are read-only, except for the one driver seat (driver.js).
       socket.on('disconnect', () => this._scheduleViewerBroadcast());
+      this.driver.attach(socket);
       // Following a car is a subscription (detail stream for one vehicle), not control.
       socket.on('follow', (id) => this._follow(socket, id));
       socket.on('unfollow', () => this._follow(socket, null));
@@ -86,6 +90,7 @@ export class LiveChannel {
       viewers: this.viewers(),
       mock: this.cfg.USE_MOCK,
       gui: this.gui,
+      driver: this.driver.public(),
     };
   }
 
@@ -122,6 +127,7 @@ export class LiveChannel {
       events: this.events,
       result: this.lastResult,
       history_seconds: this.cfg.HISTORY_SECONDS,
+      driver: { seat: this.driver.public(), state: this.driver.state },
     };
   }
 
@@ -133,6 +139,7 @@ export class LiveChannel {
     if (this.proc) await this._stopProcess();
     if (this.closing) return null;
     if (source === 'admin') this.paused = false; // admin start resumes the loop afterwards (if enabled)
+    this.driver.onRunEnded(); // a drive belongs to one run
 
     this._dropPendingState(); // never deliver a state of the previous run after this one starts
     const runId = `live-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
@@ -241,7 +248,10 @@ export class LiveChannel {
       }
       case 'status':
         this.lastStatus = msg;
-        if (['finished', 'stopped', 'error'].includes(msg.status)) this.sawFinalStatus = true;
+        if (['finished', 'stopped', 'error'].includes(msg.status)) {
+          this.sawFinalStatus = true;
+          this.driver._broadcast(); // no new drives in a run that is ending
+        }
         this._emitReliable('status', msg);
         break;
       case 'network':
@@ -250,6 +260,9 @@ export class LiveChannel {
         break;
       case 'vehicles':
         this._onVehicles(msg);
+        break;
+      case 'driver':
+        this.driver.onSimMessage({ ...msg, run_id: runId });
         break;
       case 'result':
         this.lastResult = msg;
@@ -355,6 +368,7 @@ export class LiveChannel {
     if (proc !== this.proc) return;
     // A pending final state is still sent by its timer, keeping the at-most-once-per-interval rule.
     this.proc = null;
+    this.driver.onRunEnded();
     const run = this.current;
     let status;
     if (stopped) status = 'stopped';
@@ -392,6 +406,7 @@ export class LiveChannel {
     clearTimeout(this._stateTimer);
     clearTimeout(this._viewerTimer);
     clearTimeout(this._vehiclesTimer);
+    this.driver.close();
     if (this.proc) await this._stopProcess();
   }
 }

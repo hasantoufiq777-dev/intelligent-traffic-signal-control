@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import DrivePanel from '../components/DrivePanel.jsx';
 import EcoSummary from '../components/EcoSummary.jsx';
 import { FLAG } from '../lib/vehicles.js';
 import EventLog from '../components/EventLog.jsx';
@@ -8,7 +9,8 @@ import NowPlaying from '../components/NowPlaying.jsx';
 import TrafficMap from '../components/TrafficMap.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
 
-const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end', 'ev_reroute']);
+const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end', 'ev_reroute',
+  'driver_start', 'driver_end']);
 
 export default function UserPanel() {
   const live = useLive();
@@ -42,14 +44,15 @@ export default function UserPanel() {
           />
         </section>
         <div className="stack">
-          <MyCarPanel
+          <DrivePanel live={live} />
+          {!live.myDrive?.active && <MyCarPanel
             followId={live.followId}
             detail={live.followed}
             rows={rows}
             tlsState={live.latest?.tls}
             onFollow={live.follow}
             events={live.events}
-          />
+          />}
           <EcoSummary eco={live.latest?.eco} />
           <EventLog events={live.events} limit={8} filter={(k) => USER_EVENTS.has(k)} />
         </div>

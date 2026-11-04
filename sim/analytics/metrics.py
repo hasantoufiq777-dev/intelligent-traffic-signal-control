@@ -144,8 +144,8 @@ def parse_tripinfo(
         vtype = trip.attrib.get("vType", "")
         vid = trip.attrib.get("id", "")
 
-        # Synthetic incident blockers (Module 10) are not traffic
-        if vid.startswith("incblk_") or vtype == "incident_blocker":
+        # Synthetic incident blockers (Module 10) and the dashboard driver's car are not scenario traffic
+        if vid.startswith("incblk_") or vtype in ("incident_blocker", "driven"):
             continue
 
         waiting_times.append(w)
@@ -202,7 +202,7 @@ def parse_tripinfo_emissions(
     for trip in root.findall("tripinfo"):
         vid = trip.attrib.get("id", "")
         vtype = trip.attrib.get("vType", "")
-        if vid.startswith("incblk_") or vtype == "incident_blocker":
+        if vid.startswith("incblk_") or vtype in ("incident_blocker", "driven"):
             continue
         em = trip.find("emissions")
         if em is None:

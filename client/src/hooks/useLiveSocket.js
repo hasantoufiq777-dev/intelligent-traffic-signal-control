@@ -23,14 +23,20 @@ function emptyBuffers() {
     vehicles: null, // {t, rows: [[id, x, y, angle, flags], ...]}
     followed: null, // detail object of the followed car
     viewers: null,
+    driverSeat: null, // { enabled, available, busy, vid, since, idle_ms, max_ms }
+    driver: null, // latest driver message of the current drive (anyone's)
+    myDrive: null, // { vid, ended: {reason, message}, report } for this viewer's own drive
   };
 }
+
+const ACK_TIMEOUT_MS = 5000;
 
 export function LiveProvider({ children }) {
   const buf = useRef(emptyBuffers());
   const dirty = useRef(true);
   const followId = useRef(null);
   const socketRef = useRef(null);
+  const driveKey = useRef(null); // seat key of this viewer's drive (reclaims the seat after a reconnect)
   const [snap, setSnap] = useState(() => ({ ...emptyBuffers(), connection: 'connecting', followId: null }));
   const [connection, setConnection] = useState('connecting');
 
@@ -43,6 +49,15 @@ export function LiveProvider({ children }) {
     socket.on('connect', () => {
       setConnection('connected');
       if (followId.current) socket.emit('follow', followId.current); // re-subscribe after a reconnect
+      if (driveKey.current) {
+        socket.emit('driver:resume', driveKey.current, (res) => {
+          if (!res?.ok) {
+            driveKey.current = null;
+            if (b.myDrive) b.myDrive = { ...b.myDrive, active: false, ended: { reason: 'left', message: res?.error } };
+            touch();
+          }
+        });
+      }
     });
     socket.on('disconnect', () => setConnection('reconnecting'));
     socket.io.on('reconnect_attempt', () => setConnection('reconnecting'));
@@ -58,6 +73,8 @@ export function LiveProvider({ children }) {
       b.network = m.network;
       b.vehicles = m.vehicles;
       b.viewers = m.now_playing?.viewers ?? null;
+      b.driverSeat = m.driver?.seat ?? m.now_playing?.driver ?? null;
+      b.driver = m.driver?.state ?? null;
       touch();
     });
     socket.on('now_playing', (m) => {
@@ -73,6 +90,7 @@ export function LiveProvider({ children }) {
       }
       b.nowPlaying = m;
       b.viewers = m.viewers ?? b.viewers;
+      if (m.driver) b.driverSeat = m.driver;
       touch();
     });
     socket.on('state', (m) => {
@@ -94,6 +112,28 @@ export function LiveProvider({ children }) {
       if (m && m.id === followId.current) { b.followed = m; touch(); }
     });
     socket.on('viewers', (m) => { b.viewers = m.count; touch(); });
+
+    // One-driver mode
+    socket.on('driver_lock', (m) => { b.driverSeat = m; touch(); });
+    socket.on('driver', (m) => {
+      const final = ['finished', 'released', 'error'].includes(m.status);
+      const mine = b.myDrive && (b.myDrive.vid ? m.vid === b.myDrive.vid : b.myDrive.active);
+      if (mine) {
+        if (!b.myDrive.vid && m.vid) b.myDrive = { ...b.myDrive, vid: m.vid };
+        if (final) b.myDrive = { ...b.myDrive, active: false, report: m.report ?? b.myDrive.report, last: m };
+        else b.myDrive = { ...b.myDrive, last: m };
+      }
+      b.driver = final ? null : m;
+      touch();
+    });
+    socket.on('driver_seat', (m) => {
+      // This viewer's drive ended (handed back, idle, left, admin, run ended, finished, error)
+      if (!m.mine && b.myDrive) {
+        driveKey.current = null;
+        b.myDrive = { ...b.myDrive, active: false, ended: { reason: m.reason, message: m.message } };
+        touch();
+      }
+    });
 
     const timer = setInterval(() => {
       if (!dirty.current) return;
@@ -123,7 +163,39 @@ export function LiveProvider({ children }) {
     else s.emit('unfollow');
   }, []);
 
-  const value = { ...snap, connection, follow };
+  /** Emit with an acknowledgement; resolves {ok:false,error} on timeout or when offline. */
+  const ask = useCallback((name, body) => new Promise((resolve) => {
+    const s = socketRef.current;
+    if (!s?.connected) {
+      resolve({ ok: false, error: 'Not connected to the gateway' });
+      return;
+    }
+    s.timeout(ACK_TIMEOUT_MS).emit(name, body, (err, res) => resolve(err ? { ok: false, error: 'No answer from the gateway' } : res));
+  }), []);
+
+  const startDrive = useCallback(async (from, to) => {
+    const res = await ask('driver:claim', { from, to });
+    if (res?.ok) {
+      driveKey.current = res.key;
+      buf.current.myDrive = { active: true, vid: null, from, to, since: Date.now(), idleMs: res.idle_ms,
+        maxMs: res.max_ms, report: null, ended: null, last: null };
+      dirty.current = true;
+    }
+    return res;
+  }, [ask]);
+
+  const driveCommand = useCallback((action, speedKmh) => (
+    ask('driver:cmd', action === 'ease' ? { action, speed_kmh: speedKmh } : { action })
+  ), [ask]);
+
+  const endDrive = useCallback(() => ask('driver:release'), [ask]);
+
+  const clearDrive = useCallback(() => {
+    buf.current.myDrive = null;
+    dirty.current = true;
+  }, []);
+
+  const value = { ...snap, connection, follow, startDrive, driveCommand, endDrive, clearDrive };
   return createElement(LiveContext.Provider, { value }, children);
 }
 

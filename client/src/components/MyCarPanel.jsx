@@ -114,7 +114,8 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
       ) : (
       <div className={`advice advice-${advice.advice}`}>
         <span className="small muted">
-          {isEco ? 'Advice from the roadside unit (this car follows it)' : 'Suggested advice (this car is not an eco car and drives normally)'}
+          {kind === 'driven' ? 'Advice this car gets (a viewer is driving it and decides)'
+            : isEco ? 'Advice from the roadside unit (this car follows it)' : 'Suggested advice (this car is not an eco car and drives normally)'}
         </span>
         <span className="headline">{adviceHeadline(advice, detail.dist)}</span>
         {advice.advice === 'slow' && (

@@ -10,6 +10,7 @@ junctions, V2V/V2I messages with range, loss and delay) drives the decisions:
 - **Incident detection** from beacons (stopped vehicles), with rerouting and signal reaction.
 - **Eco-driving (GLOSA):** roadside units broadcast signal timing (SPaT) and eco cars get speed advice to arrive on green.
 - **Offline GA tuning** of signal/VANET and ACO parameters, and a multi-seed **evaluation** with statistics.
+- **Driver mode:** one viewer at a time takes a car into the live run and drives it with Go / Ease off / Stop, with speed advice, ambulance warnings and a trip report.
 - **Live web dashboard:** traffic map, follow a car, its advice, fuel and CO₂, junction cards, VANET and navigation panels, results. One shared stream for 1000+ viewers.
 
 Simulation: **SUMO** controlled through TraCI on a **2×2 signalised grid** (and a single junction for early tests).
@@ -147,6 +148,9 @@ ambulance run through the admin API, states, alerts, preemption, stored result.
 | `LIVE_LOOP` | Loop `server/playlist.json` |
 | `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 0.25) |
 | `SIM_GUI` | Open live runs in SUMO-GUI from the start |
+| `DRIVER_MODE` | Allow one viewer to drive a car (default true; the admin can switch it off at run time) |
+| `DRIVER_IDLE_MS`, `DRIVER_MAX_MS` | Free the driver seat after 2 min without input / 10 min in total |
+| `DRIVER_STEP_DELAY` | Live pacing while someone drives (default 0.5 s per simulated second, 2x real time) |
 | `PORT`, `HOST` | Listen address (default 4000, 0.0.0.0) |
 
 ## 7. API (gateway)
@@ -155,10 +159,12 @@ REST:
 - `GET /api/health`, `/api/live/status`, `/api/live/playlist`, `/api/options`
 - `GET /api/experiments/summary`, `/api/runs`, `/api/runs/:id`, `/api/metrics`
 - `GET` / `POST /api/sumo/gui`
-- admin: `POST /api/live/start`, `POST /api/live/stop`
+- `GET /api/driver` (driver seat and recent drives)
+- admin: `POST /api/live/start`, `POST /api/live/stop`, `POST /api/driver {enabled}`, `POST /api/driver/release`
 
 Socket.io (room `live`): `init`, `state`, `event`, `status`, `result`, `now_playing`, `viewers`, `network`, `vehicles`,
-`vehicle` (after `follow`). Full reference: [server/README.md](server/README.md).
+`vehicle` (after `follow`), `driver`, `driver_lock`, `driver_seat`. The driver sends `driver:claim`, `driver:cmd`,
+`driver:release` and `driver:resume`. Full reference: [server/README.md](server/README.md).
 
 ## 8. Repository
 
@@ -202,4 +208,5 @@ docs/                method.md, demo_script.md, results_discussion.md
 - **A\* = Dijkstra in path quality.** A\* returns the same optimal path as Dijkstra for the same edge costs. Its gain is fewer node expansions; the contribution here is the VANET-derived edge costs and the comparison with ACO.
 - **Eco-driving needs predictable signals.** GLOSA helps most with fixed-time signals. Adaptive control and preemption make the timing uncertain, so the advisor gives less advice.
 - **Estimates only.** Fuel and CO₂ come from SUMO's HBEFA4 emission model.
+- **Driver mode is a demo feature.** Only one viewer drives at a time (one shared simulation). The driven car is left out of the run's result metrics, but it does affect the traffic around it, so live runs with a driver are not used for evaluation.
 - **Simplified emergency vehicles.** Other cars do not form a rescue lane (no SUMO bluelight device), and ambulances obey red lights. Preemption is what clears their way.

@@ -67,6 +67,10 @@ def main() -> None:
         help="Override the scenario's network (default: the scenario YAML's network)",
     )
     parser.add_argument(
+        "--driver", action="store_true",
+        help="One-driver mode (live only): read drive commands as JSON lines on stdin (sim/driver.py)",
+    )
+    parser.add_argument(
         "--step-delay", type=float, default=0.0,
         help="Wall-clock seconds to wait per simulated second (live demo pacing; 0 = as fast as possible)",
     )
@@ -128,6 +132,7 @@ def main() -> None:
             step_delay=max(0.0, args.step_delay),
             eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
             ev_routing=(args.ev_routing == "on"),
+            driver=args.driver,
         )
 
         # In non-live mode, output result at the end as JSON on stdout

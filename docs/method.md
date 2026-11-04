@@ -471,3 +471,56 @@ GLOSA and actuated control pull in different directions. One predicts the signal
 - The emission model gives estimates, not measurements.
 - The advisor knows the car's own route and position (as a navigation unit would) and sees the vehicle ahead (as radar would). It does not know the length of the queue at the stop line, so a slowed car may still reach the back of a queue that forms after the advice.
 - Every advice update costs extra TraCI calls per eco car, so eco runs take several times longer to simulate.
+
+## 12. One-Driver Mode (a viewer drives a car)
+
+One dashboard viewer at a time can take a car into the live run and drive it. It is a demonstration of what a
+connected car receives over the VANET, not an evaluated feature.
+
+**Control path.** The browser sends `driver:claim {from, to}` and `driver:cmd {action, speed_kmh}` over Socket.io. The
+gateway (`server/src/driver.js`) checks that the sender holds the seat, validates the command and applies a rate limit
+of 2 commands per second. It then writes the command as a JSON line to the simulation's stdin. `sim/driver.py` applies
+it at the next simulated second. The driven car gets its own vType `driven` (purple in SUMO-GUI and on the map) and a
+route from SUMO's router between the chosen roads.
+
+**What the driver controls.** Only the target speed:
+
+| Button | TraCI call | Effect |
+|---|---|---|
+| Go | `setSpeed(-1)` | SUMO's normal driving up to the speed limit |
+| Ease off | `setSpeed(v)`, capped at the limit | Hold at most v (10-50 km/h) |
+| Stop | `setSpeed(0)` | Brake to a standstill. Inside a junction the stop waits until the car has left it |
+
+SUMO's default speed mode stays on. Safe gaps, the acceleration and braking limits, right of way and stopping at red
+are still enforced, so a driver cannot cause a collision or run a red light. Stopping on a road holds up the cars
+behind, as it would in reality. That is why the seat has an idle timeout.
+
+**What the driver sees.** Every second the car's OBU receives:
+- SPaT from the RSU of its next junction. With a VANET this goes through the emulated channel (range, loss, delay);
+  without one it comes directly from the controller. The car gets GLOSA advice from it as in section 11, except that
+  the advice is only shown and the driver decides. Advice is counted as followed when the car is at most 5 km/h above
+  the advised speed.
+- The ambulances' EV_ALERT broadcasts (V2V, within radio range, with the channel's loss probability). An alert carries
+  the ambulance's position, route and progress. The warning appears in two cases:
+  - **Behind:** the ambulance is behind the driver on the same road, or will enter that road.
+  - **Crossing:** the ambulance crosses one of the driver's next two signalised junctions, is within 200 m of it, and
+    the driver is within 250 m.
+
+**Trip report.** At arrival (or hand back) the report gives travel time, distance, stops, fuel and CO2, and the share
+of advice followed. These are compared per km with the other cars that finished during the run, using cars with the
+same origin and destination when there are any. Fuel, CO2 and stops are integrated in the same way for all cars (live
+tracker, HBEFA4 rates per step), so the comparison is like for like.
+
+**Seat rules.** The seat is freed:
+- when the car arrives, or the driver hands it back;
+- after 2 minutes without input, or 10 minutes in total;
+- when the driver leaves (after a 15 s reconnect grace);
+- when the run ends, or by the admin.
+
+On a hand back the car finishes its trip as normal traffic. While someone drives, the live run is paced at 2× real time
+instead of 4× (`DRIVER_STEP_DELAY`).
+
+**Effect on results.** The driven car is excluded from navigation, eco-driving and the run's result metrics (tripinfo
+parsing skips vType `driven`). It still affects the traffic around it, so evaluation runs never use driver mode, and
+headless runs have no command channel.
+

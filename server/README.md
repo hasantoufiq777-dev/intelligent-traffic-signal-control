@@ -50,6 +50,12 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | `HISTORY_SECONDS`, `EVENT_HISTORY` | `120`, `200` | History sent in `init` |
 | `SAMPLE_EVERY_SIM_S` | `2` | Persist one state every N simulated seconds |
 | `CRASH_RETRY_MS` | `5000` | Wait before the next playlist entry after a crash |
+| `DRIVER_MODE` | `true` | One-driver mode on at start (the admin can switch it at run time) |
+| `DRIVER_IDLE_MS` | `120000` | Seat freed after this long without a command |
+| `DRIVER_MAX_MS` | `600000` | Longest single drive |
+| `DRIVER_RESUME_MS` | `15000` | A driver who loses the connection can reclaim the seat this long (with the seat key) |
+| `DRIVER_CMDS_PER_S` | `2` | Command rate limit per driver (bursts up to twice this) |
+| `DRIVER_STEP_DELAY` | `0.5` | Live pacing while someone drives (real SUMO only) |
 | `LOG_LEVEL` | `info` | `debug` also logs the simulation's stderr |
 
 `SUMO_HOME` and the rest of the environment pass through to the Python process.
@@ -70,8 +76,11 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | GET | `/api/metrics` | Process CPU/memory and broadcast counters (used by the load test) |
 | POST | `/api/live/start` | Admin. Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?, ev_routing? ('on'|'off'), network?}`; unknown keys are rejected. 202 `{run_id}` |
 | POST | `/api/live/stop` | Admin. Stops the run and pauses the playlist until the next start |
+| GET | `/api/driver` | Driver seat `{enabled, available, busy, vid, since, idle_ms, max_ms}` and the last 20 drives with their trip reports |
+| POST | `/api/driver` | Admin. `{enabled: true\|false}` switches driver mode; switching off ends the current drive |
+| POST | `/api/driver/release` | Admin. Ends the current drive (the car is handed back to the simulation) |
 
-## Socket.io (viewers are read-only; everyone joins room `live`)
+## Socket.io (viewers are read-only except the one driver seat; everyone joins room `live`)
 
 | Event | Payload |
 |---|---|
@@ -85,8 +94,20 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | `network` | Road geometry of the current run (junctions, edge shapes, bounds) |
 | `vehicles` | Map frame `{run_id, t, rows: [[id, x, y, angle, flags]], sent_at}`, at most 1/s, volatile, sent 150 ms after the state |
 | `vehicle` | Full row of the followed car (next light, distance, fuel, CO2, advice), every map frame, only to its followers |
+| `driver` | The driven car's state from the simulation (speed, mode, next light, advice, ambulance warning, fuel, CO2), every simulated second, to everyone; the final one (`finished`/`released`/`error`) carries the trip report |
+| `driver_lock` | The seat `{enabled, available, busy, vid, since, idle_ms, max_ms}` when it changes (also in `now_playing.driver` and `init.driver`) |
+| `driver_seat` | To the driver only: `{mine: false, reason, message}` when their drive ends (released, idle, left, admin, time_limit, run_ended, finished, error) |
 
 Viewers can send `follow` (a vehicle id) and `unfollow`. This is a subscription to one car's details, not control of it.
+
+One-driver mode (`src/driver.js`), all with an acknowledgement callback `{ok, error?}`:
+- `driver:claim {from, to}`: take the seat with a car from one road to another (`from`/`to` are edge ids of the current
+  network). Refused when driving is off, no run is live, or someone else drives. Answer: `{ok, key, idle_ms, max_ms}`.
+- `driver:cmd {action: go|ease|stop, speed_kmh?}`: only from the seat holder; rate limited (`retry_ms` when refused).
+- `driver:release`: hand the car back. `driver:resume <key>`: reclaim the seat after a reconnect within `DRIVER_RESUME_MS`.
+
+The gateway passes commands to Python as JSON lines on stdin (`--driver`). SQLite table `driver_trips` keeps each drive
+(run, car, roads, status, reason, report).
 Volatile messages are dropped while a socket is still writing the previous one, so the map frame is kept out of the
 state broadcast's tick, and follower details are sent reliably.
 

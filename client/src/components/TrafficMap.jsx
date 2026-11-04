@@ -18,6 +18,7 @@ const KIND_STYLE = {
   nav: { fill: 'var(--series-1)' },
   eco: { fill: 'var(--series-3)', stroke: 'var(--surface-1)' },
   emergency: { fill: 'var(--sig-red)', stroke: '#ffffff' },
+  driven: { fill: 'var(--driver)', stroke: 'var(--surface-1)' },
 };
 const SIG_FILL = { G: 'var(--sig-green)', y: 'var(--sig-yellow)', r: 'var(--sig-red)' };
 
@@ -178,7 +179,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
           {rows.map(([id, x, y, angle, flags]) => {
             const kind = vehicleKind(flags);
             const st = KIND_STYLE[kind];
-            const big = kind === 'emergency' ? 1.35 : 1;
+            const big = kind === 'emergency' || kind === 'driven' ? 1.35 : 1;
             const [wx, wy] = geo.widen(x, y);
             return (
               <g
@@ -221,6 +222,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
         <span><svg width="10" height="16"><rect x="2" y="1" width="6" height="14" rx="1.5" fill="var(--series-1)" /></svg>Connected car</span>
         <span><svg width="10" height="16"><rect x="2" y="1" width="6" height="14" rx="1.5" fill="var(--series-3)" stroke="var(--surface-1)" /></svg>Eco car</span>
         <span><svg width="12" height="18"><rect x="1" y="1" width="10" height="16" rx="2" fill="var(--sig-red)" /><path d="M6 6 V12 M3 9 H9" stroke="#fff" strokeWidth="1.5" /></svg>Ambulance</span>
+        <span><svg width="12" height="18"><rect x="1" y="1" width="10" height="16" rx="2" fill="var(--driver)" stroke="var(--surface-1)" /></svg>Driven by a viewer</span>
         <span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="var(--sig-yellow)" /></svg>Slowing for green</span>
         <span><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--text-primary)" strokeWidth="1.5" /></svg>Your car</span>
       </div>

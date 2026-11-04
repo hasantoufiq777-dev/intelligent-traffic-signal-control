@@ -29,6 +29,8 @@ def is_vehicle_equipped(
     """
     if vtype == "emergency" or "amb" in vehicle_id.lower() or "ev" in vehicle_id.lower():
         return True
+    if vtype == "driven":  # the dashboard driver's car (sim/driver.py) always has an OBU
+        return True
     if penetration >= 1.0:
         return True
     if penetration <= 0.0:

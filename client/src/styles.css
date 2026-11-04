@@ -26,6 +26,7 @@
   --junction: #7b7973;
   --map-bg: #e9e8e2;
   --car: #57554f;
+  --driver: #8a44d6; /* the car a viewer drives (SUMO-GUI: purple too) */
   --accent: var(--series-1);
   --radius: 10px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -56,6 +57,7 @@
     --junction: #5a5955;
     --map-bg: #141413;
     --car: #b9b7af;
+    --driver: #a66ef0;
   }
 }
 
@@ -82,6 +84,7 @@
   --junction: #5a5955;
   --map-bg: #141413;
   --car: #b9b7af;
+  --driver: #a66ef0;
 }
 
 /* ---------- Base ---------- */
@@ -253,3 +256,17 @@ label.field input, label.field select {
 .chart-tooltip .tt-name { color: var(--text-secondary); }
 .recharts-cartesian-axis-tick-value { fill: var(--text-muted); font-size: 11px; }
 .recharts-legend-item-text { color: var(--text-secondary) !important; font-size: 12px; }
+
+/* ---------- Driving (one-driver mode) ---------- */
+.drive-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.drive-controls .btn { padding-top: 12px; padding-bottom: 12px; font-weight: 600; }
+.drive-controls kbd, .btn kbd {
+  font: inherit; font-size: 11px; padding: 0 5px; margin-left: 4px; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
+}
+.drive-speed { font-size: 28px; }
+.drive-chip { background: var(--driver); color: #fff; border-color: transparent; }
+.drive-alert {
+  padding: 10px 12px; border-radius: var(--radius); font-weight: 600;
+  background: var(--surface-2); border-left: 4px solid var(--sig-red);
+}

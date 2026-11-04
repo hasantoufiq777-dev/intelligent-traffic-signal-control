@@ -49,7 +49,7 @@ export function createGateway(overrides = {}) {
     connectTimeout: 10_000,
     perMessageDeflate: false, // the state stream is small and frequent; compression costs CPU per viewer
     httpCompression: false,
-    maxHttpBufferSize: 1e4, // viewers send nothing of size
+    maxHttpBufferSize: 1e4, // viewers send only small messages (follow, driver commands)
   });
 
   const playlist = loadPlaylist(cfg.PLAYLIST_PATH, log);
@@ -154,6 +154,21 @@ export function createGateway(overrides = {}) {
   app.post('/api/live/stop', requireAdmin, async (_req, res) => {
     const stopped = await live.stop();
     res.json({ stopped });
+  });
+
+  // ---- one-driver mode -----------------------------------------------------
+  // Viewers take the seat and drive over Socket.io (driver.js); these endpoints are for the admin.
+  app.get('/api/driver', (_req, res) => {
+    res.json({ ...live.driver.public(), trips: db.listDriverTrips(20) });
+  });
+
+  app.post('/api/driver', requireAdmin, (req, res) => {
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Body must be {"enabled": true|false}' });
+    return res.json(live.driver.setEnabled(req.body.enabled));
+  });
+
+  app.post('/api/driver/release', requireAdmin, (_req, res) => {
+    res.json({ released: live.driver.end('admin') });
   });
 
   // ---- optional static React build (production: nginx serves it, see README) --

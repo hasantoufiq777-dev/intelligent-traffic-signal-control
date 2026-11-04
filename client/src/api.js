@@ -41,4 +41,7 @@ export const api = {
   stop: (token) => request('/api/live/stop', { method: 'POST', token }),
   sumoGui: () => request('/api/sumo/gui'),
   setSumoGui: (enabled, token) => request('/api/sumo/gui', { method: 'POST', body: { enabled }, token }),
+  driver: () => request('/api/driver'),
+  setDriver: (token, enabled) => request('/api/driver', { method: 'POST', body: { enabled }, token }),
+  releaseDriver: (token) => request('/api/driver/release', { method: 'POST', token }),
 };

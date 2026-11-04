@@ -1,4 +1,4 @@
-// SQLite persistence: runs, final results, events, and state samples (one per SAMPLE_INTERVAL_MS).
+// SQLite persistence: runs, final results, events, state samples (one per SAMPLE_EVERY_SIM_S) and driver trips.
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -44,6 +44,19 @@ CREATE TABLE IF NOT EXISTS state_samples (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_samples_run ON state_samples(run_id, t);
+CREATE TABLE IF NOT EXISTS driver_trips (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id      TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  vid         TEXT,                     -- simulation vehicle id (drv1, ...)
+  from_edge   TEXT NOT NULL,
+  to_edge     TEXT NOT NULL,
+  status      TEXT NOT NULL,            -- driving | finished | released | error
+  reason      TEXT,                     -- why it ended: finished | released | idle | left | admin | time_limit | run_ended | error
+  report      TEXT,                     -- JSON trip report from the simulation
+  started_at  TEXT NOT NULL,
+  ended_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_driver_trips_run ON driver_trips(run_id, id);
 `;
 
 const now = () => new Date().toISOString();
@@ -75,12 +88,20 @@ export function openDatabase(dbPath) {
     getEvents: db.prepare(`SELECT t, kind, tls, detail FROM events WHERE run_id = ? ORDER BY id LIMIT ?`),
     countSamples: db.prepare(`SELECT COUNT(*) AS n FROM state_samples WHERE run_id = ?`),
     getSamples: db.prepare(`SELECT payload FROM state_samples WHERE run_id = ? ORDER BY t LIMIT ?`),
+    insertTrip: db.prepare(`INSERT INTO driver_trips (run_id, from_edge, to_edge, status, started_at) VALUES (?, ?, ?, 'driving', ?)`),
+    endTrip: db.prepare(`UPDATE driver_trips SET status = @status, reason = COALESCE(reason, @reason), vid = COALESCE(@vid, vid),
+      report = COALESCE(@report, report), ended_at = COALESCE(ended_at, @ended_at) WHERE id = @id`),
+    listTrips: db.prepare(`SELECT * FROM driver_trips ORDER BY id DESC LIMIT ?`),
+    closeOpenTrips: db.prepare(`UPDATE driver_trips SET status = 'released', reason = 'run_ended', ended_at = ? WHERE status = 'driving'`),
   };
 
   return {
     raw: db,
     /** Runs left "running" by a previous gateway process cannot be resumed. */
-    markInterruptedRuns: () => stmts.markInterrupted.run(now()).changes,
+    markInterruptedRuns: () => {
+      stmts.closeOpenTrips.run(now());
+      return stmts.markInterrupted.run(now()).changes;
+    },
     insertRun: (run) => stmts.insertRun.run({ eco_fraction: 0, ev_routing: 'off', ...run, started_at: now() }),
     endRun: (id, status, message = null) => stmts.endRun.run({ id, status, message, ended_at: now() }).changes,
     saveResult: (runId, metrics) => stmts.upsertResult.run(runId, JSON.stringify(metrics ?? {}), now()),
@@ -101,6 +122,12 @@ export function openDatabase(dbPath) {
         samples: sampleLimit > 0 ? stmts.getSamples.all(id, sampleLimit).map((s) => JSON.parse(s.payload)) : undefined,
       };
     },
+    /** One-driver mode trips: insert when a viewer takes a car, update when it ends (report from Python). */
+    insertDriverTrip: (runId, from, to) => Number(stmts.insertTrip.run(runId, from, to, now()).lastInsertRowid),
+    endDriverTrip: (id, { status, reason = null, vid = null, report = null }) =>
+      stmts.endTrip.run({ id, status, reason, vid, report: report ? JSON.stringify(report) : null, ended_at: now() }).changes,
+    listDriverTrips: (limit = 20) =>
+      stmts.listTrips.all(limit).map((r) => ({ ...r, report: r.report ? JSON.parse(r.report) : null })),
     close: () => db.close(),
   };
 }

@@ -67,6 +67,7 @@ def main() -> None:
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
     parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
     parser.add_argument("--ev-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
+    parser.add_argument("--driver", action="store_true", help="One-driver mode: drive commands as JSON lines on stdin")
 
     args = parser.parse_args()
 
@@ -76,7 +77,7 @@ def main() -> None:
     except (ValueError, AttributeError):
         pass
 
-    valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation"}
+    valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation", "ev_incident", "ev_congested"}
     if args.scenario not in valid_scenarios and not Path(args.scenario).exists():
         err_msg = f"Unknown scenario: {args.scenario}"
         logger.error(err_msg)
@@ -101,7 +102,7 @@ def main() -> None:
                     network = sc_data.get("network", "single")
             except Exception:
                 network = "single"
-        elif args.scenario in ("navigation", "incident"):
+        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested"):
             network = "grid2x2"
         else:
             network = "single"
@@ -113,6 +114,13 @@ def main() -> None:
         from mock_traffic import MockTraffic, mock_spat  # type: ignore
     traffic = MockTraffic(network, random.Random(args.seed + 7), args.penetration, args.eco_fraction, args.nav,
                           with_ev=args.scenario in ("emergency", "incident"))
+    commands = None
+    if args.driver and args.live:
+        try:
+            from sim.commands import CommandReader
+        except ImportError:  # run as a script from sim/
+            from commands import CommandReader  # type: ignore
+        commands = CommandReader(sys.stdin)
 
     if args.live:
         emit_json({
@@ -258,7 +266,13 @@ def main() -> None:
             pdr = round(float((total_sent - total_lost) / max(total_sent, 1)), 2)
 
             spat = mock_spat(t, preempted=preempt_active)
+            if commands is not None:
+                for cmd in commands.poll():
+                    traffic.handle_driver(cmd, t)
             traffic.step(t, spat)
+            if args.live:
+                for line in traffic.pop_driver_output(args.run_id):
+                    emit_json(line)
             tls_data: Dict[str, Any] = {}
             for j_idx, jid in enumerate(tls_ids):
                 # Vary the fake queues per junction so charts show distinct series
@@ -313,12 +327,20 @@ def main() -> None:
                     },
                 })
                 emit_json(traffic.vehicles_message(args.run_id, t))
+                drv_msg = traffic.driver_message(args.run_id, t)
+                if drv_msg is not None:
+                    emit_json(drv_msg)
 
             if args.step_delay > 0:
                 time.sleep(args.step_delay)
 
     finally:
         pass
+
+    if args.live and traffic.driver is not None:
+        traffic.handle_driver({"cmd": "drive_end", "reason": "run_ended"}, t)
+        for line in traffic.pop_driver_output(args.run_id):
+            emit_json(line)
 
     result_metrics = {
         "avg_waiting_time": round(float(9.5 + rng.random() * 2), 2),
