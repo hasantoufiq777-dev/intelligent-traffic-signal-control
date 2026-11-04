@@ -6,7 +6,7 @@ import request from 'supertest';
 import { io as ioc } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createGateway } from '../src/app.js';
-import { buildSimArgs, parseLine } from '../src/protocol.js';
+import { buildSimArgs, parseLine, RunEntrySchema } from '../src/protocol.js';
 
 const TOKEN = 'test-token';
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-test-'));
@@ -206,6 +206,15 @@ describe('gateway with mock simulation', () => {
     expect(buildSimArgs(entry, 'r1', real)).not.toContain('--gui');
     expect(buildSimArgs(entry, 'r1', real, { gui: true })).toContain('--gui');
     expect(buildSimArgs(entry, 'r1', { ...gw.cfg, USE_MOCK: true }, { gui: true })).not.toContain('--gui');
+  });
+
+  it('passes ambulance routing to the simulation and rejects bad values', () => {
+    const base = { scenario: 'ev_incident', controller: 'adaptive_ev_vanet' };
+    const parsed = RunEntrySchema.parse(base);
+    expect(parsed.ev_routing).toBe('off');
+    const args = buildSimArgs(RunEntrySchema.parse({ ...base, ev_routing: 'on' }), 'r1', { ...gw.cfg, USE_MOCK: false });
+    expect(args[args.indexOf('--ev-routing') + 1]).toBe('on');
+    expect(RunEntrySchema.safeParse({ ...base, ev_routing: 'yes' }).success).toBe(false);
   });
 
   it('returns 404 until the experiment summary exists', async () => {

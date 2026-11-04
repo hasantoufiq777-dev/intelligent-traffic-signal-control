@@ -8,7 +8,7 @@ import NowPlaying from '../components/NowPlaying.jsx';
 import TrafficMap from '../components/TrafficMap.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
 
-const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end']);
+const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end', 'ev_reroute']);
 
 export default function UserPanel() {
   const live = useLive();
@@ -48,6 +48,7 @@ export default function UserPanel() {
             rows={rows}
             tlsState={live.latest?.tls}
             onFollow={live.follow}
+            events={live.events}
           />
           <EcoSummary eco={live.latest?.eco} />
           <EventLog events={live.events} limit={8} filter={(k) => USER_EVENTS.has(k)} />

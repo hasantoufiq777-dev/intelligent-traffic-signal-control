@@ -66,6 +66,7 @@ def main() -> None:
     parser.add_argument("--relay", type=str, default="off", choices=["on", "off"], help="V2V multi-hop relaying")
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
     parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
+    parser.add_argument("--ev-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
 
     args = parser.parse_args()
 

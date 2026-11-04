@@ -28,6 +28,9 @@ All runs below are on the 2×2 grid: set **network = grid2x2** in the admin form
    - `preempt_start` at J0 and the junctions ahead on its route;
    - `preempt_end` after it passes.
 4. *"Only the ambulance's approach turns green, reached through yellow and all-red, so the cars in front of it, including those turning left, clear the way. Then the cross traffic gets a recovery green."*
+5. **Admin:** scenario `ev_incident`, controller `adaptive_ev_vanet`, ev_routing `on`, Start. A road two blocks ahead (J1 to J3) is closed.
+   - The event log shows `Incident detected`, then `Ambulance rerouted ... around a closed road, now via J0J2 → J2J3`; the ambulance card shows the new route. In SUMO-GUI the ambulance gets a yellow ring when it reroutes.
+   - *"The ambulance learns about the closure from the traffic map over V2I before it gets there. Without route choice it would find out at J1 and have to turn back (Results → Ambulance routing)."*
 
 ## 3:00-4:00 Eco-driving and navigation
 1. **Admin:** scenario `normal`, controller `fixed`, eco_fraction `0.6`, Start.
@@ -40,6 +43,7 @@ All runs below are on the 2×2 grid: set **network = grid2x2** in the admin form
 1. Open **Results** (`/results`) and go through the tabs.
    - **Signals:** waiting time vs penetration against fixed and oracle adaptive.
    - **Emergency:** ambulance travel time vs packet loss, relay on and off, against oracle preemption.
+   - **Ambulance routing:** ambulance travel time with its scenario route vs route choice, with and without preemption.
    - **Navigation:** A\* vs ACO.
    - **Eco-driving:** CO₂ and stops vs eco-car share.
 2. Each table gives mean ± std over 10 seeds, % improvement vs the baseline, and a paired p-value.

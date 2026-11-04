@@ -1,0 +1,47 @@
+name: ev_incident
+network: grid2x2
+simulation:
+  duration: 1000
+  step_length: 1.0
+
+# Ambulance routing test: a road closure two edges ahead on the ambulance's default route.
+# Same demand as the emergency scenario. (With the heavier incident-scenario demand, all the cars
+# turning back at J1 gridlock the network, which says nothing about the ambulance's route choice.)
+traffic:
+  seed: 1
+  rate_per_od: 100
+  od_flows:
+    - {from: "bottom0J0", to: "top1J3", rate: 100}
+    - {from: "bottom1J1", to: "top0J2", rate: 100}
+    - {from: "left0J0", to: "right1J3", rate: 100}
+    - {from: "left1J2", to: "right0J1", rate: 100}
+    - {from: "top0J2", to: "bottom1J1", rate: 100}
+    - {from: "top1J3", to: "bottom0J0", rate: 100}
+    - {from: "right0J1", to: "left1J2", rate: 100}
+    - {from: "right1J3", to: "left0J0", rate: 100}
+    - {from: "bottom0J0", to: "top0J2", rate: 120}
+    - {from: "bottom1J1", to: "top1J3", rate: 120}
+    - {from: "left0J0", to: "right0J1", rate: 120}
+    - {from: "left1J2", to: "right1J3", rate: 120}
+
+# Default route bottom0J0 -> J0J1 -> J1J3 -> J3top1. J1J3 is closed when the ambulance departs.
+# Without routing it learns of the closure only at J1 (local detour) and must turn back via J0.
+# With routing it plans around the TMC-reported closure at departure (J0J2 -> J2J3).
+emergency:
+  enabled: true
+  vehicles:
+    - id: amb1
+      depart: 240.0
+      from_edge: bottom0J0
+      to_edge: top1J3
+      approach_direction: S
+
+incident:
+  enabled: true
+  type: closure
+  edge: J1J3           # second edge of the ambulance's default route
+  lane: 0
+  position_frac: 0.5
+  start_time: 150.0
+  duration: 300.0      # still closed when the ambulance arrives
+  local_detour: true   # every driver, the ambulance's too, sees the blockage on arrival at J1

@@ -59,6 +59,10 @@ def main() -> None:
         help="Fraction of equipped vehicles that follow GLOSA eco-driving advice (0 = off)",
     )
     parser.add_argument(
+        "--ev-routing", type=str, default="off", choices=["on", "off"],
+        help="Ambulances choose and update their route with A* on the TMC map (off: scenario route)",
+    )
+    parser.add_argument(
         "--network", type=str, default=None, choices=["single", "grid2x2"],
         help="Override the scenario's network (default: the scenario YAML's network)",
     )
@@ -123,6 +127,7 @@ def main() -> None:
             aco_params=args.aco_params,
             step_delay=max(0.0, args.step_delay),
             eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
+            ev_routing=(args.ev_routing == "on"),
         )
 
         # In non-live mode, output result at the end as JSON on stdout

@@ -27,6 +27,7 @@ controllers:
     eta_threshold: 18.0
     clearance_time: 5.0
     recovery_time: 10.0
+    max_preempt_s: 90.0      # safety limit: a preemption never holds the other approaches red longer
     lookahead_junctions: 2
 
 vanet:
@@ -64,6 +65,13 @@ navigation:
   speed_smoothing_s: 60.0   # time constant (s) for smoothing TMC edge speeds, about one signal cycle; 0 = off
   junction_delay_s: 8.0     # expected wait (s) added per traffic light on a route (mean wait per signal
                             # measured in the navigation scenario: about 16 s per trip over 2 signals)
+
+ev_routing:
+  # Ambulance route choice on the TMC map (sim/navigation/ev_router.py); enabled per run with --ev-routing on
+  speed_smoothing_s: 60.0   # same smoothing as navigation
+  junction_delay_s: 0.0     # preemption turns the lights ahead green, so no signal wait is counted
+  hysteresis: 0.05          # switch only to a route at least 5% faster ...
+  min_gain_s: 3.0           # ... and at least 3 s faster than the rest of the current route
 
 eco:
   # GLOSA eco-driving (RSU SPaT broadcast -> speed advice); enabled per run with --eco-fraction
@@ -129,8 +137,10 @@ ga:
     scenario: navigation
     nav_fraction: 0.3
     w_edge_load_cv: 20.0      # w
-    max_search_ms: 2000.0     # route-search time per run above this is penalised
-    w_search_time: 0.01       # penalty per ms above max_search_ms
+    # Route-search work per run, counted in edge-cost evaluations (deterministic; wall-clock time
+    # depends on machine load). 500 k evaluations take about 2 s.
+    max_search_kevals: 500.0  # thousands of evaluations per run allowed without penalty
+    w_search_kevals: 0.04     # penalty per thousand evaluations above that (about 0.01 per ms)
     bounds:
       alpha: [0.2, 3.0, float]
       beta: [0.5, 5.0, float]
@@ -167,6 +177,11 @@ evaluation:
     scenarios: [normal, congested]
     controllers: [fixed, adaptive_vanet]
     fractions: [0.0, 0.3, 0.6, 1.0]
+    penetration: 1.0
+  evroute:
+    # Ambulance route choice: scenario route vs A* on the TMC map, with and without preemption
+    scenarios: [emergency, ev_incident, ev_congested]
+    controllers: [adaptive_ev_vanet, adaptive_vanet]
     penetration: 1.0
   quick:
     seeds: [1, 2]

@@ -1,9 +1,10 @@
 [
-  { "label": "Baseline: fixed-time signals", "scenario": "normal", "network": "grid2x2", "controller": "fixed", "nav": "none", "seed": 1 },
-  { "label": "VANET-sensed adaptive signals (50% equipped)", "scenario": "normal", "network": "grid2x2", "controller": "adaptive_vanet", "nav": "none", "seed": 1, "penetration": 0.5 },
-  { "label": "Ambulance with V2I/V2V preemption", "scenario": "emergency", "network": "grid2x2", "controller": "adaptive_ev_vanet", "nav": "none", "seed": 2, "loss": 0.1, "relay": "on" },
-  { "label": "Eco-driving: 60% of cars follow GLOSA speed advice", "scenario": "normal", "network": "grid2x2", "controller": "fixed", "nav": "none", "seed": 1, "eco_fraction": 0.6 },
-  { "label": "Navigation with A*", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "astar", "seed": 3 },
-  { "label": "Navigation with ACO", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "aco", "seed": 3 },
-  { "label": "Road closure detected through VANET", "scenario": "incident", "controller": "adaptive_ev_vanet", "nav": "astar", "seed": 1 }
+  {"label": "Baseline: fixed-time signals", "scenario": "normal", "network": "grid2x2", "controller": "fixed", "nav": "none", "seed": 1},
+  {"label": "VANET-sensed adaptive signals (50% equipped)", "scenario": "normal", "network": "grid2x2", "controller": "adaptive_vanet", "nav": "none", "seed": 1, "penetration": 0.5},
+  {"label": "Ambulance with V2I/V2V preemption and route choice", "scenario": "emergency", "network": "grid2x2", "controller": "adaptive_ev_vanet", "nav": "none", "seed": 2, "loss": 0.1, "relay": "on", "ev_routing": "on"},
+  {"label": "Ambulance plans around a road closure reported over VANET", "scenario": "ev_incident", "controller": "adaptive_ev_vanet", "nav": "none", "seed": 1, "ev_routing": "on"},
+  {"label": "Eco-driving: 60% of cars follow GLOSA speed advice", "scenario": "normal", "network": "grid2x2", "controller": "fixed", "nav": "none", "seed": 1, "eco_fraction": 0.6},
+  {"label": "Navigation with A*", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "astar", "seed": 3},
+  {"label": "Navigation with ACO", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "aco", "seed": 3},
+  {"label": "Road closure detected through VANET", "scenario": "incident", "controller": "adaptive_ev_vanet", "nav": "astar", "seed": 1}
 ]

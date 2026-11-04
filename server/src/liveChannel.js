@@ -152,7 +152,7 @@ export class LiveChannel {
     this._pendingVehicles = null;
     this.db.insertRun({ id: runId, scenario: entry.scenario, controller: entry.controller, nav: entry.nav,
       seed: entry.seed, penetration: entry.penetration, loss: entry.loss, relay: entry.relay,
-      eco_fraction: entry.eco_fraction ?? 0, source });
+      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', source });
     this.stats.runs_started += 1;
 
     const args = buildSimArgs(entry, runId, this.cfg, { gui: this.gui });

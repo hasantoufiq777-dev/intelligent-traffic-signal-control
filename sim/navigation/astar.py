@@ -22,6 +22,7 @@ def astar_search(
     closed_edges: Optional[Set[str]] = None,
     heuristic: str = "euclid",
     v_min: float = 1.0,
+    junction_delay_s: Optional[float] = None,
 ) -> Tuple[List[str], float, int]:
     """Execute A* heuristic search from start_edge to goal_edge.
 
@@ -33,6 +34,7 @@ def astar_search(
         closed_edges: Set of road edges currently blocked or closed.
         heuristic: 'euclid' for admissible Euclidean heuristic, 'zero' for exact Dijkstra.
         v_min: Minimum velocity floor for edge traversal time computation.
+        junction_delay_s: Wait added per traffic light (None = the graph's default).
 
     Returns:
         Tuple of (path, total_cost, expansions):
@@ -93,6 +95,7 @@ def astar_search(
                 speed_map=speed_map,
                 closed_edges=closed_edges,
                 v_min=v_min,
+                junction_delay_s=junction_delay_s,
             )
             if math.isinf(edge_cost):
                 continue

@@ -39,7 +39,7 @@ class FakeRunner:
             if "aco" in p:
                 a = p["aco"]
                 out.append({"nav_avg_travel_time": 100 + (a["beta"] - 3) ** 2, "edge_load_cv": 0.5,
-                            "route_search_ms": 10.0})
+                            "route_search_ms": 10.0, "route_search_evals": 1000})
             else:
                 wait = 10 + 0.1 * (p["min_green"] - 20) ** 2 + 0.01 * (p["max_green"] - 60) ** 2
                 out.append({"avg_waiting_time": wait, "ev_travel_time": 50.0, "missed_preemptions": 0})

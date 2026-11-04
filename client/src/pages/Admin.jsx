@@ -97,6 +97,7 @@ export default function Admin() {
               {sel('controller', options.controllers)}
               {sel('nav', options.nav)}
               {sel('relay', options.relay)}
+              {sel('ev_routing', options.ev_routing || ['off', 'on'])}
               <label className="field">network
                 <select value={form.network || ''} onChange={set('network')}>
                   <option value="">scenario default</option>
@@ -124,12 +125,13 @@ export default function Admin() {
         <div className="card-head"><h2 id="pl-h">Playlist</h2><span className="small muted">read-only · edit server/playlist.json</span></div>
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>#</th><th>Label</th><th>Scenario</th><th>Controller</th><th>Nav</th><th>Seed</th><th>Eco</th></tr></thead>
+            <thead><tr><th>#</th><th>Label</th><th>Scenario</th><th>Controller</th><th>Nav</th><th>Seed</th><th>Eco</th><th>Ambulance routing</th></tr></thead>
             <tbody>
               {(options?.playlist || []).map((p, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td><td>{p.label || ''}</td><td>{p.scenario}</td><td>{p.controller}</td>
                   <td>{p.nav}</td><td>{p.seed}</td><td>{p.eco_fraction ? `${Math.round(p.eco_fraction * 100)}%` : '–'}</td>
+                  <td>{p.ev_routing === 'on' ? 'on' : '–'}</td>
                 </tr>
               ))}
             </tbody>

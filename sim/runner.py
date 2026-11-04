@@ -85,44 +85,6 @@ def create_controller(
     raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
 
 
-def _reroute_evs_around(
-    sumo_api: Any,
-    graph: Any,
-    vehicle_ids: List[str],
-    closed_edges: set,
-    speed_map: Dict[str, float],
-    rerouted: set,
-) -> None:
-    """Emergency vehicles (always equipped) avoid edges the TMC reports as closed.
-
-    Uses A* on the TMC map. The EV's new route then flows into its EV_ALERTs, so
-    preemption follows the new route.
-    """
-    from sim.navigation.astar import astar_search
-
-    for vid in vehicle_ids:
-        try:
-            if sumo_api.vehicle.getTypeID(vid) != "emergency":
-                continue
-            curr = str(sumo_api.vehicle.getRoadID(vid))
-            if curr.startswith(":") or curr in closed_edges or curr not in graph.edges:
-                continue
-            route = list(sumo_api.vehicle.getRoute(vid))
-            idx = int(sumo_api.vehicle.getRouteIndex(vid))
-            if not any(e in closed_edges for e in route[idx + 1:]):
-                continue
-            path, cost, _exp = astar_search(
-                graph=graph, start_edge=curr, goal_edge=route[-1],
-                speed_map=speed_map, closed_edges=closed_edges,
-            )
-            if path and cost < float("inf"):
-                sumo_api.vehicle.setRoute(vid, path)
-                rerouted.add(vid)
-                logger.info("EV %s rerouted around closed edge(s) %s", vid, sorted(closed_edges))
-        except Exception as e:
-            logger.debug("EV incident reroute failed for %s: %s", vid, e)
-
-
 # SUMO-GUI colours matching the dashboard legend (RGBA)
 GUI_COLORS = {
     "plain": (128, 128, 128, 255),     # car without radio
@@ -210,8 +172,12 @@ def run_simulation(
     output_dir: Optional[Path] = None,
     step_delay: float = 0.0,
     eco_fraction: float = 0.0,
+    ev_routing: bool = False,
 ) -> Dict[str, Any]:
     """Run a single simulation run and return performance metrics.
+
+    ev_routing: ambulances choose and update their route with A* on the TMC map
+    (sim/navigation/ev_router.py). Off: they keep the route from the scenario file.
 
     output_dir: where tripinfo and the preemption-events CSV go (default results/).
     Parallel callers such as the GA pass a private directory so runs never share files.
@@ -412,7 +378,6 @@ def run_simulation(
             incident_mgr = IncidentManager(sumo_api, incident_cfg)
             oracle_provider.set_incident_source(incident_mgr.get_true_incidents)
         incident_speed = float(vanet_cfg.get("incident_speed", 1.0))
-        ev_informed_reroutes: set = set()
 
         for tid in tls_ids:
             controllers_map[tid] = create_controller(
@@ -453,6 +418,22 @@ def run_simulation(
             seed=seed,
             speed_smoothing_s=float(nav_cfg.get("speed_smoothing_s", 0.0)),
         )
+
+        # Emergency-vehicle route choice (off = ambulances keep their scenario route)
+        ev_router: Optional[Any] = None
+        if ev_routing:
+            from sim.navigation.ev_router import EmergencyRouter
+
+            evr_cfg = base_config.get("ev_routing", {}) or {}
+            ev_router = EmergencyRouter(
+                sumo_api=sumo_api,
+                graph=edge_graph,
+                speed_smoothing_s=float(evr_cfg.get("speed_smoothing_s", nav_cfg.get("speed_smoothing_s", 0.0))),
+                junction_delay_s=float(evr_cfg.get("junction_delay_s", 0.0)),
+                hysteresis=float(evr_cfg.get("hysteresis", 0.05)),
+                min_gain_s=float(evr_cfg.get("min_gain_s", 3.0)),
+                gui=gui,
+            )
 
         # Eco-driving (GLOSA): RSUs broadcast SPaT, eco cars follow speed advice
         if eco_on and vanet_net is not None:
@@ -621,8 +602,12 @@ def run_simulation(
                 for e, k in tmc_incidents.items():
                     if k != "edge_blocked":
                         speed_map[e] = incident_speed
-                if closed_edges:
-                    _reroute_evs_around(sumo_api, edge_graph, active_vehs, closed_edges, speed_map, ev_informed_reroutes)
+            if ev_router is not None:
+                ev_router.step(t, active_vehs, speed_map=speed_map, closed_edges=closed_edges,
+                               incident_edges=set(tmc_incidents) or None)
+                if live:
+                    for e_ev in ev_router.pop_events():
+                        emit_json_line(protocol_event(e_ev, run_id, t))
             navigator.step(
                 sim_time=t,
                 speed_map=speed_map,
@@ -779,6 +764,12 @@ def run_simulation(
     nav_metrics = navigator.get_nav_metrics()
     result_payload.update(nav_metrics)
 
+    # Emergency-vehicle routing (null when routing is off)
+    result_payload["ev_routing"] = bool(ev_routing)
+    result_payload.update({"ev_reroutes": None, "ev_reroutes_closure": None, "ev_route_checks": None})
+    if ev_router is not None:
+        result_payload.update(ev_router.get_metrics())
+
     # Eco-driving and emission fields (eco-specific ones stay null when eco-driving is off)
     result_payload["eco_fraction"] = float(eco_fraction or 0.0)
     for key in ("co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
@@ -806,7 +797,9 @@ def run_simulation(
     })
     if incident_mgr is not None:
         result_payload.update(incident_mgr.get_metrics())
-        rerouted = set(incident_mgr.local_detour_vids) | set(ev_informed_reroutes)
+        rerouted = set(incident_mgr.local_detour_vids)
+        if ev_router is not None:
+            rerouted |= {r["vehicle_id"] for r in ev_router.reroutes if incident_mgr.is_active_window(r["time"])}
         rerouted |= {vid for (rt, vid) in navigator.reroute_log if incident_mgr.is_active_window(rt)}
         result_payload["incident_rerouted_vehicles"] = len(rerouted)
 

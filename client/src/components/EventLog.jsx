@@ -8,6 +8,7 @@ const ICON = {
   incident_detected: ['🔎', 'Incident detected'],
   incident_end: ['✔', 'Incident cleared'],
   reroute: ['↪', 'Reroute'],
+  ev_reroute: ['🚑', 'Ambulance rerouted'],
 };
 
 export default function EventLog({ events, limit = 80, filter }) {

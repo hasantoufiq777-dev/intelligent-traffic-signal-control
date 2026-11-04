@@ -12,6 +12,7 @@ const TABS = [
   { id: 'ev', title: 'Emergency' },
   { id: 'nav', title: 'Navigation' },
   { id: 'eco', title: 'Eco-driving' },
+  { id: 'evroute', title: 'Ambulance routing' },
 ];
 
 const METRIC_LABEL = {
@@ -25,6 +26,7 @@ const METRIC_LABEL = {
   co2_g_per_km: 'CO₂ (g/km)', fuel_l_per_100km: 'Fuel (L/100 km)', stops_per_vehicle: 'Stops per vehicle',
   co2_g_per_km_eco: 'CO₂ eco cars', co2_g_per_km_non: 'CO₂ other cars', stops_per_vehicle_eco: 'Stops eco cars',
   stops_per_vehicle_non: 'Stops other cars', eco_advice_share_slow: 'Slow-advice share', spat_pdr: 'SPaT delivery',
+  ev_reroutes: 'Ambulance reroutes',
 };
 
 const KEY_METRICS = {
@@ -32,6 +34,7 @@ const KEY_METRICS = {
   ev: ['ev_travel_time', 'avg_waiting_time', 'missed_preemptions', 'pdr'],
   nav: ['avg_travel_time', 'nav_avg_travel_time', 'nonnav_avg_travel_time', 'edge_load_cv', 'route_search_ms'],
   eco: ['co2_g_per_km', 'fuel_l_per_100km', 'stops_per_vehicle', 'avg_travel_time'],
+  evroute: ['ev_travel_time', 'avg_waiting_time', 'missed_preemptions', 'ev_reroutes'],
 };
 
 const param = (label, name) => {
@@ -161,6 +164,7 @@ function SuiteCharts({ suite, scen, cfgs }) {
       </div>
     );
   }
+  if (suite === 'evroute') return null; // table only: route_off vs route_on per controller
   const ctrls = [...new Set(Object.keys(cfgs).map((l) => l.split('@')[0]))];
   return (
     <div className="overview-grid">

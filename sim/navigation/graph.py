@@ -39,6 +39,8 @@ class EdgeGraph:
         # Expected wait at a traffic light, added to every edge that ends at one (navigation.junction_delay_s).
         # Without it a detour through extra signals looks as cheap as its driving time alone.
         self.junction_delay_s: float = 0.0
+        # Number of edge-cost evaluations so far: a deterministic measure of route-search work
+        self.cost_evals: int = 0
 
     @classmethod
     def from_net_file(cls, net_path: Union[str, Path]) -> EdgeGraph:
@@ -106,12 +108,15 @@ class EdgeGraph:
         speed_map: Optional[Dict[str, float]] = None,
         closed_edges: Optional[Set[str]] = None,
         v_min: float = 1.0,
+        junction_delay_s: Optional[float] = None,
     ) -> float:
         """Compute the dynamic travel time cost of traversing edge_id in seconds.
 
-        Cost = length / max(speed, v_min), plus junction_delay_s if the edge ends at a traffic light.
+        Cost = length / max(speed, v_min), plus a junction delay if the edge ends at a traffic light
+        (junction_delay_s, or the graph's default when None).
         Closed edges (due to incidents or road closures) incur infinite cost.
         """
+        self.cost_evals += 1
         if closed_edges and edge_id in closed_edges:
             return float("inf")
 
@@ -129,5 +134,46 @@ class EdgeGraph:
         effective_speed = max(speed, float(v_min))
         cost = node.length / effective_speed
         if node.signalized_end:
-            cost += self.junction_delay_s
+            cost += self.junction_delay_s if junction_delay_s is None else float(junction_delay_s)
         return cost
+
+
+class SpeedSmoother:
+    """Exponentially smoothed TMC edge speeds (time constant tau_s; 0 = pass the raw map through).
+
+    A queue waiting at a red light makes an approach's raw speed drop near 0 for a few seconds.
+    Smoothed over about one signal cycle, only congestion that lasts shows up in route costs.
+    Edges without a report relax towards their free-flow speed.
+    """
+
+    def __init__(self, graph: EdgeGraph, tau_s: float = 0.0) -> None:
+        self.graph = graph
+        self.tau_s = max(0.0, float(tau_s))
+        self._ema: Dict[str, float] = {}
+        self._time: Optional[float] = None
+
+    def update(
+        self, sim_time: float, speed_map: Optional[Dict[str, float]], keep_raw: Optional[Set[str]] = None
+    ) -> Optional[Dict[str, float]]:
+        """Fold in one speed map and return the smoothed map.
+
+        keep_raw: edges whose raw value is used as is (incident edges must take effect at once).
+        """
+        import math
+
+        if self.tau_s <= 0.0 or speed_map is None:
+            return speed_map
+        dt = 1.0 if self._time is None else max(0.0, sim_time - self._time)
+        if dt > 0.0 or not self._ema:
+            a = 1.0 - math.exp(-dt / self.tau_s) if dt > 0.0 else 1.0
+            for eid, node in self.graph.edges.items():
+                obs = speed_map.get(eid)
+                target = obs if (obs is not None and obs > 0.0) else node.free_flow_speed
+                prev = self._ema.get(eid)
+                self._ema[eid] = target if prev is None else prev + a * (target - prev)
+            self._time = sim_time
+        out = dict(self._ema)
+        for eid in keep_raw or ():
+            if eid in speed_map:
+                out[eid] = speed_map[eid]
+        return out

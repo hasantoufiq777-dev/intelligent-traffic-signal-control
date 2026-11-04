@@ -36,6 +36,7 @@ class PreemptionController(BaseController):
         self.clearance_time: float = float(self.params.get("clearance_time", 5.0))
         self.recovery_time: float = float(self.params.get("recovery_time", 10.0))
         self.lookahead_junctions: int = int(self.params.get("lookahead_junctions", 2))
+        self.max_preempt_s: float = float(self.params.get("max_preempt_s", 90.0))
 
         # Instantiate underlying adaptive controller
         self.adaptive_controller = AdaptiveController(
@@ -272,6 +273,30 @@ class PreemptionController(BaseController):
                 ev_cleared = True
             elif active_rec.get("dist", 100.0) <= 0.0:
                 ev_cleared = True
+            elif str(active_rec.get("approach", self.active_ev_approach)) != self.active_ev_approach:
+                # The EV now arrives from another side: it changed route (or turned back) after this
+                # junction gave it green. Holding the old approach green would keep its new approach
+                # red for good. Close by: move the green to the new approach. Further away: end this
+                # preemption; it triggers again when the EV is within eta_threshold.
+                new_app = str(active_rec.get("approach"))
+                if float(active_rec.get("eta", 999.0)) <= self.eta_threshold and self._start_ev_only_green(new_app):
+                    self.events_queue.append({
+                        "kind": "preempt_start", "tls": self.tls_id,
+                        "detail": f"{self.active_ev_id} now arrives on approach {new_app}: green moved there",
+                    })
+                    logger.info("[%s] EV %s changed approach %s -> %s: green moved",
+                                self.tls_id, self.active_ev_id, self.active_ev_approach, new_app)
+                    self.active_ev_approach = new_app
+                    self.clearance_timer = 0.0
+                    self.preempt_state = "TRANSITION"
+                    return
+                ev_cleared = True
+            if not ev_cleared and sim_time - self.preempt_start_time > self.max_preempt_s:
+                # Safety limit, as in real preemption systems: never hold the other approaches red forever
+                logger.warning("[%s] Preemption for %s ended after the %.0f s limit",
+                               self.tls_id, self.active_ev_id, self.max_preempt_s)
+                ev_cleared = True
+                self.clearance_timer = self.clearance_time
 
             if ev_cleared:
                 self.clearance_timer += 1.0

@@ -225,6 +225,27 @@ stateDiagram-v2
   - `adaptive_ev` uses true EV positions (oracle).
   - `adaptive_ev_vanet` uses only EV_ALERTs received by the junction's RSU. It dead-reckons the distance along the route, and an alert older than `alert_timeout` (2 s) means "no EV".
 - **Missed preemption.** An EV drove through a junction whose preemption never triggered for it.
+- **EV changes approach.** While a junction holds green for an EV, it checks the side the EV now arrives from. If the EV changed route (or turned back) and now arrives from another approach, the green moves there through yellow and all-red when the EV is within `eta_threshold`. Otherwise the preemption ends and triggers again when the EV comes close (section 10.2).
+- **Safety limit.** A preemption never lasts longer than `max_preempt_s` (90 s); after that the junction exits and recovers as usual.
+
+### 5.5 Ambulance route choice (`--ev-routing on`)
+
+Preemption clears the lights on the ambulance's route; route choice picks that route. The ambulance is always equipped, so it receives the TMC map (smoothed edge speeds and the incident map) over V2I. `sim/navigation/ev_router.py` plans with A\* on that map:
+
+- **When.** At departure, each time the ambulance enters a new edge (where its next turn can still change), and at once when the TMC reports a new closure.
+- **Cost.** Edge cost as in section 6 with the same 60 s speed smoothing, but **no signal wait** (`ev_routing.junction_delay_s` = 0): preemption turns the lights ahead green.
+- **Switching.** Always when a closed edge lies ahead. Otherwise only to a route at least 5% and 3 s faster than the rest of the current route (`hysteresis`, `min_gain_s`), so it does not flip between near-equal routes.
+- **Preemption follows the route.** EV_ALERTs carry the ambulance's route, so the junctions on the new route preempt and those it left stop.
+- **Off (default).** The ambulance keeps the route from the scenario file. It avoids a closure only when its driver sees the blockage on arrival (the incident scenario's local-detour rule, which applies to every vehicle). Normal-car navigation (section 6) never reroutes an ambulance.
+
+Two scenarios test it:
+
+| Scenario | Situation | Without route choice | With route choice |
+|---|---|---|---|
+| `ev_incident` | J1J3 closed when the ambulance departs; it is the second edge of its default route | sees the closure at J1, turns back via J1J0, J0J2 | plans J0J2, J2J3 at departure |
+| `ev_congested` | Heavy demand: the two heavy diagonal flows load J0J1, J1J3 | queues on its default corridor | takes the freer parallel route |
+
+The `evroute` evaluation suite compares the scenario route with route choice, with and without preemption, on these two scenarios and the normal `emergency` scenario.
 
 ---
 
@@ -322,7 +343,7 @@ sequenceDiagram
 | Target | Chromosome | Fitness (minimise) | Evaluated on |
 |---|---|---|---|
 | `signals` | min_green, max_green, queue_threshold, decision_interval, eta_threshold, alert_interval, beacon_interval | avg_waiting_time + w1 · ev_travel_time + w2 · missed_preemptions (+ penalty) | `adaptive_ev_vanet`, scenarios emergency and congested on grid2x2 |
-| `aco` | alpha, beta, rho, n_ants, n_iterations, Q, elite_k | nav_avg_travel_time + w · edge_load_cv + penalty for route-search time above a limit | `adaptive_vanet` with `--nav aco`, nav-fraction 0.3, navigation scenario |
+| `aco` | alpha, beta, rho, n_ants, n_iterations, Q, elite_k | nav_avg_travel_time + w · edge_load_cv + penalty for route-search work above a limit (edge-cost evaluations, see below) | `adaptive_vanet` with `--nav aco`, nav-fraction 0.3, navigation scenario |
 
 Both targets are tuned at one communication condition (penetration 0.5, loss 0.1, range 300 m), averaged over tuning seeds 101-103. Each run lasts `ga.eval_max_steps` (600 s) to keep tuning affordable.
 
@@ -345,6 +366,7 @@ The GA optimises on seeds 101-103, which may simply fit those traffic samples. T
 
 ### 8.4 Limits
 - Fitness uses shortened runs (600 s), so tuned values are tuned for that horizon.
+- **Search cost is counted, not timed.** The ACO fitness first penalised route-search time in milliseconds. Wall-clock time depends on how busy the computer is: the same default ACO setting scored 163 in one held-out check and 137 in another, with almost identical travel times. The penalty now counts edge-cost evaluations during route search (`route_search_evals`; 500 k evaluations are free, about 2 s, then 0.04 per thousand), so a chromosome always gets the same fitness. Search time in ms is still reported.
 - The full evaluation (section 9) uses full-length runs, so tuned parameters are checked on a horizon they were not tuned for.
 - `avg_waiting_time` counts finished trips only. A setting that holds vehicles until after the run ends is not fully penalised. The held-out table reports throughput so this can be checked.
 - 12 × 12 is a small search for 7 genes. The result is an improvement over the defaults, not an optimum.
@@ -396,6 +418,12 @@ The first full evaluation showed navigating vehicles **slower** than the others,
 3. **Signals cost nothing.** A detour crosses extra signals, but only driving time was counted.
 
 The fixes are in section 6: the current edge is left out of both costs, edge speeds are smoothed over about one cycle, and each signal on a route adds an expected wait. With them, on the same run, navigating cars drove 940 m and needed 100 s, against 106 s for the others. The ACO GA target and the navigation suite were rerun with the fixed model, and the earlier navigation numbers are superseded.
+
+### 10.2 Preemption deadlock when an EV changes approach
+
+Testing ambulance routing showed an ambulance that never arrived. In `ev_incident` without route choice, the ambulance passed J0 from the south (J0 preempted for approach S), saw the closure at J1 and turned back towards J0, now arriving from the east. J0 still saw the EV ahead on its route, so it never ended the south preemption: east stayed red and the ambulance waited at J0 for the rest of the run. The approach-change rule and the 90 s limit in section 5.4 fix it (unit tests in `sim/tests/test_ev_only_green.py`). The fix does not change any earlier result: all 120 runs of the `ev` evaluation suite were rerun and are identical.
+
+A second finding: the old closure-only EV reroute in the runner never acted, because the local-detour rule rerouted the ambulance first. It was replaced by the route choice of section 5.5.
 
 ---
 

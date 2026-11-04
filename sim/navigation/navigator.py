@@ -18,7 +18,7 @@ import numpy as np
 
 from sim.navigation.aco import AcoRouter
 from sim.navigation.astar import astar_search
-from sim.navigation.graph import EdgeGraph
+from sim.navigation.graph import EdgeGraph, SpeedSmoother
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +66,7 @@ class VehicleNavigator:
         # waiting at a red light makes the raw speed drop near 0 for a few seconds; unsmoothed, every
         # red light looks like a jam and navigating cars detour around it.
         self.speed_smoothing_s = max(0.0, float(speed_smoothing_s))
-        self._speed_ema: Dict[str, float] = {}
-        self._ema_time: Optional[float] = None
+        self._smoother = SpeedSmoother(graph, self.speed_smoothing_s)
 
         # ACO router instance
         self.aco_router = AcoRouter(
@@ -91,6 +90,8 @@ class VehicleNavigator:
         self.reroute_log: List[Tuple[float, str]] = []  # (time, vehicle id) of applied reroutes
         self.total_search_expansions: int = 0
         self.total_search_ms: float = 0.0
+        # Edge-cost evaluations during route search: deterministic, unlike wall-clock time
+        self.total_search_evals: int = 0
         self.step_edge_loads: List[List[int]] = []
 
         # Event queue and rate limiting (max 5 per second)
@@ -101,28 +102,14 @@ class VehicleNavigator:
     def smoothed_speeds(
         self, sim_time: float, speed_map: Optional[Dict[str, float]], keep_raw: Optional[Set[str]] = None
     ) -> Optional[Dict[str, float]]:
-        """Exponentially smoothed edge speeds; edges without a report relax towards free-flow speed.
+        """Smoothed edge speeds (see SpeedSmoother); keep_raw edges use the raw value."""
+        return self._smoother.update(sim_time, speed_map, keep_raw=keep_raw)
 
-        keep_raw: edges whose raw value is used as is (incident edges must take effect at once).
-        """
-        if self.speed_smoothing_s <= 0.0 or speed_map is None:
-            return speed_map
-        dt = 1.0 if self._ema_time is None else max(0.0, sim_time - self._ema_time)
-        if dt <= 0.0 and self._speed_ema:
-            out = dict(self._speed_ema)
-        else:
-            a = 1.0 - math.exp(-dt / self.speed_smoothing_s) if dt > 0.0 else 1.0
-            for eid, node in self.graph.edges.items():
-                obs = speed_map.get(eid)
-                target = obs if (obs is not None and obs > 0.0) else node.free_flow_speed
-                prev = self._speed_ema.get(eid)
-                self._speed_ema[eid] = target if prev is None else prev + a * (target - prev)
-            self._ema_time = sim_time
-            out = dict(self._speed_ema)
-        for eid in keep_raw or ():
-            if eid in speed_map:
-                out[eid] = speed_map[eid]
-        return out
+    def _is_emergency(self, vid: str) -> bool:
+        try:
+            return str(self.sumo_api.vehicle.getTypeID(vid)) == "emergency"
+        except Exception:
+            return False
 
     def pop_events(self) -> List[Dict[str, Any]]:
         """Pop all pending navigation events."""
@@ -182,9 +169,10 @@ class VehicleNavigator:
                 is_equipped = True
                 if equipped_check_fn is not None:
                     is_equipped = equipped_check_fn(vid)
+                # Emergency vehicles have their own router (sim/navigation/ev_router.py)
                 self.is_nav_vehicle[vid] = is_vehicle_navigating(
                     vid=vid, nav_fraction=self.nav_fraction, seed=self.seed
-                ) if is_equipped else False
+                ) if (is_equipped and not self._is_emergency(vid)) else False
 
             try:
                 road_id = self.sumo_api.vehicle.getRoadID(vid)
@@ -276,6 +264,7 @@ class VehicleNavigator:
 
             # Search alternative route
             t_start = time.perf_counter()
+            evals_start = self.graph.cost_evals
             new_path: List[str] = []
             new_cost: float = float("inf")
             expansions: int = 0
@@ -314,6 +303,7 @@ class VehicleNavigator:
             t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
             self.total_search_ms += t_elapsed_ms
             self.total_search_expansions += expansions
+            self.total_search_evals += self.graph.cost_evals - evals_start
 
             # Apply route if strictly advantageous under hysteresis threshold
             if new_path and new_path != remaining_route:
@@ -353,6 +343,7 @@ class VehicleNavigator:
             "max_edge_load": max_load,
             "route_search_expansions": self.total_search_expansions,
             "route_search_ms": round(self.total_search_ms, 1),
+            "route_search_evals": self.total_search_evals,
             "reroute_count": self.reroute_count,
         }
 

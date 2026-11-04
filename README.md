@@ -5,6 +5,7 @@ junctions, V2V/V2I messages with range, loss and delay) drives the decisions:
 
 - **Adaptive signals** that read queues the roadside units estimate from vehicle beacons.
 - **Ambulance preemption** over V2I/V2V alerts. Only the ambulance's approach gets green, reached safely via yellow and all-red.
+- **Ambulance route choice:** the ambulance plans its route with A\* on the VANET traffic map, around closures and congested roads, and preemption follows the new route.
 - **Navigation** with A\* heuristic search and ant colony optimisation (ACO) on the VANET traffic map.
 - **Incident detection** from beacons (stopped vehicles), with rerouting and signal reaction.
 - **Eco-driving (GLOSA):** roadside units broadcast signal timing (SPaT) and eco cars get speed advice to arrive on green.
@@ -79,7 +80,7 @@ Pages:
 - `/admin`: start/stop runs; needs `ADMIN_TOKEN` from `server/.env`.
 
 With `LIVE_LOOP=true` (in `server/.env`) the playlist in `server/playlist.json` loops through baseline,
-VANET-adaptive, ambulance, eco-driving, A\*, ACO and road closure.
+VANET-adaptive, ambulance, ambulance around a road closure, eco-driving, A\*, ACO and road closure.
 
 **See it in SUMO-GUI.** Click **Open in SUMO-GUI** in the dashboard's top bar. It's shown only to a browser on the same computer as the gateway. The current run restarts in SUMO's own window; click again to close it. Or set `SIM_GUI=true` in `server/.env`, or run one simulation directly:
 ```bash
@@ -91,10 +92,10 @@ The simulation always uses real sizes.
 ## 3. Command line (one simulation)
 
 ```bash
-python sim/main.py --scenario <normal|congested|emergency|incident|navigation> --controller <controller>
+python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev_incident|ev_congested> --controller <controller>
                    [--network single|grid2x2] [--nav none|astar|aco|aco_tuned] [--seed 1]
                    [--penetration 0.5] [--loss 0.1] [--range 300] [--relay on|off] [--nav-fraction 0.3]
-                   [--eco-fraction 0.6] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
+                   [--eco-fraction 0.6] [--ev-routing on|off] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
 ```
 - **Controllers:**
   - `fixed`, `adaptive` (true queues), `adaptive_vanet` (VANET queues);
@@ -108,7 +109,7 @@ python sim/main.py --scenario <normal|congested|emergency|incident|navigation> -
 |---|---|---|
 | `npm run sim:tune` | GA tuning, signals then ACO, held-out check on seeds 1-10 → `results/ga/` | about 45 min each |
 | `npm run sim:experiments:quick` | All suites, 2 seeds, short runs → `results/quick/` | about 5 min |
-| `npm run sim:experiments` | Full evaluation: suites signals, ev, nav, eco; 10 seeds → `results/summary.json`, `summary.md`, plots | 1-2 h |
+| `npm run sim:experiments` | Full evaluation: suites signals, ev, evroute, nav, eco; 10 seeds → `results/summary.json`, `summary.md`, plots | 1-2 h |
 
 The evaluation resumes where it stopped (`results/raw.csv`). It prints a runtime estimate first, and configurations
 that need GA output are skipped until `npm run sim:tune` has run. The Results page reads `results/summary.json`.
@@ -122,9 +123,10 @@ paragraphs there are written by hand, so regenerating replaces them with placeho
 |---|---|
 | Adaptive signals with VANET sensing | Waiting time −36 to −39% vs fixed-time from 80% penetration (oracle −38%); worse than fixed-time at 20% |
 | Ambulance preemption over VANET | Ambulance travel time −25 to −27% vs adaptive at 0-50% packet loss, same as oracle; 0 missed junctions |
+| Ambulance route choice | Road closed ahead: −44% (113.7 s → 63.3 s); congested corridor: −13%; normal traffic: no change |
 | Navigation (A\*, ACO) | Navigating cars 0-12% faster than others; network-wide −6% with an incident (A\*, 50%), neutral without |
 | Eco-driving (GLOSA) | Fixed-time signals, all cars eco: stops −40%, waiting −31%, CO₂ −3%; almost no effect with adaptive signals |
-| GA tuning on held-out seeds | ACO −27 to −40% fitness (10/10 seeds); signals −1.5 to −3.8%, not significant |
+| GA tuning on held-out seeds | ACO −35 to −44% fitness (10/10 seeds); signals −1.5 to −3.8%, not significant |
 
 ## 5. Tests
 

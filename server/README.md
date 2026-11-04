@@ -68,7 +68,7 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | GET | `/api/sumo/gui` | `{available, enabled, mock, running}`. `available` is true only for a browser on the gateway's computer (or with the admin token), with the real simulation |
 | POST | `/api/sumo/gui` | `{enabled: true\|false}`: show the live run in the SUMO-GUI window on the gateway's computer. The current run restarts with or without the window. Local requests or admin token only; 409 with the mock |
 | GET | `/api/metrics` | Process CPU/memory and broadcast counters (used by the load test) |
-| POST | `/api/live/start` | Admin. Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?}`; unknown keys are rejected. 202 `{run_id}` |
+| POST | `/api/live/start` | Admin. Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?, ev_routing? ('on'|'off'), network?}`; unknown keys are rejected. 202 `{run_id}` |
 | POST | `/api/live/stop` | Admin. Stops the run and pauses the playlist until the next start |
 
 ## Socket.io (viewers are read-only; everyone joins room `live`)

@@ -56,7 +56,7 @@ VANET_GENES = {"alert_interval", "beacon_interval"}
 RESULT_KEYS = (
     "avg_waiting_time", "avg_travel_time", "ev_travel_time", "missed_preemptions",
     "throughput_veh_per_hr", "pdr", "nav_avg_travel_time", "nonnav_avg_travel_time",
-    "edge_load_cv", "route_search_ms",
+    "edge_load_cv", "route_search_ms", "route_search_evals",
 )
 
 
@@ -192,8 +192,10 @@ def run_cost(target: str, res: Dict[str, Any], ga_cfg: Dict[str, Any], task: Dic
     if nav_tt <= 0.0:
         return penalty  # no navigating vehicle finished
     cost = nav_tt + float(t_cfg["w_edge_load_cv"]) * float(res.get("edge_load_cv") or 0.0)
-    over = float(res.get("route_search_ms") or 0.0) - float(t_cfg["max_search_ms"])
-    return cost + float(t_cfg["w_search_time"]) * max(0.0, over)
+    # Search cost in edge-cost evaluations, not milliseconds: wall-clock time depends on how busy
+    # the machine is, which made the fitness of the same chromosome vary between runs.
+    over = float(res.get("route_search_evals") or 0.0) / 1000.0 - float(t_cfg["max_search_kevals"])
+    return cost + float(t_cfg["w_search_kevals"]) * max(0.0, over)
 
 
 class Runner:

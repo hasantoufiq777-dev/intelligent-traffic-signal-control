@@ -37,7 +37,7 @@ function adviceHeadline(a, distM) {
   return 'No advice: the light timing is not predictable right now';
 }
 
-export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow }) {
+export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow, events = [] }) {
   if (!followId) {
     return (
       <section className="card stack" aria-labelledby="mycar-h">
@@ -104,6 +104,12 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow 
           <span className="small muted">Emergency vehicle</span>
           <span className="headline">Priority: lights ahead turn green for this ambulance</span>
           <span className="small">Its alerts reach the roadside units over V2I/V2V; each junction on its route switches to green before it arrives (see Events).</span>
+          {(() => {
+            const last = [...events].reverse().find((e) => e.kind === 'ev_reroute' && e.detail?.startsWith(`${followId} `));
+            return last
+              ? <span className="small"><strong>Route:</strong> at {last.t}s {last.detail.slice(followId.length + 1)}</span>
+              : null;
+          })()}
         </div>
       ) : (
       <div className={`advice advice-${advice.advice}`}>

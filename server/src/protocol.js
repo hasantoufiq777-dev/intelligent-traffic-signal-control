@@ -2,13 +2,14 @@
 import { z } from 'zod';
 
 export const OPTIONS = {
-  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation'],
+  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested'],
   controllers: ['fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
+  ev_routing: ['on', 'off'],
   networks: ['single', 'grid2x2'],
   defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 1.0, loss: 0.0, relay: 'off',
-    eco_fraction: 0.0 },
+    eco_fraction: 0.0, ev_routing: 'off' },
 };
 
 /** A live run request (admin start body, playlist entry). Unknown keys are rejected. */
@@ -22,6 +23,7 @@ export const RunEntrySchema = z
     loss: z.coerce.number().min(0).max(1).default(0.0),
     relay: z.enum(OPTIONS.relay).default('off'),
     eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
+    ev_routing: z.enum(OPTIONS.ev_routing).default('off'), // ambulances pick their route on the TMC map
     network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
     label: z.string().max(120).optional(),
   })
@@ -72,6 +74,7 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--loss', String(entry.loss),
     '--relay', entry.relay,
     '--eco-fraction', String(entry.eco_fraction ?? 0),
+    '--ev-routing', entry.ev_routing ?? 'off',
     '--live',
   ];
   if (entry.network) args.push('--network', entry.network);
