@@ -27,6 +27,8 @@
   --map-bg: #e9e8e2;
   --car: #57554f;
   --car-outline: rgba(0, 0, 0, 0.5);
+  --zone: #f0a020;       /* accident zone: shared lane */
+  --zone-strong: #b86e00;
   --driver: #8a44d6; /* the car a viewer drives (SUMO-GUI: purple too) */
   --accent: var(--series-1);
   --radius: 10px;
@@ -59,6 +61,8 @@
     --map-bg: #141413;
     --car: #b9b7af;
     --car-outline: rgba(255, 255, 255, 0.55);
+    --zone: #f5b23c;
+    --zone-strong: #ffd27a;
     --driver: #a66ef0;
   }
 }
@@ -87,6 +91,8 @@
   --map-bg: #141413;
   --car: #b9b7af;
   --car-outline: rgba(255, 255, 255, 0.55);
+  --zone: #f5b23c;
+  --zone-strong: #ffd27a;
   --driver: #a66ef0;
 }
 

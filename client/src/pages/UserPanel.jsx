@@ -7,10 +7,11 @@ import EventLog from '../components/EventLog.jsx';
 import MyCarPanel from '../components/MyCarPanel.jsx';
 import NowPlaying from '../components/NowPlaying.jsx';
 import TrafficMap from '../components/TrafficMap.jsx';
+import ZonePanel from '../components/ZonePanel.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
 
 const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end', 'ev_reroute',
-  'driver_start', 'driver_end']);
+  'driver_start', 'driver_end', 'zone_activated', 'zone_guided', 'zone_ev_priority', 'zone_deactivated']);
 
 export default function UserPanel() {
   const live = useLive();
@@ -39,11 +40,13 @@ export default function UserPanel() {
             network={live.network}
             vehicles={live.vehicles}
             tlsState={live.latest?.tls}
+            zoneState={live.latest?.zone}
             followId={live.followId}
             onSelect={live.follow}
           />
         </section>
         <div className="stack">
+          <ZonePanel zone={live.latest?.zone} />
           <DrivePanel live={live} />
           {!live.myDrive?.active && <MyCarPanel
             followId={live.followId}

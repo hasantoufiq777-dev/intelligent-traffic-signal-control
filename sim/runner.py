@@ -259,6 +259,14 @@ def run_simulation(
     incident_cfg: Dict[str, Any] = dict(scenario_cfg.get("incident") or {})
     if params and isinstance(params.get("incident"), dict):
         incident_cfg.update(params["incident"])
+
+    # Accident work zone (network grid2x2_zone): the crash is an incident; the zone controller
+    # handles the shared lane (alternating) or closes the westbound road (closure)
+    from sim.scenarios.accident_zone import ZONE_NETWORK, ZONE_TLS, incident_events, zone_config
+
+    zone_cfg: Optional[Dict[str, Any]] = zone_config(scenario_cfg, params) if network == ZONE_NETWORK else None
+    if zone_cfg is not None and zone_cfg.get("enabled"):
+        incident_cfg = incident_events(zone_cfg)
     incident_enabled = bool(incident_cfg.get("enabled", False))
     # The process id keeps parallel runs that share a run_id (for example the default "r1") from
     # overwriting each other's route and tripinfo files.
@@ -283,6 +291,8 @@ def run_simulation(
     sumo_binary = sumolib.checkBinary("sumo-gui" if gui else "sumo")
     if network == "grid2x2":
         net_path = project_root / "sim" / "sumo" / "grid2x2.net.xml"
+    elif network == ZONE_NETWORK:
+        net_path = project_root / "sim" / "sumo" / "grid2x2_zone.net.xml"
     else:
         net_path = project_root / "sim" / "sumo" / "net.xml"
 
@@ -317,7 +327,7 @@ def run_simulation(
     if network == "single" and decorations_file.exists():
         sumo_cmd.extend(["-a", str(decorations_file)])
 
-    settings_name = "gui-settings-grid.cfg.xml" if network == "grid2x2" else "gui-settings.cfg.xml"
+    settings_name = "gui-settings-grid.cfg.xml" if network in ("grid2x2", ZONE_NETWORK) else "gui-settings.cfg.xml"
     gui_settings_file = project_root / "sim" / "sumo" / settings_name
     if gui:
         if gui_settings_file.exists():
@@ -336,6 +346,7 @@ def run_simulation(
     eco_mgr: Optional[Any] = None
     queue_errors: List[float] = []
     collision_pairs: set = set()  # (collider, victim) pairs SUMO reported
+    zone_ctrl: Optional[Any] = None
 
     if live:
         emit_json_line({
@@ -347,7 +358,8 @@ def run_simulation(
 
     try:
         sumo_api.start(sumo_cmd)
-        tls_ids = list(sumo_api.trafficlight.getIDList())
+        # Junction signals only; the accident-zone signals belong to the zone controller
+        tls_ids = [t for t in sumo_api.trafficlight.getIDList() if t not in ZONE_TLS]
 
         vanet_cfg = base_config.get("vanet", {}).copy()
         vanet_cfg.update(tuned_vanet)
@@ -391,6 +403,25 @@ def run_simulation(
             incident_mgr = IncidentManager(sumo_api, incident_cfg)
             oracle_provider.set_incident_source(incident_mgr.get_true_incidents)
         incident_speed = float(vanet_cfg.get("incident_speed", 1.0))
+
+        if zone_cfg is not None:
+            from sim.controllers.zone import ZoneController
+
+            zone_params = dict(base_config.get("accident_zone", {}) or {})
+            zone_params.update({k: v for k, v in zone_cfg.items() if not isinstance(v, (dict, list))})
+            zone_ctrl = ZoneController(
+                sumo_api=sumo_api,
+                control=zone_cfg["control"],
+                params=zone_params,
+                vanet_net=vanet_net,
+                penetration=penetration,
+                range_m=range_m,
+                seed=seed,
+            )
+            if vanet_net is not None:
+                # Queues at the zone are managed: RSUs do not report them as incidents
+                for rsu in vanet_net.rsus.values():
+                    rsu.incident_ignore_edges = {"J2J3", "J3J2", "J2J3.z", "J3J2.cf"}
 
         for tid in tls_ids:
             controllers_map[tid] = create_controller(
@@ -472,7 +503,12 @@ def run_simulation(
         if live:
             from sim.live_vehicles import LiveVehicleTracker, build_network_message
 
-            emit_json_line(build_network_message(net_path, tls_ids, run_id))
+            net_msg = build_network_message(net_path, tls_ids, run_id)
+            if zone_ctrl is not None:
+                from sim.scenarios.accident_zone import zone_geometry
+
+                net_msg["zone"] = zone_geometry(net_path, zone_cfg)
+            emit_json_line(net_msg)
             vehicle_tracker = LiveVehicleTracker(sumo_api, tls_ids, penetration=penetration, seed=seed,
                                                  eco_mgr=eco_mgr, navigator=navigator)
 
@@ -546,6 +582,18 @@ def run_simulation(
 
             active_vehs = list(sumo_api.vehicle.getIDList())
             n_vehicles = len(active_vehs)
+
+            # Accident work zone: mode from the TMC incident map (VANET detection), then signals
+            tmc_map: Dict[str, str] = {}
+            if vanet_net is not None and incident_detection_on:
+                tmc_map = vanet_net.get_incidents()
+            elif incident_mgr is not None:
+                tmc_map = incident_mgr.get_true_incidents()
+            if zone_ctrl is not None:
+                zone_ctrl.step(t, active_vehs, tmc_map)
+                if live:
+                    for z_ev in zone_ctrl.pop_events():
+                        emit_json_line(protocol_event(z_ev, run_id, t))
 
             # Emergency vehicles (type looked up once per vehicle) and the junctions they cross
             for vid in active_vehs:
@@ -635,6 +683,13 @@ def run_simulation(
                 for e, k in tmc_incidents.items():
                     if k != "edge_blocked":
                         speed_map[e] = incident_speed
+            if zone_ctrl is not None:
+                # Zone: closed carriageway / contraflow lane, and the expected wait at the zone
+                closed_edges = set(closed_edges or ()) | zone_ctrl.closed_edges()
+                zone_speeds = zone_ctrl.speed_overrides()
+                if zone_speeds:
+                    speed_map = dict(speed_map)
+                    speed_map.update(zone_speeds)
             if ev_router is not None:
                 ev_router.step(t, active_vehs, speed_map=speed_map, closed_edges=closed_edges,
                                incident_edges=set(tmc_incidents) or None)
@@ -690,7 +745,7 @@ def run_simulation(
                     for a_ev in vanet_net.pop_events():
                         emit_json_line(protocol_event(a_ev, run_id, t))
 
-                emit_json_line({
+                state_msg: Dict[str, Any] = {
                     "type": "state",
                     "run_id": run_id,
                     "t": int(t),
@@ -709,7 +764,12 @@ def run_simulation(
                         "fuel_l_100km_eco": None, "fuel_l_100km_non": None,
                         "stops_eco": None, "stops_non": None, "spat_pdr": None,
                     },
-                })
+                }
+                if zone_ctrl is not None:
+                    state_msg["zone"] = zone_ctrl.live_block(t)
+                    # For the map only: whether the crash is in place (the zone reacts to the TMC report)
+                    state_msg["zone"]["accident"] = bool(incident_mgr is not None and incident_mgr.get_true_incidents())
+                emit_json_line(state_msg)
                 if vehicle_tracker is not None:
                     emit_json_line(vehicle_tracker.build(active_vehs, run_id, t))
                 if driver_mgr is not None:
@@ -832,6 +892,9 @@ def run_simulation(
     nav_metrics = navigator.get_nav_metrics()
     result_payload.update(nav_metrics)
 
+    if zone_ctrl is not None:
+        result_payload.update(zone_ctrl.get_metrics())
+
     # Emergency-vehicle routing (null when routing is off)
     result_payload["ev_routing"] = bool(ev_routing)
     result_payload.update({"ev_reroutes": None, "ev_reroutes_closure": None, "ev_route_checks": None})
@@ -869,6 +932,8 @@ def run_simulation(
         if ev_router is not None:
             rerouted |= {r["vehicle_id"] for r in ev_router.reroutes if incident_mgr.is_active_window(r["time"])}
         rerouted |= {vid for (rt, vid) in navigator.reroute_log if incident_mgr.is_active_window(rt)}
+        if zone_ctrl is not None:
+            rerouted |= zone_ctrl.rerouted  # sent through the contraflow lane or around the closed road
         result_payload["incident_rerouted_vehicles"] = len(rerouted)
 
         from sim.navigation.navigator import is_vehicle_navigating

@@ -8,6 +8,7 @@ junctions, V2V/V2I messages with range, loss and delay) drives the decisions:
 - **Ambulance route choice:** the ambulance plans its route with A\* on the VANET traffic map, around closures and congested roads, and preemption follows the new route.
 - **Navigation** with A\* heuristic search and ant colony optimisation (ACO) on the VANET traffic map.
 - **Incident detection** from beacons (stopped vehicles), with rerouting and signal reaction.
+- **Accident work zone:** when a crash blocks one side of a road, the other side's open lane is shared one direction at a time, with automatic signals at both ends, queue-based turn lengths, ambulance priority and rerouting (scenario `accident_zone`).
 - **Eco-driving (GLOSA):** roadside units broadcast signal timing (SPaT) and eco cars get speed advice to arrive on green.
 - **Offline GA tuning** of signal/VANET and ACO parameters, and a multi-seed **evaluation** with statistics.
 - **Driver mode:** one viewer at a time takes a car into the live run and drives it with Go / Ease off / Stop, with speed advice, ambulance warnings and a trip report.
@@ -93,8 +94,8 @@ The simulation always uses real sizes.
 ## 3. Command line (one simulation)
 
 ```bash
-python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev_incident|ev_congested> --controller <controller>
-                   [--network single|grid2x2] [--nav none|astar|aco|aco_tuned] [--seed 1]
+python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev_incident|ev_congested|accident_zone> --controller <controller>
+                   [--network single|grid2x2|grid2x2_zone] [--nav none|astar|aco|aco_tuned] [--seed 1]
                    [--penetration 0.5] [--loss 0.1] [--range 300] [--relay on|off] [--nav-fraction 0.3]
                    [--eco-fraction 0.6] [--ev-routing on|off] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
 ```
@@ -173,11 +174,11 @@ PROJECT_CONTEXT.md   project rules, interfaces and protocol
 package.json         root scripts (setup, dev, test, experiments)
 scripts/             setup.mjs, py.mjs
 sim/                 SUMO + Python simulation
-  sumo/              networks (net.xml single junction, grid2x2.net.xml), GUI settings
+  sumo/              networks (net.xml single junction, grid2x2.net.xml, grid2x2_zone.net.xml from generate_zone_net.py), GUI settings
   sensing.py         StateProvider (oracle) interface
   vanet/             channel, messages, nodes (RSU/TMC), network, alerts, glosa (eco-driving), sensing_vanet
   navigation/        graph, astar, aco, navigator
-  controllers/       base, fixed, adaptive, preemption
+  controllers/       base, fixed, adaptive, preemption, zone (accident work zone)
   optimizer/         ga_tuner
   analytics/         metrics, plots, evaluate, vanet_experiments
   scenarios/         *.yaml, generate_routes, route_alternatives, incident
@@ -208,5 +209,6 @@ docs/                method.md, demo_script.md, results_discussion.md
 - **A\* = Dijkstra in path quality.** A\* returns the same optimal path as Dijkstra for the same edge costs. Its gain is fewer node expansions; the contribution here is the VANET-derived edge costs and the comparison with ACO.
 - **Eco-driving needs predictable signals.** GLOSA helps most with fixed-time signals. Adaptive control and preemption make the timing uncertain, so the advisor gives less advice.
 - **Estimates only.** Fuel and CO₂ come from SUMO's HBEFA4 emission model.
+- **One accident zone.** The alternating one-way control runs on one road (J2-J3) of its own network variant, `grid2x2_zone`; the mock simulation shows the plain grid for it. Details and results: [docs/method.md](docs/method.md) section 13.
 - **Driver mode is a demo feature.** Only one viewer drives at a time (one shared simulation). The driven car is left out of the run's result metrics, but it does affect the traffic around it, so live runs with a driver are not used for evaluation.
 - **Simplified emergency vehicles.** Other cars do not form a rescue lane (no SUMO bluelight device), and ambulances obey red lights. Preemption is what clears their way.

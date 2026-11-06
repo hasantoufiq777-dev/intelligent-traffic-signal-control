@@ -205,7 +205,10 @@ class OracleStateProvider(StateProvider):
         if self._edge_info is None:
             self._edge_info = build_edge_info(self.sumo_api)
             try:
-                self._tls_set = set(self.sumo_api.trafficlight.getIDList())
+                from sim.scenarios.accident_zone import ZONE_TLS
+
+                # Junction signals only: the accident-zone signals (grid2x2_zone) are not junctions
+                self._tls_set = {t for t in self.sumo_api.trafficlight.getIDList() if t not in ZONE_TLS}
             except Exception:
                 self._tls_set = None
 

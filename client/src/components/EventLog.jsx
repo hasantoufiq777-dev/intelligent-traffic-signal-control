@@ -11,6 +11,11 @@ const ICON = {
   ev_reroute: ['🚑', 'Ambulance rerouted'],
   driver_start: ['🕹', 'Viewer drives'],
   driver_end: ['🏁', 'Drive ended'],
+  zone_activated: ['🚧', 'Accident zone'],
+  zone_switch: ['⇆', 'Zone turn'],
+  zone_guided: ['↰', 'Cars guided past the crash'],
+  zone_ev_priority: ['🚑', 'Ambulance priority at the zone'],
+  zone_deactivated: ['✔', 'Zone cleared'],
 };
 
 export default function EventLog({ events, limit = 80, filter }) {

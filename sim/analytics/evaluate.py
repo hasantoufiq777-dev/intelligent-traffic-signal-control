@@ -49,7 +49,7 @@ import yaml
 
 logger = logging.getLogger("evaluate")
 
-SUITES = ("signals", "ev", "nav", "eco", "evroute")
+SUITES = ("signals", "ev", "nav", "eco", "evroute", "zone")
 
 # Metrics summarised per suite (raw.csv keeps every field of the results dict)
 SUITE_METRICS: Dict[str, List[str]] = {
@@ -64,16 +64,22 @@ SUITE_METRICS: Dict[str, List[str]] = {
             "co2_g_per_km_eco", "co2_g_per_km_non", "stops_per_vehicle_eco", "stops_per_vehicle_non",
             "eco_advice_share_slow", "spat_pdr"],
     "evroute": ["ev_travel_time", "avg_waiting_time", "avg_travel_time", "missed_preemptions", "ev_reroutes"],
+    "zone": ["avg_travel_time", "avg_waiting_time", "ev_travel_time", "max_queue", "zone_max_queue_westbound",
+             "zone_max_queue_eastbound", "zone_ev_wait_s", "zone_switches", "zone_max_clearance_s", "zone_conflicts",
+             "collisions", "incident_rerouted_vehicles"],
 }
 HIGHER_IS_BETTER = {"throughput_veh_per_hr", "pdr"}
 # Metrics where "improvement" has no meaning (descriptive only)
 NO_IMPROVEMENT = {"route_search_expansions", "reroute_count", "avg_hops", "incident_rerouted_vehicles",
                   "eco_advice_share_slow", "spat_pdr", "co2_g_per_km_eco", "co2_g_per_km_non",
-                  "stops_per_vehicle_eco", "stops_per_vehicle_non", "ev_reroutes", "ev_reroutes_closure"}
+                  "stops_per_vehicle_eco", "stops_per_vehicle_non", "ev_reroutes", "ev_reroutes_closure",
+                  "zone_switches", "zone_max_clearance_s", "zone_conflicts", "collisions",
+                  # queues at the zone entries: closure sends that traffic elsewhere, so not comparable
+                  "zone_max_queue_westbound", "zone_max_queue_eastbound"}
 
 RAW_ID_FIELDS = ["run_key", "suite", "scenario", "label", "baseline", "seed", "controller", "nav",
-                 "nav_fraction", "penetration", "loss", "range", "relay", "eco_fraction", "ev_routing", "max_steps", "wall_s",
-                 "error"]
+                 "nav_fraction", "penetration", "loss", "range", "relay", "eco_fraction", "ev_routing", "zone_control",
+                 "max_steps", "wall_s", "error"]
 RESULT_FIELDS = [
     "avg_waiting_time", "avg_time_loss", "avg_travel_time", "ev_travel_time", "max_queue",
     "throughput_veh_per_hr", "pdr", "avg_latency_ms", "avg_hops", "missed_preemptions",
@@ -85,7 +91,10 @@ RESULT_FIELDS = [
     "co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
     "stops_per_vehicle_eco", "stops_per_vehicle_non", "travel_time_eco", "travel_time_non",
     "eco_advised_vehicles", "eco_advice_share_slow", "eco_advice_share_stop", "spat_pdr",
-    "ev_reroutes", "ev_reroutes_closure",
+    "ev_reroutes", "ev_reroutes_closure", "collisions",
+    "zone_activated_at", "zone_deactivated_at", "zone_switches", "zone_conflicts", "zone_max_clearance_s",
+    "zone_passed_eastbound", "zone_passed_westbound", "zone_max_queue_eastbound", "zone_max_queue_westbound",
+    "zone_rerouted", "zone_guided", "zone_ev_priority", "zone_ev_wait_s",
 ]
 RAW_FIELDS = RAW_ID_FIELDS + RESULT_FIELDS
 
@@ -108,6 +117,8 @@ class RunSpec:
     relay: str = "off"
     eco_fraction: float = 0.0
     ev_routing: str = "off"
+    zone_control: str = ""  # accident_zone: alternating | closure
+    network: Optional[str] = None  # default: the plan's network
     requires: Optional[str] = None  # tuned file this config needs
     description: str = ""
 
@@ -215,6 +226,22 @@ def build_plan(cfg: Dict[str, Any], suites: Iterable[str], quick: bool) -> Plan:
                         penetration=float(r.get("penetration", 1.0)),
                         description=f"{ctrl}, ambulance " + ("plans its route on the TMC map" if mode == "on"
                                                              else "keeps its scenario route")))
+    if "zone" in suites:
+        z = ev_cfg.get("zone", {})
+        ctrl = z.get("controller", "adaptive_ev_vanet")
+        variants = [
+            ("closure", "none", "off", "westbound road closed at J3, traffic detours (baseline)"),
+            ("alternating", "none", "off", "alternating one-way traffic on the shared lane"),
+            ("alternating", z.get("nav", "astar"), "off", "alternating, and navigating cars see the wait at the zone"),
+            ("closure", "none", "on", "road closed; the ambulance plans its route on the TMC map"),
+            ("alternating", "none", "on", "alternating; the ambulance picks the zone or a detour on the TMC map"),
+        ]
+        for control, nav, evr, desc in variants:
+            label = f"{control}" + (f"+nav_{nav}" if nav != "none" else "") + ("+ev_routing" if evr == "on" else "")
+            plan.specs.append(RunSpec(
+                "zone", z.get("scenario", "accident_zone"), label, "closure", ctrl, nav=nav,
+                nav_fraction=float(z.get("nav_fraction", 0.3)), penetration=float(z.get("penetration", 1.0)),
+                ev_routing=evr, zone_control=control, network="grid2x2_zone", description=desc))
     return plan
 
 
@@ -229,7 +256,8 @@ def run_one(job: Dict[str, Any]) -> Dict[str, Any]:
         try:
             res = run_simulation(
                 scenario=job["scenario"], controller=job["controller"], seed=int(job["seed"]),
-                params={"network": job["network"]},
+                params={"network": job["network"],
+                        **({"accident_zone": {"control": job["zone_control"]}} if job.get("zone_control") else {})},
                 run_id=f"ev_{hashlib.sha1(job['run_key'].encode()).hexdigest()[:10]}_{os.getpid()}",
                 max_steps=job["max_steps"], metrics_csv_path=Path(tmp) / "m.csv", output_dir=Path(tmp),
                 nav=job["nav"], nav_fraction=float(job["nav_fraction"]), penetration=float(job["penetration"]),
@@ -283,8 +311,8 @@ def execute(plan: Plan, raw_path: Path, workers: int, default_s: float) -> None:
                 "baseline": spec.baseline, "seed": seed, "controller": spec.controller, "nav": spec.nav,
                 "nav_fraction": spec.nav_fraction, "penetration": spec.penetration, "loss": spec.loss,
                 "range": spec.range, "relay": spec.relay, "eco_fraction": spec.eco_fraction,
-                "ev_routing": spec.ev_routing,
-                "max_steps": plan.max_steps, "network": plan.network,
+                "ev_routing": spec.ev_routing, "zone_control": spec.zone_control,
+                "max_steps": plan.max_steps, "network": spec.network or plan.network,
             })
     for s in skipped_specs:
         logger.warning("Skipping %s. Run the GA tuner first (Module 11).", s)
@@ -444,7 +472,8 @@ def write_markdown(summary: Dict[str, Any], path: Path) -> None:
     titles = {"signals": "Signal control (baseline: fixed)", "ev": "Emergency vehicles (baseline: adaptive)",
               "nav": "Navigation (baseline: no navigation, same penetration)",
               "eco": "Eco-driving / GLOSA (baseline: same controller without eco cars)",
-              "evroute": "Ambulance routing (baseline: same controller, scenario route)"}
+              "evroute": "Ambulance routing (baseline: same controller, scenario route)",
+              "zone": "Accident work zone (baseline: westbound road closed at J3)"}
     for suite in SUITES:
         if suite not in summary["suites"]:
             continue

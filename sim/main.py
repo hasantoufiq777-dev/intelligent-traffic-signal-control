@@ -63,7 +63,7 @@ def main() -> None:
         help="Ambulances choose and update their route with A* on the TMC map (off: scenario route)",
     )
     parser.add_argument(
-        "--network", type=str, default=None, choices=["single", "grid2x2"],
+        "--network", type=str, default=None, choices=["single", "grid2x2", "grid2x2_zone"],
         help="Override the scenario's network (default: the scenario YAML's network)",
     )
     parser.add_argument(

@@ -13,6 +13,7 @@ const TABS = [
   { id: 'nav', title: 'Navigation' },
   { id: 'eco', title: 'Eco-driving' },
   { id: 'evroute', title: 'Ambulance routing' },
+  { id: 'zone', title: 'Accident zone' },
 ];
 
 const METRIC_LABEL = {
@@ -27,6 +28,9 @@ const METRIC_LABEL = {
   co2_g_per_km_eco: 'CO₂ eco cars', co2_g_per_km_non: 'CO₂ other cars', stops_per_vehicle_eco: 'Stops eco cars',
   stops_per_vehicle_non: 'Stops other cars', eco_advice_share_slow: 'Slow-advice share', spat_pdr: 'SPaT delivery',
   ev_reroutes: 'Ambulance reroutes',
+  zone_max_queue_westbound: 'Max queue westbound', zone_max_queue_eastbound: 'Max queue eastbound',
+  zone_ev_wait_s: 'Ambulance wait at zone (s)', zone_switches: 'Direction turns', zone_conflicts: 'Both directions in lane (s)',
+  zone_max_clearance_s: 'Longest clearance (s)', collisions: 'Collisions',
 };
 
 const KEY_METRICS = {
@@ -35,6 +39,7 @@ const KEY_METRICS = {
   nav: ['avg_travel_time', 'nav_avg_travel_time', 'nonnav_avg_travel_time', 'edge_load_cv', 'route_search_ms'],
   eco: ['co2_g_per_km', 'fuel_l_per_100km', 'stops_per_vehicle', 'avg_travel_time'],
   evroute: ['ev_travel_time', 'avg_waiting_time', 'missed_preemptions', 'ev_reroutes'],
+  zone: ['avg_travel_time', 'avg_waiting_time', 'ev_travel_time', 'zone_max_queue_westbound', 'zone_conflicts', 'collisions'],
 };
 
 const param = (label, name) => {
@@ -164,7 +169,7 @@ function SuiteCharts({ suite, scen, cfgs }) {
       </div>
     );
   }
-  if (suite === 'evroute') return null; // table only: route_off vs route_on per controller
+  if (suite === 'evroute' || suite === 'zone') return null; // table only
   const ctrls = [...new Set(Object.keys(cfgs).map((l) => l.split('@')[0]))];
   return (
     <div className="overview-grid">

@@ -29,17 +29,18 @@ function approachOf(shape) {
   return x2 > x1 ? 'W' : 'E';
 }
 
-function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
+function TrafficMapInner({ network, vehicles, tlsState, zoneState, followId, onSelect }) {
   const geo = useMemo(() => {
     if (!network) return null;
     const node = Object.fromEntries(network.junctions.map((j) => [j.id, j]));
 
     // One road per node pair (both directions together), drawn along the junction-to-junction line
     const segMap = new Map();
+    const contraflow = network.zone?.contraflow_edge;
     for (const e of network.edges) {
       const a = node[e.from];
       const b = node[e.to];
-      if (!a || !b) continue;
+      if (!a || !b || e.id === contraflow) continue; // the contraflow lane lies on an existing lane
       const key = [e.from, e.to].sort().join('|');
       const seg = segMap.get(key) || { key, ax: a.x, ay: a.y, bx: b.x, by: b.y, lanes: 0 };
       seg.lanes += Math.max(1, e.lanes);
@@ -119,6 +120,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
       })),
       junctions: tlsJ.map((j) => ({ ...j, X: tx(mapX(j.x)), Y: ty(mapY(j.y)) })),
       heads,
+      zone: zoneGeometry(network.zone, (x, y) => [tx(mapX(x)), ty(mapY(y))]),
     };
   }, [network]);
 
@@ -170,6 +172,7 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
           ))}
         </g>
         <g>
+          {geo.zone && <ZoneOverlay z={geo.zone} st={zoneState} />}
           {geo.heads.map((h) => {
             const s = tlsState?.[h.tls]?.signal?.[h.approach];
             return (
@@ -223,9 +226,104 @@ function TrafficMapInner({ network, vehicles, tlsState, followId, onSelect }) {
         <span><CarIcon kind="driven" />Driven by a viewer</span>
         <span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="var(--sig-yellow)" /></svg>Slowing for green</span>
         <span><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--text-primary)" strokeWidth="1.5" /></svg>Your car</span>
+        {geo.zone && (
+          <>
+            <span><svg width="14" height="14"><path d="M7 1 L13 13 H1 Z" fill="var(--sig-red)" /><path d="M7 5 V9 M7 10.5 V11.5" stroke="#fff" strokeWidth="1.4" /></svg>Accident</span>
+            <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--zone)" fillOpacity="0.45" /></svg>Shared lane, one direction at a time</span>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 export default memo(TrafficMapInner);
+
+/** Zone drawing data (network message "zone") in map coordinates. */
+function zoneGeometry(zone, pt) {
+  if (!zone) return null;
+  const P = ([x, y]) => pt(x, y);
+  const path = (pts) => pts.map(P).map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const shared = zone.shared.map(P);
+  return {
+    sharedPath: path(zone.shared),
+    sharedStart: shared[0], // west end: eastbound traffic enters here
+    sharedEnd: shared[shared.length - 1],
+    blocked: zone.blocked.map(path),
+    crash: zone.crash.map(P),
+    debris: P(zone.debris),
+    closure: zone.closure.map(P),
+    entry: Object.fromEntries(Object.entries(zone.entry).map(([d, e]) => [d, { head: P(e.head), line: e.line.map(P), label: e.label }])),
+  };
+}
+
+const DIR_WORD = { E: 'eastbound', W: 'westbound' };
+const SIG_WORD = { G: 'green', y: 'yellow', r: 'red' };
+
+/** Accident, shared lane with the current direction of flow, entry signals and the closure at J3. */
+function ZoneOverlay({ z, st }) {
+  if (!st) return null;
+  const alt = st.mode === 'alternating';
+  const closure = st.mode === 'closure';
+  const crashShown = st.accident || alt || closure;
+  const flowing = alt && (st.phase === 'green' || st.phase === 'yellow') ? st.dir : null;
+  const [ax, ay] = flowing === 'W' ? z.sharedEnd : z.sharedStart;
+  const [bx, by] = flowing === 'W' ? z.sharedStart : z.sharedEnd;
+  const chevrons = [];
+  if (flowing) {
+    const s = bx > ax ? 1 : -1;
+    for (let k = 1; k <= 3; k += 1) {
+      const x = ax + ((bx - ax) * k) / 4;
+      const y = ay + ((by - ay) * k) / 4;
+      chevrons.push(`M${x - 3 * s} ${y - 3} L${x} ${y} L${x - 3 * s} ${y + 3}`);
+    }
+  }
+  return (
+    <g aria-label="Accident zone">
+      {crashShown && z.blocked.map((d, i) => (
+        <path key={`b${i}`} d={d} stroke="var(--sig-red)" strokeOpacity={0.3} strokeWidth={8} fill="none" />
+      ))}
+      {alt && (
+        <path d={z.sharedPath} stroke="var(--zone)" strokeOpacity={st.phase === 'clear' ? 0.25 : 0.45} strokeWidth={8} fill="none">
+          <title>{`Shared lane: ${st.phase === 'clear' ? 'clearing, both sides red' : `${DIR_WORD[st.dir]} turn`}`}</title>
+        </path>
+      )}
+      {chevrons.map((d, i) => <path key={`c${i}`} d={d} stroke="var(--zone-strong)" strokeWidth={1.6} fill="none" />)}
+      {crashShown && (
+        <>
+          {z.crash.map(([x, y], i) => (
+            <g key={`x${i}`} transform={`translate(${x},${y})`}>
+              <path d="M0 -6 L6 5 H-6 Z" fill="var(--sig-red)" stroke="var(--surface-1)" strokeWidth={0.8} />
+              <path d="M0 -2.5 V1.5 M0 2.8 V3.6" stroke="#fff" strokeWidth={1.3} />
+              <title>Accident: westbound lanes blocked</title>
+            </g>
+          ))}
+          <g transform={`translate(${z.debris[0]},${z.debris[1]})`}>
+            <path d="M0 -3.5 L3.5 3 H-3.5 Z" fill="var(--sig-yellow)" stroke="var(--surface-1)" strokeWidth={0.6} />
+            <title>Debris on the inner eastbound lane</title>
+          </g>
+        </>
+      )}
+      {alt && ['E', 'W'].map((d) => {
+        const e = z.entry[d];
+        const s = st.signal?.[d];
+        const [[x1, y1], [x2, y2]] = e.line;
+        return (
+          <g key={`e${d}`}>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={s === 'G' ? 'var(--sig-green)' : 'var(--sig-red)'} strokeWidth={1.6} />
+            <circle cx={e.head[0]} cy={e.head[1]} r={4.5} fill={SIG_FILL[s] || 'var(--surface-2)'} stroke="var(--surface-1)" strokeWidth={1}>
+              <title>{`Zone signal for ${e.label} traffic: ${SIG_WORD[s] || 'off'}`}</title>
+            </circle>
+          </g>
+        );
+      })}
+      {closure && (
+        <line x1={z.closure[0][0]} y1={z.closure[0][1]} x2={z.closure[1][0]} y2={z.closure[1][1]}
+          stroke="var(--sig-red)" strokeWidth={4}>
+          <title>Westbound road closed at J3</title>
+        </line>
+      )}
+    </g>
+  );
+}
+

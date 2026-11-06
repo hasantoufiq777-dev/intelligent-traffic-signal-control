@@ -524,3 +524,66 @@ instead of 4× (`DRIVER_STEP_DELAY`).
 parsing skips vType `driven`). It still affects the traffic around it, so evaluation runs never use driver mode, and
 headless runs have no command channel.
 
+
+## 13. Accident Work Zone: Alternating One-Way Traffic
+
+When a crash blocks one side of a road, the open side can carry both directions, one at a time, the
+way a flagger or temporary signals do at road works. The system runs this automatically.
+
+**Network.** `grid2x2_zone` is the 2x2 grid with the J2-J3 road split at ZW (x = 340) and ZE (x = 420),
+built by `sim/sumo/generate_zone_net.py`. All four grid junctions keep exactly the connections of
+`grid2x2` (checked by a test). SUMO only drives forward along a lane's direction, so the shared lane
+is modelled as an extra one-lane edge `J3J2.cf` (ZE to ZW), drawn on the eastbound outer lane and fed
+only from the inner westbound lane, so cars line up in one lane before the entry line. ZW and ZE are
+signals owned by the zone controller; junction controllers, RSUs and the oracle sensing ignore them.
+
+**Accident.** At 150 s a crash blocks both westbound lanes 16 m into the zone, and its debris the
+inner eastbound lane (scenario `accident_zone`, 360 s). One lane, the eastbound outer lane, is left
+for both directions. The crash is detected over the VANET like any incident (stopped vehicles, RSU
+INCIDENT_FLAG, TMC). The zone switches on when the TMC marks the westbound zone edge fully blocked,
+on average 33 s after the crash, and back to normal when the TMC clears it.
+
+**Alternating control** (`sim/controllers/zone.py`):
+
+| Step | Rule |
+|---|---|
+| Turn order | green(d) -> yellow 3 s -> all red until the shared lane is empty (at least 2 s) -> green(next) |
+| Safety | The next side never gets green before the lane, including both end junctions, is empty. Occupancy comes from counting vehicles in and out at both ends (loop detectors), not from radio messages, so packet loss cannot cause a head-on meeting |
+| Turn length | 8 s + 2.5 s per queued vehicle at the start of the turn, at most 40 s. A turn ends early when its own approach is empty and the other side waits, and runs on while the other side has no demand. A side that has waited 90 s ends the other turn at the minimum |
+| Queues | From the beacons the zone's roadside unit receives (range and loss of the emulated channel, scaled by 1/penetration) |
+| Ambulance | An EV_ALERT (range and loss) from an ambulance whose route crosses the zone within 25 s gives its side the next turn: the other side's green ends at once (no new entries), the lane clears, then the ambulance's side turns green and stays green until it has entered |
+| Routing | Westbound routes through the blocked carriageway are switched to the shared lane. Navigation and ambulance route choice see the expected wait at the zone (half a cycle plus the queue ahead) as extra edge cost and may choose other roads |
+| Trapped cars | Cars that entered the blocked lane before the crash was detected are guided across into the shared lane before the next westbound turn (they would otherwise block the westbound entry for good) |
+
+**Closure** (the alternative without alternating control): the westbound road is closed at J3, and
+vehicles about to turn into it take another route. Cars already past J3 wait until the crash is cleared.
+
+**Evaluation** (suite `zone`, 10 seeds, adaptive_ev_vanet, 100% equipped; baseline: closure):
+
+| Configuration | Avg trip (s) | Avg waiting (s) | Ambulance trip (s) | Both directions in lane | Collisions |
+|---|---|---|---|---|---|
+| Closure | 102.1 ± 2.7 | 19.4 ± 2.5 | 66.2 ± 7.2 | 0 | 0 |
+| Alternating | 95.4 ± 1.7 (-6.6%) | 15.2 ± 1.1 (-21.6%) | 74.2 ± 10.0 (+12.1%) | 0 | 0 |
+| Alternating + A* navigation (30%) | 94.4 ± 1.3 (-7.5%) | 15.1 ± 0.6 (-22.1%) | 71.5 ± 7.3 (+8.0%) | 0 | 0 |
+| Closure + ambulance route choice | 102.1 ± 2.7 | 19.4 ± 2.5 | 66.2 ± 7.2 | 0 | 0 |
+| Alternating + ambulance route choice | 95.3 ± 1.3 (-6.6%) | 15.1 ± 0.8 (-22.3%) | 60.5 ± 2.3 (-8.6%) | 0 | 0 |
+
+All trip and waiting-time differences have p = 0.002 (Wilcoxon, paired by seed); the ambulance
+results p = 0.002 (+12.1%) and p = 0.008 (-8.6%).
+
+- Alternating control beats closing the road: trips are 6.6% shorter and waiting 22% lower, because
+  westbound traffic keeps its route instead of loading the detour roads. The direction turns take
+  15-17 per accident with an average longest clearance of about 10 s.
+- Safety held in every run: never both directions in the shared lane, and no collisions.
+- The ambulance always got its turn on time (waiting at the line 0-0.1 s on average). On its scenario
+  route it is still 12% slower than detouring around a closed road, because on the single shared lane
+  it cannot pass the cars queued ahead of it. With ambulance route choice it takes the zone or a detour,
+  whichever the TMC map shows to be faster, and is then 8.6% faster than with the road closed.
+- The zone's own queues are longer under alternating control (westbound about 7 vehicles at most
+  against 2 under closure), as traffic waits at the line instead of detouring.
+
+**Limits.** One zone on one road; the zone network is used only by this scenario, so all other results
+are unchanged. The shared lane is a separate SUMO edge, so SUMO itself would not stop a head-on
+meeting there; the controller's safety rule does, and the tests and the `zone_conflicts` count check
+it. Guided trapped cars are moved across by TraCI (a short sideways jump on the map). The mock
+simulation has no zone and shows the plain grid.

@@ -77,7 +77,8 @@ def main() -> None:
     except (ValueError, AttributeError):
         pass
 
-    valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation", "ev_incident", "ev_congested"}
+    valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation", "ev_incident", "ev_congested",
+                       "accident_zone"}
     if args.scenario not in valid_scenarios and not Path(args.scenario).exists():
         err_msg = f"Unknown scenario: {args.scenario}"
         logger.error(err_msg)
@@ -102,11 +103,14 @@ def main() -> None:
                     network = sc_data.get("network", "single")
             except Exception:
                 network = "single"
-        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested"):
+        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested", "accident_zone"):
             network = "grid2x2"
         else:
             network = "single"
 
+    if network == "grid2x2_zone":
+        # The mock has no accident work zone (no shared-lane model): it shows the plain grid
+        network = "grid2x2"
     tls_ids = ["J0", "J1", "J2", "J3"] if network == "grid2x2" else ["J0"]
     try:
         from sim.mock_traffic import MockTraffic, mock_spat
