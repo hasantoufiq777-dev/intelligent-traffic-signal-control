@@ -20,7 +20,7 @@ from sim.vanet.network import resolve_lane_direction
 from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
 
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
-                  "advice", "adv_speed", "green_in"]
+                  "advice", "adv_speed", "green_in", "road", "to"]
 FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
 PETROL_MG_PER_ML = 745.0
 DRIVER_VTYPE = "driven"  # the car a dashboard viewer drives (sim/driver.py)
@@ -47,6 +47,8 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
             "from": e.getFromNode().getID(),
             "to": e.getToNode().getID(),
             "lanes": e.getLaneNumber(),
+            "speed": round(e.getSpeed(), 2),  # speed limit (m/s), for the congestion colouring
+            "length": round(e.getLength(), 1),
             "shape": [[round(p[0], 1), round(p[1], 1)] for p in e.getShape()],
         })
     (xmin, ymin), (xmax, ymax) = net.getBBoxXY()
@@ -191,5 +193,6 @@ class LiveVehicleTracker:
                 round(self.co2_mg.get(vid, 0.0) / 1000.0, 1),
                 round(self.fuel_mg.get(vid, 0.0) / PETROL_MG_PER_ML, 1),
                 advice.get("advice"), advice.get("speed"), advice.get("green_in"),
+                road, route[-1] if route else None,
             ])
         return {"type": "vehicles", "run_id": run_id, "t": int(t), "fields": VEHICLE_FIELDS, "rows": rows}

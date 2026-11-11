@@ -83,7 +83,9 @@ Check SUMO and TraCI: `.venv/Scripts/python.exe sim/smoke_test.py` (Linux: `.ven
 | `npm start` | Builds the dashboard and serves everything from the gateway: http://localhost:4000 |
 
 Pages:
-- `/`: **My drive**. Traffic map; tap a car to follow it and see its next light, countdown, eco advice, fuel and CO₂.
+- `/`: **Live traffic**. Large map with zoom, pan and layer switches: cars, signals with countdowns, queue counts,
+  congestion, accidents and closures, ambulance routes, roadside units and radio range. Select a junction for its
+  signals and queues, or a car for its road, next light, eco advice, fuel and CO₂; drive a car from the Vehicle tab.
 - `/live`: junction cards, VANET and navigation panels, charts, event log.
 - `/results`: experiment results.
 - `/admin`: **Run control** (administrators and researchers): start and stop runs on the shared simulation.

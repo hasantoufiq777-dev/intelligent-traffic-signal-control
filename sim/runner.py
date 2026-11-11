@@ -504,6 +504,9 @@ def run_simulation(
             from sim.live_vehicles import LiveVehicleTracker, build_network_message
 
             net_msg = build_network_message(net_path, tls_ids, run_id)
+            # Radio settings of this run, for drawing roadside units and their range
+            net_msg["vanet"] = {"active": vanet_net is not None, "range_m": float(range_m),
+                                "penetration": float(penetration)}
             if zone_ctrl is not None:
                 from sim.scenarios.accident_zone import zone_geometry
 
@@ -674,6 +677,7 @@ def run_simulation(
 
             # Step Navigation (Module 9)
             speed_map = provider.get_edge_speeds()
+            observed_speeds = speed_map  # as sensed, before incident overrides (shown on the live map)
             closed_edges: Optional[set] = None
             tmc_incidents = vanet_net.get_incidents() if (vanet_net is not None and incident_detection_on) else {}
             if tmc_incidents:
@@ -729,6 +733,8 @@ def run_simulation(
                 avg_wait = round(float(sum(active_waits) / len(active_waits)), 1) if active_waits else 0.0
                 hours = max(t / 3600.0, 1e-4)
                 throughput_rate = round(arrived_count / hours, 1)
+                moving = [sumo_api.vehicle.getSpeed(v) for v in active_vehs if not v.startswith("incblk_")]
+                avg_speed_kmh = round(3.6 * float(sum(moving) / len(moving)), 1) if moving else None
 
                 if is_vanet_controller and vanet_net is not None:
                     comm_dict = vanet_net.get_comm_stats()
@@ -755,6 +761,7 @@ def run_simulation(
                         "avg_wait": avg_wait,
                         "n_vehicles": n_vehicles,
                         "throughput": throughput_rate,
+                        "avg_speed_kmh": avg_speed_kmh,
                     },
                     "comm": comm_dict,
                     "nav": navigator.get_live_nav_state(),
@@ -765,6 +772,23 @@ def run_simulation(
                         "stops_eco": None, "stops_non": None, "spat_pdr": None,
                     },
                 }
+                # Display-only extras for the map: observed road speeds, incidents (what the TMC knows
+                # and what is really in place) and the remaining route of each ambulance
+                state_msg["edge_speeds"] = {e: round(float(v), 1) for e, v in (observed_speeds or {}).items()
+                                            if not str(e).startswith(":")}
+                state_msg["incidents"] = {
+                    "known": dict(tmc_incidents),
+                    "actual": incident_mgr.get_true_incidents() if incident_mgr is not None else {},
+                    "detection": bool(vanet_net is not None and incident_detection_on),
+                }
+                ev_routes: Dict[str, List[str]] = {}
+                for ev_id in active_evs:
+                    try:
+                        r_edges = list(sumo_api.vehicle.getRoute(ev_id))
+                        ev_routes[ev_id] = r_edges[max(0, int(sumo_api.vehicle.getRouteIndex(ev_id))):]
+                    except Exception:
+                        continue
+                state_msg["ev_routes"] = ev_routes
                 if zone_ctrl is not None:
                     state_msg["zone"] = zone_ctrl.live_block(t)
                     # For the map only: whether the crash is in place (the zone reacts to the TMC report)
