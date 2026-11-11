@@ -63,7 +63,14 @@ Then, from the project folder:
 npm run setup
 ```
 This creates `.venv`, installs `sim/requirements.txt`, runs `npm install` in `server/` and `client/`, and writes
-`server/.env`. The `.env` gets the venv's Python and a random `ADMIN_TOKEN`; open it to see or change the token.
+`server/.env` with the venv's Python.
+
+Everyone signs in. Create the first administrator account once:
+```bash
+npm --prefix server run create-admin -- you@example.org "Your Name"   # asks for a password (at least 10 characters)
+```
+or set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `server/.env` before the first start. Further accounts are added on the
+Administration page (roles: administrator, researcher, viewer), or by self-registration when an administrator opens it.
 
 Check SUMO and TraCI: `.venv/Scripts/python.exe sim/smoke_test.py` (Linux: `.venv/bin/python sim/smoke_test.py`).
 
@@ -79,7 +86,9 @@ Pages:
 - `/`: **My drive**. Traffic map; tap a car to follow it and see its next light, countdown, eco advice, fuel and CO₂.
 - `/live`: junction cards, VANET and navigation panels, charts, event log.
 - `/results`: experiment results.
-- `/admin`: start/stop runs; needs `ADMIN_TOKEN` from `server/.env`.
+- `/admin`: **Run control** (administrators and researchers): start and stop runs on the shared simulation.
+- `/administration`: users and roles, active sessions, audit log, settings, system health (administrators).
+- `/account`: your name and password.
 
 With `LIVE_LOOP=true` (in `server/.env`) the playlist in `server/playlist.json` loops through baseline,
 VANET-adaptive, ambulance, ambulance around a road closure, eco-driving, A\*, ACO and road closure.
@@ -145,7 +154,11 @@ ambulance run through the admin API, states, alerts, preemption, stored result.
 |---|---|
 | `PYTHON_BIN` | Python with the requirements; a relative path is relative to `server/` |
 | `USE_MOCK` | `true` = mock simulation, no SUMO |
-| `ADMIN_TOKEN` | Required for start/stop (header `X-Admin-Token`) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | First administrator, created at start-up when none exists |
+| `ALLOW_REGISTRATION` | Let visitors create viewer accounts (administrators can switch it at run time) |
+| `NODE_ENV=production` | Secure (HTTPS-only) session cookies and HSTS |
+| `TRUST_PROXY` | Number of reverse proxies in front (nginx or a tunnel: 1) |
+| `MAX_CONNECTIONS` | Limit on concurrent live connections (default 1000); more are refused with a clear message |
 | `LIVE_LOOP` | Loop `server/playlist.json` |
 | `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 0.25) |
 | `SIM_GUI` | Open live runs in SUMO-GUI from the start |

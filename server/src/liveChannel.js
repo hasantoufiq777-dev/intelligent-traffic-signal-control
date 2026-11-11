@@ -21,7 +21,13 @@ export class LiveChannel {
     this.closing = false;
 
     this.proc = null;
-    this.current = null; // { run_id, entry, source, started_at, status }
+    this.current = null; // { run_id, entry, source, started_at, status, started_by }
+    // Simulation lifecycle shown to every client: STOPPED -> STARTING -> RUNNING -> STOPPING -> STOPPED,
+    // FAILED after an error, RECOVERING while the playlist waits to retry.
+    this.lifecycle = 'STOPPED';
+    this.failures = 0; // consecutive failed runs
+    this._op = false; // a start/stop/restart request is in progress
+    this.accept = null; // (socket) => boolean, set by the gateway (session rooms, connection cap)
     this.lastStatus = null;
     this.lastResult = null;
     this.latestState = null;
@@ -50,8 +56,10 @@ export class LiveChannel {
   }
 
   // ------------------------------------------------------------------ viewers
-  attach() {
+  attach({ accept = null } = {}) {
+    this.accept = accept;
     this.io.on('connection', (socket) => {
+      if (this.accept && !this.accept(socket)) return; // refused (over the connection limit)
       socket.join(ROOM);
       socket.emit('init', this.snapshot());
       // Viewers are read-only, except for the one driver seat (driver.js).
@@ -84,6 +92,8 @@ export class LiveChannel {
     const loop = this.cfg.LIVE_LOOP && !this.paused;
     return {
       running: Boolean(this.proc),
+      lifecycle: this.lifecycle,
+      failures: this.failures,
       current: this.current,
       next: loop && this.playlist.length ? this.playlist[this.nextIndex % this.playlist.length] : null,
       loop,
@@ -132,18 +142,47 @@ export class LiveChannel {
   }
 
   // ------------------------------------------------------------------ lifecycle
-  /** Start a run (stopping any current one). source: 'admin' | 'playlist'. */
-  async start(entry, source = 'admin') {
+  /**
+   * Run one start/stop/restart request at a time. A second request while one is in progress is
+   * refused (error code "busy") instead of interleaving with it.
+   */
+  async exclusive(fn) {
+    if (this._op) {
+      const err = new Error('Another start or stop request is in progress. Try again in a moment.');
+      err.code = 'busy';
+      throw err;
+    }
+    this._op = true;
+    try {
+      return await fn();
+    } finally {
+      this._op = false;
+    }
+  }
+
+  _setLifecycle(state) {
+    if (this.lifecycle === state) return;
+    this.lifecycle = state;
+    this.log.debug(`Simulation lifecycle: ${state}`);
+  }
+
+  /** Start a run (stopping any current one). source: 'admin' | 'playlist'; user: who asked (admin starts). */
+  async start(entry, source = 'admin', user = null) {
     clearTimeout(this._loopTimer);
     this._loopTimer = null;
     if (this.proc) await this._stopProcess();
     if (this.closing) return null;
-    if (source === 'admin') this.paused = false; // admin start resumes the loop afterwards (if enabled)
+    if (source === 'admin') {
+      this.paused = false; // admin start resumes the loop afterwards (if enabled)
+      this.failures = 0;
+    }
     this.driver.onRunEnded(); // a drive belongs to one run
+    this._setLifecycle('STARTING');
 
     this._dropPendingState(); // never deliver a state of the previous run after this one starts
     const runId = `live-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
-    this.current = { run_id: runId, entry, source, started_at: new Date().toISOString(), status: 'running' };
+    this.current = { run_id: runId, entry, source, started_at: new Date().toISOString(), status: 'running',
+      started_by: user ? { id: user.id, name: user.name } : null };
     this.states = [];
     this.events = [];
     this.latestState = null;
@@ -159,7 +198,7 @@ export class LiveChannel {
     this._pendingVehicles = null;
     this.db.insertRun({ id: runId, scenario: entry.scenario, controller: entry.controller, nav: entry.nav,
       seed: entry.seed, penetration: entry.penetration, loss: entry.loss, relay: entry.relay,
-      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', source });
+      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', source, started_by: user?.id ?? null });
     this.stats.runs_started += 1;
 
     const args = buildSimArgs(entry, runId, this.cfg, { gui: this.gui });
@@ -187,7 +226,7 @@ export class LiveChannel {
     this.gui = Boolean(enabled);
     let restarted = false;
     if (this.proc && this.current && Boolean(this.proc.gui) !== this.gui) {
-      await this.start(this.current.entry, this.current.source);
+      await this.start(this.current.entry, this.current.source, this.current.started_by);
       restarted = true;
     }
     this.io.to(ROOM).emit('now_playing', this.nowPlaying());
@@ -209,6 +248,7 @@ export class LiveChannel {
     const proc = this.proc;
     if (!proc) return;
     proc.manualStop = true;
+    this._setLifecycle('STOPPING');
     await proc.stop();
   }
 
@@ -233,6 +273,10 @@ export class LiveChannel {
     const runId = this.current.run_id;
     switch (msg.type) {
       case 'state':
+        if (this.lifecycle === 'STARTING') {
+          this._setLifecycle('RUNNING');
+          this.io.to(ROOM).emit('now_playing', this.nowPlaying());
+        }
         this.stats.states_in += 1;
         this._recordState(runId, msg);
         this._broadcastState(msg);
@@ -248,6 +292,10 @@ export class LiveChannel {
       }
       case 'status':
         this.lastStatus = msg;
+        if (msg.status === 'started' && this.lifecycle === 'STARTING') {
+          this._setLifecycle('RUNNING');
+          this.io.to(ROOM).emit('now_playing', this.nowPlaying());
+        }
         if (['finished', 'stopped', 'error'].includes(msg.status)) {
           this.sawFinalStatus = true;
           this.driver._broadcast(); // no new drives in a run that is ending
@@ -392,9 +440,20 @@ export class LiveChannel {
       this.log.info('SUMO-GUI window was closed; continuing without the window');
     }
     this.log.info(`Live run ${run?.run_id} ended: ${status} (code ${code})`);
+
+    // Bounded recovery: after MAX_SIM_FAILURES failed runs in a row the playlist stops retrying
+    this.failures = status === 'error' ? this.failures + 1 : 0;
+    let loops = !this.closing && !this.paused && this.cfg.LIVE_LOOP && !proc.manualStop;
+    if (loops && this.failures >= this.cfg.MAX_SIM_FAILURES) {
+      loops = false;
+      this.paused = true;
+      this.log.error(`${this.failures} runs failed in a row: the playlist is paused until an administrator starts a run`);
+    }
+    if (status === 'error') this._setLifecycle(loops ? 'RECOVERING' : 'FAILED');
+    else this._setLifecycle('STOPPED');
     this.io.to(ROOM).emit('now_playing', this.nowPlaying());
 
-    if (!this.closing && !this.paused && this.cfg.LIVE_LOOP && !proc.manualStop) {
+    if (loops) {
       const delay = status === 'error' ? this.cfg.CRASH_RETRY_MS : 1500;
       this._loopTimer = setTimeout(() => this._startNextFromPlaylist(), delay);
     }

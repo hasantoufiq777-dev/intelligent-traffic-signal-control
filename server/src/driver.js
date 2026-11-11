@@ -188,7 +188,9 @@ export class DriverSeat {
   /** A "driver" message from the simulation. */
   onSimMessage(msg) {
     const seat = this.seat;
-    if (seat && !seat.vid && msg.vid && msg.run_id === seat.runId) {
+    // The seat learns its car's id from the first message about a car that is not an earlier
+    // drive's: the previous drive's final report can arrive after the next viewer took the seat.
+    if (seat && !seat.vid && msg.vid && msg.run_id === seat.runId && !this.tripByVid.has(msg.vid)) {
       seat.vid = msg.vid;
       this.tripByVid.set(msg.vid, seat.tripId);
       this._broadcast();

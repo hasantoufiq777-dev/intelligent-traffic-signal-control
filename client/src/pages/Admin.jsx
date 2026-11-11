@@ -1,29 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import NowPlaying from '../components/NowPlaying.jsx';
+import { useAuth } from '../hooks/useAuth.js';
 import { useLive } from '../hooks/useLiveSocket.js';
-
-const TOKEN_KEY = 'itsc-admin-token';
-
-function readToken() {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY) || '';
-  } catch {
-    return '';
-  }
-}
-function saveToken(v) {
-  try {
-    sessionStorage.setItem(TOKEN_KEY, v);
-  } catch {
-    /* storage unavailable: keep in memory only */
-  }
-}
 
 const REASON = { finished: 'arrived', released: 'handed back', idle: 'idle', left: 'driver left', admin: 'admin',
   time_limit: 'time limit', run_ended: 'run ended', error: 'error' };
 
-function DriverAdmin({ token, seat }) {
+function DriverAdmin({ seat }) {
   const [info, setInfo] = useState(null);
   const [msg, setMsg] = useState(null);
   const load = useCallback(() => api.driver().then(setInfo).catch((e) => setMsg({ error: true, text: e.message })), []);
@@ -48,12 +32,12 @@ function DriverAdmin({ token, seat }) {
         {s?.busy ? ` · ${s.vid ?? 'a car'} is being driven since ${new Date(s.since).toLocaleTimeString()}` : ' · nobody is driving'}
       </p>
       <div className="row">
-        <button type="button" className="btn" disabled={!token || !s}
-          onClick={() => act(() => api.setDriver(token, !s.enabled), s.enabled ? 'Driver mode switched off.' : 'Driver mode switched on.')}>
+        <button type="button" className="btn" disabled={!s}
+          onClick={() => act(() => api.setDriver(!s.enabled), s.enabled ? 'Driver mode switched off.' : 'Driver mode switched on.')}>
           {s?.enabled ? 'Switch driver mode off' : 'Switch driver mode on'}
         </button>
-        <button type="button" className="btn danger" disabled={!token || !s?.busy}
-          onClick={() => act(() => api.releaseDriver(token), 'The drive was ended and the car handed back.')}>End current drive</button>
+        <button type="button" className="btn danger" disabled={!s?.busy}
+          onClick={() => act(() => api.releaseDriver(), 'The drive was ended and the car handed back.')}>End current drive</button>
       </div>
       {msg && <div className={`notice${msg.error ? ' error' : ''}`} role="status">{msg.text}</div>}
       <div className="table-wrap">
@@ -79,7 +63,7 @@ function DriverAdmin({ token, seat }) {
 
 export default function Admin() {
   const live = useLive();
-  const [token, setToken] = useState(readToken);
+  const { user, isAdmin } = useAuth();
   const [options, setOptions] = useState(null);
   const [form, setForm] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -106,7 +90,7 @@ export default function Admin() {
         eco_fraction: Number(form.eco_fraction),
       };
       if (!body.network) delete body.network;
-      const res = await api.start(token, body);
+      const res = await api.start(body);
       setMsg({ text: `Started run ${res.run_id}` });
     } catch (err) {
       const issues = err.body?.issues?.map((i) => `${i.path}: ${i.message}`).join('; ');
@@ -120,7 +104,7 @@ export default function Admin() {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await api.stop(token);
+      const res = await api.stop();
       setMsg({ text: res.stopped ? 'Stopped. The playlist is paused until the next start.' : 'Nothing was running.' });
     } catch (err) {
       setMsg({ error: true, text: err.message });
@@ -128,6 +112,17 @@ export default function Admin() {
       setBusy(false);
     }
   }
+
+  // What the gateway reports, so the buttons never offer an operation that would be refused
+  const np = live.nowPlaying;
+  const lifecycle = np?.lifecycle;
+  const running = Boolean(np?.running);
+  const transitional = lifecycle === 'STARTING' || lifecycle === 'STOPPING';
+  const startedBy = running && np?.current?.source === 'admin' ? np.current.started_by : null;
+  // Same rules as the gateway: a researcher may replace a playlist run or their own, and stop only their own
+  const mine = np?.current?.started_by?.id === user.id;
+  const canStart = isAdmin || !running || np?.current?.source !== 'admin' || mine;
+  const canStop = isAdmin || (running && mine);
 
   const sel = (k, list) => (
     <label className="field">{k}
@@ -142,11 +137,16 @@ export default function Admin() {
     <div className="stack">
       <NowPlaying nowPlaying={live.nowPlaying} latest={live.latest} viewers={live.viewers} status={live.status} />
       <section className="card stack" aria-labelledby="admin-h">
-        <div className="card-head"><h2 id="admin-h">Live run control</h2><span className="small muted">admin only</span></div>
-        <label className="field" style={{ maxWidth: 360 }}>Admin token
-          <input type="password" autoComplete="off" value={token}
-            onChange={(e) => { setToken(e.target.value); saveToken(e.target.value); }} />
-        </label>
+        <div className="card-head">
+          <h2 id="admin-h">Live run control</h2>
+          <span className="small muted">administrators and researchers · one shared simulation for all viewers</span>
+        </div>
+        {startedBy && (
+          <p className="small muted" style={{ margin: 0 }}>
+            The current run was started by {startedBy.id === user.id ? 'you' : startedBy.name}.
+            {!canStart && ' Only an administrator can stop or replace it.'}
+          </p>
+        )}
         {form && options ? (
           <form onSubmit={start} className="stack">
             <div className="form-grid">
@@ -167,8 +167,9 @@ export default function Admin() {
               {num('eco_fraction', { min: 0, max: 1, step: 0.1 })}
             </div>
             <div className="row">
-              <button type="submit" className="btn primary" disabled={busy || !token}>Start live run</button>
-              <button type="button" className="btn danger" disabled={busy || !token} onClick={stop}>Stop</button>
+              <button type="submit" className="btn primary" disabled={busy || transitional || !canStart}>Start live run</button>
+              <button type="button" className="btn danger" disabled={busy || transitional || !running || !canStop} onClick={stop}>Stop</button>
+              <span className="chip" role="status">simulation: {(lifecycle || 'unknown').toLowerCase()}</span>
               {options.mock && <span className="chip">gateway uses the mock simulation</span>}
             </div>
           </form>
@@ -178,7 +179,7 @@ export default function Admin() {
         {msg && <div className={`notice${msg.error ? ' error' : ''}`} role="status">{msg.text}</div>}
       </section>
 
-      <DriverAdmin token={token} seat={live.driverSeat} />
+      {isAdmin && <DriverAdmin seat={live.driverSeat} />}
 
       <section className="card" aria-labelledby="pl-h">
         <div className="card-head"><h2 id="pl-h">Playlist</h2><span className="small muted">read-only · edit server/playlist.json</span></div>

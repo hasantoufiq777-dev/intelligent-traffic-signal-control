@@ -4,17 +4,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
-import { io as ioc } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createGateway } from '../src/app.js';
+import { adminSession, connect, TEST_ENV } from './helpers.js';
 import { buildSimArgs, DriverCommandSchema, DriverStartSchema } from '../src/protocol.js';
 
-const TOKEN = 'test-token';
+let S; // signed-in administrator of the gateway under test
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-driver-'));
 const FLAG_DRIVER = 32;
 
 const base = {
-  USE_MOCK: 'true', ADMIN_TOKEN: TOKEN, LIVE_LOOP: 'false', DB_PATH: ':memory:',
+  USE_MOCK: 'true', ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
   MOCK_STEP_DELAY: '0.05', MOCK_MAX_STEPS: '400', STATE_INTERVAL_MS: '200', VIEWER_BROADCAST_MS: '100',
   CRASH_RETRY_MS: '200', PLAYLIST_PATH: path.join(tmp, 'none.json'), SUMMARY_PATH: path.join(tmp, 's.json'),
   LOG_LEVEL: 'silent', DRIVER_RESUME_MS: '0',
@@ -30,7 +30,7 @@ const waitFor = async (pred, timeoutMs = 20_000, stepMs = 40) => {
 };
 
 function viewer(url) {
-  const socket = ioc(url, { transports: ['websocket'], forceNew: true, reconnection: false });
+  const socket = connect(url, S);
   const got = { init: null, driver: [], lock: [], seat: [], vehicles: [], event: [] };
   socket.on('init', (m) => (got.init = m));
   socket.on('driver', (m) => got.driver.push(m));
@@ -45,11 +45,12 @@ function viewer(url) {
 async function startGateway(extra = {}) {
   const gw = createGateway({ ...base, ...extra });
   const addr = await gw.listen(0, '127.0.0.1');
+  S = await adminSession(gw);
   return { gw, url: `http://127.0.0.1:${addr.port}` };
 }
 
 async function startRun(gw, entry = { scenario: 'navigation', controller: 'fixed' }) {
-  const res = await request(gw.app).post('/api/live/start').set('X-Admin-Token', TOKEN).send(entry).expect(202);
+  const res = await S.post('/api/live/start').send(entry).expect(202);
   await waitFor(() => gw.live.network !== null && gw.live.driver.public().available);
   return res.body.run_id;
 }
@@ -81,7 +82,7 @@ describe('one-driver mode with the mock simulation', () => {
   });
   afterEach(async () => {
     while (sockets.length) sockets.pop().close();
-    await request(gw.app).post('/api/live/stop').set('X-Admin-Token', TOKEN);
+    await S.post('/api/live/stop');
   });
   afterAll(async () => {
     await gw.close();
@@ -133,8 +134,8 @@ describe('one-driver mode with the mock simulation', () => {
     await waitFor(() => a.got.seat.some((s) => s.mine === false && s.reason === 'released'));
     expect(gw.live.driver.public().busy).toBe(false);
     await waitFor(() => a.got.driver.some((d) => d.vid === vid && d.status === 'released' && d.report));
-    await waitFor(async () => (await request(gw.app).get('/api/driver')).body.trips[0]?.report !== null);
-    const info = (await request(gw.app).get('/api/driver').expect(200)).body;
+    await waitFor(async () => (await S.get('/api/driver')).body.trips[0]?.report !== null);
+    const info = (await S.get('/api/driver').expect(200)).body;
     expect(info).toMatchObject({ enabled: true, busy: false });
     expect(info.trips[0]).toMatchObject({ run_id: runId, vid, from_edge: 'bottom0J0', to_edge: 'J3top1', status: 'released', reason: 'released' });
     expect(info.trips[0].report).toHaveProperty('travel_s');
@@ -155,7 +156,7 @@ describe('one-driver mode with the mock simulation', () => {
     expect(final.report).toMatchObject({ finished: true, from: 'S2J0', to: 'J02N' });
     expect(final.report.distance_m).toBeGreaterThan(400);
     expect(final.report.compare).toHaveProperty('co2_g_per_km');
-    const trip = (await request(gw.app).get('/api/driver')).body.trips[0];
+    const trip = (await S.get('/api/driver')).body.trips[0];
     expect(trip).toMatchObject({ status: 'finished', reason: 'finished' });
   }, 40_000);
 
@@ -165,17 +166,17 @@ describe('one-driver mode with the mock simulation', () => {
     await waitFor(() => a.got.init);
     await startRun(gw);
     await request(gw.app).post('/api/driver').send({ enabled: false }).expect(401);
-    await request(gw.app).post('/api/driver').set('X-Admin-Token', TOKEN).send({ enabled: 'no' }).expect(400);
+    await S.post('/api/driver').send({ enabled: 'no' }).expect(400);
 
     expect((await a.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
-    const off = await request(gw.app).post('/api/driver').set('X-Admin-Token', TOKEN).send({ enabled: false }).expect(200);
+    const off = await S.post('/api/driver').send({ enabled: false }).expect(200);
     expect(off.body).toMatchObject({ enabled: false, busy: false });
     await waitFor(() => a.got.seat.some((s) => s.reason === 'admin'));
     expect((await a.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).error).toMatch(/switched off/);
 
-    await request(gw.app).post('/api/driver').set('X-Admin-Token', TOKEN).send({ enabled: true }).expect(200);
+    await S.post('/api/driver').send({ enabled: true }).expect(200);
     expect((await a.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
-    const kick = await request(gw.app).post('/api/driver/release').set('X-Admin-Token', TOKEN).expect(200);
+    const kick = await S.post('/api/driver/release').expect(200);
     expect(kick.body.released).toBe(true);
     expect(gw.live.driver.public().busy).toBe(false);
   }, 40_000);

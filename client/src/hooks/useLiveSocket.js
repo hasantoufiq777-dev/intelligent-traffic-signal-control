@@ -4,6 +4,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { API_BASE } from '../api.js';
+import { useAuth } from './useAuth.js';
 
 const COMMIT_MS = 500;
 const MAX_STATES = 240; // the gateway sends the last 120 simulated seconds; keep some slack
@@ -30,6 +31,7 @@ function emptyBuffers() {
 }
 
 const ACK_TIMEOUT_MS = 5000;
+const CAPACITY_RETRY_MS = 15_000; // the platform is full: try again this often
 
 export function LiveProvider({ children }) {
   const buf = useRef(emptyBuffers());
@@ -39,15 +41,21 @@ export function LiveProvider({ children }) {
   const driveKey = useRef(null); // seat key of this viewer's drive (reclaims the seat after a reconnect)
   const [snap, setSnap] = useState(() => ({ ...emptyBuffers(), connection: 'connecting', followId: null }));
   const [connection, setConnection] = useState('connecting');
+  const [connectionNote, setConnectionNote] = useState(null);
+  const { refresh: refreshAuth } = useAuth();
 
   useEffect(() => {
-    const socket = io(API_BASE || undefined, { transports: ['websocket', 'polling'], reconnectionDelayMax: 10_000 });
+    // The session cookie authenticates the socket (sent with the handshake)
+    const socket = io(API_BASE || undefined, { transports: ['websocket', 'polling'], reconnectionDelayMax: 10_000,
+      withCredentials: true });
     socketRef.current = socket;
     const b = buf.current;
     const touch = () => { dirty.current = true; };
+    let capacityTimer = null;
 
     socket.on('connect', () => {
       setConnection('connected');
+      setConnectionNote(null);
       if (followId.current) socket.emit('follow', followId.current); // re-subscribe after a reconnect
       if (driveKey.current) {
         socket.emit('driver:resume', driveKey.current, (res) => {
@@ -59,9 +67,32 @@ export function LiveProvider({ children }) {
         });
       }
     });
-    socket.on('disconnect', () => setConnection('reconnecting'));
+    const atCapacity = (info) => {
+      setConnection('capacity');
+      setConnectionNote(info?.message || 'The platform is at its connection limit. Trying again shortly.');
+      clearTimeout(capacityTimer);
+      capacityTimer = setTimeout(() => socket.connect(), CAPACITY_RETRY_MS);
+    };
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') {
+        // The gateway closed the connection: the session ended (signed out elsewhere, disabled,
+        // password changed) or the connection limit was hit. Ask who we are; the app follows.
+        setConnection((c) => (c === 'capacity' ? c : 'offline'));
+        refreshAuth();
+      } else {
+        setConnection('reconnecting');
+      }
+    });
     socket.io.on('reconnect_attempt', () => setConnection('reconnecting'));
-    socket.on('connect_error', () => setConnection('offline'));
+    socket.on('connect_error', (err) => {
+      const code = err?.data?.code;
+      if (code === 'capacity') atCapacity(err.data);
+      else if (code === 'unauthenticated') {
+        setConnection('offline');
+        refreshAuth(); // the session is gone: the app shows the sign-in page
+      } else setConnection('offline');
+    });
+    socket.on('capacity', atCapacity);
 
     socket.on('init', (m) => {
       b.nowPlaying = m.now_playing;
@@ -149,9 +180,10 @@ export function LiveProvider({ children }) {
 
     return () => {
       clearInterval(timer);
+      clearTimeout(capacityTimer);
       socket.close();
     };
-  }, []);
+  }, [refreshAuth]);
 
   const follow = useCallback((id) => {
     followId.current = id || null;
@@ -195,7 +227,7 @@ export function LiveProvider({ children }) {
     dirty.current = true;
   }, []);
 
-  const value = { ...snap, connection, follow, startDrive, driveCommand, endDrive, clearDrive };
+  const value = { ...snap, connection, connectionNote, follow, startDrive, driveCommand, endDrive, clearDrive };
   return createElement(LiveContext.Provider, { value }, children);
 }
 
