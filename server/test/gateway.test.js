@@ -221,6 +221,18 @@ describe('gateway with mock simulation', () => {
     expect(RunEntrySchema.safeParse({ ...base, ev_routing: 'yes' }).success).toBe(false);
   });
 
+  it('serves the GA tuning output per target, and null for a target that was not run', async () => {
+    await request(gw.app).get('/api/experiments/ga').expect(401);
+    expect((await S.get('/api/experiments/ga').expect(200)).body).toEqual({ signals: null, aco: null });
+    const dir = path.join(path.dirname(baseOverrides.SUMMARY_PATH), 'ga');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'ga_aco_history.json'), JSON.stringify({ target: 'aco', best_fitness: 1, generations: [] }));
+    fs.writeFileSync(path.join(dir, 'ga_signals_evaluation.json'), '{not json');
+    const body = (await S.get('/api/experiments/ga').expect(200)).body;
+    expect(body.aco).toEqual({ history: { target: 'aco', best_fitness: 1, generations: [] }, evaluation: null });
+    expect(body.signals).toBeNull(); // an unreadable file is treated as missing, not as an error
+  });
+
   it('returns 404 until the experiment summary exists', async () => {
     const missing = await S.get('/api/experiments/summary').expect(404);
     expect(missing.body.error).toMatch(/evaluate\.py/);

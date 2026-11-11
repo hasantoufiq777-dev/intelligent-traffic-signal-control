@@ -153,6 +153,25 @@ export function createGateway(overrides = {}) {
     });
   });
 
+  // Genetic-algorithm tuning output (results/ga/, written by sim/optimizer/ga_tuner.py): the
+  // convergence history and the held-out evaluation per target. A target that was not run is null.
+  app.get('/api/experiments/ga', requireAuth, async (_req, res) => {
+    const dir = path.join(path.dirname(cfg.SUMMARY_PATH), 'ga');
+    const read = async (name) => {
+      try {
+        return JSON.parse(await fs.promises.readFile(path.join(dir, name), 'utf8'));
+      } catch {
+        return null;
+      }
+    };
+    const out = {};
+    for (const target of ['signals', 'aco']) {
+      const [history, evaluation] = await Promise.all([read(`ga_${target}_history.json`), read(`ga_${target}_evaluation.json`)]);
+      out[target] = history || evaluation ? { history, evaluation } : null;
+    }
+    res.json(out);
+  });
+
   app.get('/api/runs', requireAuth, (req, res) => {
     const { limit, offset } = page(req);
     res.json({ runs: db.listRuns(limit, offset), total: db.countRuns(), limit, offset });

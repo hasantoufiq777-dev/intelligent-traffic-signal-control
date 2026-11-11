@@ -58,8 +58,8 @@ Role permissions:
 | 2–3 | Database migrations; users, sessions, RBAC, CSRF, security headers, rate limits, login lockout, audit log; authenticated sockets; 1000-connection cap; simulation lifecycle states, start/stop locking, bounded crash retry; login / account / user-management pages; backend tests | **done** — results in `docs/testing/PHASE_2_3_REPORT.md` |
 | 4 | Design system: sidebar + top bar layout, shared components, responsive (1920 → 360), accessibility | **done** — `docs/testing/PHASE_4_5_REPORT.md` (automated accessibility audit moves to Phase 8) |
 | 5 | Traffic map: zoom/pan/fit, layer controls, RSUs and radio range, queue counts, signal countdowns, junction and vehicle detail panels, closures, alternate and ambulance routes, smoother movement | **done** — `docs/testing/PHASE_4_5_REPORT.md` |
-| 6 | Module pages: signals, VANET, emergency, navigation, incidents, work zone, GLOSA, GA, experiments, notifications, documentation, administration (health, sessions) | planned |
-| 7 | Research dashboards and downloadable reports; guided teacher demonstration mode | planned |
+| 6 | Module pages: signals, VANET, emergency, navigation, incidents, work zone, GLOSA, GA, experiments, notifications, documentation, administration (health, sessions) | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
+| 7 | Research dashboards and downloadable reports; guided teacher demonstration mode | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
 | 8 | Testing: Playwright end-to-end and screenshots at all viewports, security tests, database tests, failure/recovery tests, load tests 10 → 1000 authenticated users (k6/Artillery), reports in `docs/testing/` | planned |
 | 9 | Profiling and optimisation with before/after measurements | planned |
 | 10 | Deployment guide, production `.env.example`, backup/restore, final acceptance report | planned |

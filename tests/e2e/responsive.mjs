@@ -4,7 +4,8 @@ import { chromium } from 'playwright-core';
 
 const [url, email, password, out] = process.argv.slice(2);
 const WIDTHS = [1920, 1440, 1024, 768, 390, 360];
-const PAGES = ['/', '/live', '/results', '/admin', '/administration', '/account'];
+const PAGES = ['/', '/live', '/signals', '/vanet', '/emergency', '/navigation', '/incidents', '/work-zone', '/glosa', '/events',
+  '/demo', '/results', '/ga', '/runs', '/docs', '/admin', '/administration', '/account'];
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const problems = [];

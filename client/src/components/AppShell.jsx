@@ -2,6 +2,7 @@
 // with the page title, connection state, theme and the user menu.
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
+import { IMPORTANT_EVENTS } from '../lib/events.js';
 import { ROLE_LABEL, useAuth } from '../hooks/useAuth.js';
 import { useLive } from '../hooks/useLiveSocket.js';
 import Icon from './Icon.jsx';
@@ -88,8 +89,22 @@ export function navGroups({ isAdmin, canControl }) {
     { title: 'Monitor', items: [
       { to: '/', end: true, icon: 'map', label: 'Live traffic' },
       { to: '/live', icon: 'gauge', label: 'Live overview' },
+      { to: '/signals', icon: 'signal', label: 'Signals' },
+      { to: '/vanet', icon: 'wifi', label: 'VANET' },
+      { to: '/emergency', icon: 'ambulance', label: 'Emergency' },
+      { to: '/navigation', icon: 'route', label: 'Navigation' },
+      { to: '/incidents', icon: 'alert', label: 'Incidents' },
+      { to: '/work-zone', icon: 'cone', label: 'Work zone' },
+      { to: '/glosa', icon: 'leaf', label: 'Eco-driving' },
+      { to: '/events', icon: 'bell', label: 'Events' },
     ] },
-    { title: 'Research', items: [{ to: '/results', icon: 'chart', label: 'Results' }] },
+    { title: 'Research', items: [
+      { to: '/demo', icon: 'flag', label: 'Guided demo' },
+      { to: '/results', icon: 'chart', label: 'Results' },
+      { to: '/ga', icon: 'dna', label: 'GA optimisation' },
+      { to: '/runs', icon: 'list', label: 'Run history' },
+      { to: '/docs', icon: 'book', label: 'Documentation' },
+    ] },
     canControl && { title: 'Control', items: [{ to: '/admin', icon: 'play', label: 'Run control' }] },
     isAdmin && { title: 'System', items: [{ to: '/administration', icon: 'shield', label: 'Administration' }] },
   ].filter(Boolean);
@@ -97,13 +112,22 @@ export function navGroups({ isAdmin, canControl }) {
 
 export default function AppShell({ children }) {
   const auth = useAuth();
-  const { connection, connectionNote } = useLive();
+  const { connection, connectionNote, events, nowPlaying } = useLive();
   const location = useLocation();
+  // Bell: important events of the current run that arrived since the Events page was last open
+  const runId = nowPlaying?.current?.run_id ?? null;
+  const important = events.filter((e) => IMPORTANT_EVENTS.has(e.kind)).length;
+  const [seen, setSeen] = useState({ run: null, n: 0 });
+  const onEvents = location.pathname === '/events';
+  useEffect(() => {
+    if (onEvents || seen.run !== runId) setSeen({ run: runId, n: onEvents ? important : 0 });
+  }, [onEvents, runId, important, seen.run]);
+  const unread = seen.run === runId ? Math.max(0, important - seen.n) : important;
   const [collapsed, setCollapsed] = useState(() => stored(SIDEBAR_KEY, 'open') === 'collapsed');
   const [drawer, setDrawer] = useState(false);
   const groups = navGroups(auth);
   const items = groups.flatMap((g) => g.items);
-  const current = items.find((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)))
+  const current = items.find((i) => location.pathname === i.to || (!i.end && location.pathname.startsWith(`${i.to}/`)))
     || (location.pathname === '/account' ? { label: 'Account' } : null);
 
   useEffect(() => { setDrawer(false); }, [location.pathname]); // navigating closes the mobile drawer
@@ -159,6 +183,9 @@ export default function AppShell({ children }) {
           <div className="topbar-right">
             <span className="only-desktop sumo-gui"><SumoGuiButton /></span>
             <ConnectionBadge connection={connection} />
+            <Link to="/events" className="icon-btn bell" aria-label={unread ? `${unread} new important events. Open the event centre` : 'Open the event centre'}>
+              <Icon name="bell" size={17} />{unread > 0 && <span className="badge" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+            </Link>
             <ThemeButton />
             <UserMenu />
           </div>

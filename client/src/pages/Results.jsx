@@ -181,6 +181,32 @@ function SuiteCharts({ suite, scen, cfgs }) {
   );
 }
 
+/** Save text as a file from the browser. */
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** One suite as CSV: a row per scenario, configuration and metric. */
+export function suiteCsv(name, suite) {
+  const q = (v) => (v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replaceAll('"', '""')}"` : String(v));
+  const lines = [['suite', 'scenario', 'configuration', 'metric', 'mean', 'std', 'ci95_low', 'ci95_high', 'n', 'improvement_pct', 'p_value', 'test'].join(',')];
+  for (const [scen, cfgs] of Object.entries(suite)) {
+    for (const [label, metrics] of Object.entries(cfgs)) {
+      for (const [metric, e] of Object.entries(metrics)) {
+        lines.push([name, scen, label, metric, e.mean, e.std, e.ci95?.[0], e.ci95?.[1], e.n, e.improvement_pct, e.p_value, e.test].map(q).join(','));
+      }
+    }
+  }
+  return `${lines.join('\n')}\n`;
+}
+
 export default function Results() {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
@@ -205,13 +231,20 @@ export default function Results() {
   if (!summary) return <div className="notice">Loading results…</div>;
 
   const suite = summary.suites?.[tab] || {};
+  const stamp = String(summary.generated_at || '').slice(0, 10);
   return (
     <div className="stack">
       <div className="row">
-        <h1 style={{ fontSize: 20 }}>Experiment results</h1>
         <span className="small muted">
-          Generated {new Date(summary.generated_at).toLocaleString()} · seeds {summary.meta?.seeds?.join(', ')}
+          Simulation results, mean ± standard deviation over seeds {summary.meta?.seeds?.join(', ')} · generated {new Date(summary.generated_at).toLocaleString()}
           {summary.meta?.quick ? ' · quick run' : ''}
+        </span>
+        <span className="row" style={{ marginLeft: 'auto' }}>
+          <button type="button" className="btn" disabled={!Object.keys(suite).length}
+            onClick={() => download(`results-${tab}-${stamp}.csv`, suiteCsv(tab, suite), 'text/csv')}>Download this table (CSV)</button>
+          <button type="button" className="btn" onClick={() => download(`results-${stamp}.json`, JSON.stringify(summary, null, 2), 'application/json')}>
+            Download all results (JSON)
+          </button>
         </span>
       </div>
       <div className="tabs" role="tablist">

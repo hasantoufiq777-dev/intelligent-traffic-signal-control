@@ -87,7 +87,11 @@ Pages:
   congestion, accidents and closures, ambulance routes, roadside units and radio range. Select a junction for its
   signals and queues, or a car for its road, next light, eco advice, fuel and CO₂; drive a car from the Vehicle tab.
 - `/live`: junction cards, VANET and navigation panels, charts, event log.
-- `/results`: experiment results.
+- Module pages: `/signals`, `/vanet`, `/emergency`, `/navigation`, `/incidents`, `/work-zone`, `/glosa` (eco-driving) and `/events`.
+- `/demo`: **Guided demo**, thirteen steps for a teacher or evaluator; each scenario step starts its run and says what to watch.
+- `/ga`: genetic-algorithm tuning (convergence, parameters, held-out check); `/runs`: stored runs with a side-by-side comparison;
+  `/docs`: project documentation with the algorithms and formulas.
+- `/results`: experiment results, with CSV and JSON download.
 - `/admin`: **Run control** (administrators and researchers): start and stop runs on the shared simulation.
 - `/administration`: users and roles, active sessions, audit log, settings, system health (administrators).
 - `/account`: your name and password.

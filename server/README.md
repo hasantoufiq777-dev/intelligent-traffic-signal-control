@@ -110,6 +110,7 @@ Errors are JSON `{error, code}` with `code` one of `unauthenticated` (401), `for
 | GET | `/api/live/playlist` | session | Playlist and loop flag |
 | GET | `/api/options` | session | Allowed scenarios, controllers, nav modes, relay, defaults, playlist |
 | GET | `/api/experiments/summary` | session | `results/summary.json`, or 404 with how to create it |
+| GET | `/api/experiments/ga` | session | GA tuning output per target (`signals`, `aco`): `{history, evaluation}` from `results/ga/`, or null when not run |
 | GET | `/api/runs?limit=&offset=` | session | Stored runs, newest first, with `total` |
 | GET | `/api/runs/:id?samples=N` | session | Run, result, events (up to 500), state-sample count, optional samples |
 | GET | `/api/driver` | session | Driver seat and the last 20 drives with their trip reports |

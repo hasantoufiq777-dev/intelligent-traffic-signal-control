@@ -12,6 +12,20 @@ const Results = lazy(() => import('./pages/Results.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const Administration = lazy(() => import('./pages/Administration.jsx'));
 const Account = lazy(() => import('./pages/Account.jsx'));
+const Docs = lazy(() => import('./pages/Docs.jsx'));
+const Demo = lazy(() => import('./pages/Demo.jsx'));
+const modulePage = (name) => lazy(() => import('./pages/Modules.jsx').then((m) => ({ default: m[name] })));
+const researchPage = (name) => lazy(() => import('./pages/Research.jsx').then((m) => ({ default: m[name] })));
+const Signals = modulePage('Signals');
+const Vanet = modulePage('Vanet');
+const Emergency = modulePage('Emergency');
+const Navigation = modulePage('Navigation');
+const Incidents = modulePage('Incidents');
+const WorkZone = modulePage('WorkZone');
+const Glosa = modulePage('Glosa');
+const GaPage = researchPage('GaPage');
+const Runs = researchPage('Runs');
+const EventsPage = researchPage('EventsPage');
 
 /** Pages for a role the user does not have are not rendered (the gateway refuses the data anyway). */
 function Restricted({ allow, children }) {
@@ -27,7 +41,19 @@ function SignedIn() {
           <Routes>
             <Route path="/" element={<UserPanel />} />
             <Route path="/live" element={<LiveOverview />} />
+            <Route path="/signals" element={<Signals />} />
+            <Route path="/vanet" element={<Vanet />} />
+            <Route path="/emergency" element={<Emergency />} />
+            <Route path="/navigation" element={<Navigation />} />
+            <Route path="/incidents" element={<Incidents />} />
+            <Route path="/work-zone" element={<WorkZone />} />
+            <Route path="/glosa" element={<Glosa />} />
+            <Route path="/events" element={<EventsPage />} />
             <Route path="/results" element={<Results />} />
+            <Route path="/ga" element={<GaPage />} />
+            <Route path="/runs" element={<Runs />} />
+            <Route path="/docs" element={<Docs />} />
+            <Route path="/demo" element={<Demo />} />
             <Route path="/admin" element={<Restricted allow={canControl}><Admin /></Restricted>} />
             <Route path="/administration" element={<Restricted allow={isAdmin}><Administration /></Restricted>} />
             <Route path="/account" element={<Account />} />

@@ -57,7 +57,8 @@ export default function JunctionPanel({ ids, selected, onSelect, tlsState, ev, c
                 {DIRS.map((d) => {
                   const s = data.signal?.[d];
                   const q = data.queues?.[d] ?? 0;
-                  const est = data.queues_est?.[d];
+                  // Only a VANET-sensed controller estimates queues; otherwise the stream repeats the true queue
+                  const est = /vanet/.test(controller || '') ? data.queues_est?.[d] : null;
                   return (
                     <tr key={d}>
                       <td>{FROM[d]}</td>
