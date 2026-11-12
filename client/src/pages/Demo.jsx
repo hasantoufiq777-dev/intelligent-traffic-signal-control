@@ -93,6 +93,20 @@ export default function Demo() {
     }
   }
 
+  // Pause to explain a moment, then resume (the paused state is what the simulation confirmed)
+  const paused = Boolean(np?.playback?.paused);
+  async function togglePause() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await (paused ? api.resume() : api.pause());
+    } catch (err) {
+      setMsg({ error: true, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <NowPlaying nowPlaying={np} latest={live.latest} viewers={live.viewers} status={live.status} />
@@ -123,6 +137,11 @@ export default function Demo() {
                   {playing ? 'Restart this scenario' : 'Start this scenario'}
                 </button>
               )}
+              {s.entry && canControl && playing && np?.lifecycle === 'RUNNING' && (
+                <button type="button" className="btn" aria-pressed={paused} disabled={busy} onClick={togglePause}>
+                  {paused ? 'Resume' : 'Pause to explain'}
+                </button>
+              )}
               {s.page && <Link className="btn" to={s.page[0]}>{s.page[1]}</Link>}
               <span style={{ marginLeft: 'auto' }} className="row">
                 <button type="button" className="btn" disabled={step === 0} onClick={() => setStep(step - 1)}>Previous</button>
@@ -150,7 +169,8 @@ export default function Demo() {
               <TrafficMap network={live.network} vehicles={live.vehicles} tlsState={live.latest?.tls} zoneState={live.latest?.zone}
                 edgeSpeeds={live.latest?.edge_speeds} incidents={live.latest?.incidents} evRoutes={live.latest?.ev_routes}
                 followId={live.followId} onSelect={live.follow}
-                stale={!np?.running ? 'The simulation is not running' : !playing ? 'Another scenario is playing: start this step’s scenario to see it' : null} />
+                stale={!np?.running ? 'The simulation is not running' : !playing ? 'Another scenario is playing: start this step’s scenario to see it'
+                  : paused ? `Paused at simulated second ${live.latest?.t ?? '–'}` : null} />
             </section>
           )}
         </div>

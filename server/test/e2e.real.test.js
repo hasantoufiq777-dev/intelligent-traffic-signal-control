@@ -94,4 +94,35 @@ describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
       await gw.close();
     }
   }, 200_000);
+  it('pauses, speeds up and resumes a real SUMO run without losing a simulated second', async () => {
+    const gw = createGateway({
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      SIM_STEP_DELAY: '0.1', SIM_MAX_STEPS: '600', STATE_INTERVAL_MS: '100', LOG_LEVEL: 'warn',
+      PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
+    });
+    await gw.listen(0, '127.0.0.1');
+    const S = await adminSession(gw);
+    try {
+      await S.post('/api/live/start').send({ scenario: 'normal', network: 'grid2x2', controller: 'fixed', seed: 1 }).expect(202);
+      await waitFor(() => gw.live.lifecycle === 'RUNNING' && gw.live.latestState?.t >= 5, 60_000, 50);
+      await S.post('/api/live/pause').expect(202);
+      await waitFor(() => gw.live.playback.paused, 10_000, 20);
+      const frozen = gw.live.latestState.t;
+      await new Promise((r) => setTimeout(r, 1500)); // 15 simulated seconds at this pace if it were running
+      expect(gw.live.latestState.t).toBeLessThanOrEqual(frozen + 1);
+      await S.post('/api/live/speed').send({ speed: 4 }).expect(202);
+      await waitFor(() => gw.live.playback.speed === 4, 10_000, 20);
+      await S.post('/api/live/resume').expect(202);
+      await waitFor(() => !gw.live.playback.paused, 10_000, 20);
+      const t0 = Date.now();
+      const tResume = gw.live.latestState.t;
+      await waitFor(() => gw.live.latestState.t >= tResume + 20, 20_000, 20);
+      const rate = 20 / ((Date.now() - t0) / 1000); // simulated seconds per second
+      expect(rate).toBeGreaterThan(15); // 4x of 10 s/s = 40 s/s nominal; SUMO's own step time limits it
+      const seconds = gw.live.states.map((x) => x.t);
+      expect(seconds.every((t, i) => i === 0 || t === seconds[i - 1] + 1)).toBe(true); // history has no gap
+    } finally {
+      await gw.close();
+    }
+  }, 120_000);
 });

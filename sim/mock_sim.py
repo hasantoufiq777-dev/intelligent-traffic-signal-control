@@ -119,12 +119,14 @@ def main() -> None:
     traffic = MockTraffic(network, random.Random(args.seed + 7), args.penetration, args.eco_fraction, args.nav,
                           with_ev=args.scenario in ("emergency", "incident"))
     commands = None
+    playback = None  # pause / resume / speed from the dashboard (wall-clock only)
     if args.driver and args.live:
         try:
-            from sim.commands import CommandReader
+            from sim.commands import CommandReader, Playback
         except ImportError:  # run as a script from sim/
-            from commands import CommandReader  # type: ignore
+            from commands import CommandReader, Playback  # type: ignore
         commands = CommandReader(sys.stdin)
+        playback = Playback(args.step_delay, emit_json, args.run_id)
 
     if args.live:
         emit_json({
@@ -271,7 +273,7 @@ def main() -> None:
 
             spat = mock_spat(t, preempted=preempt_active)
             if commands is not None:
-                for cmd in commands.poll():
+                for cmd in playback.split(commands.poll(), t):
                     traffic.handle_driver(cmd, t)
             traffic.step(t, spat)
             if args.live:
@@ -335,8 +337,11 @@ def main() -> None:
                 if drv_msg is not None:
                     emit_json(drv_msg)
 
-            if args.step_delay > 0:
-                time.sleep(args.step_delay)
+            delay = playback.step_delay if playback is not None else args.step_delay
+            if delay > 0:
+                time.sleep(delay)
+            if playback is not None and playback.paused:
+                playback.wait_while_paused(commands, t, lambda: _STOP_REQUESTED)
 
     finally:
         pass

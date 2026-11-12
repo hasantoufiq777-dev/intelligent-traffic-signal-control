@@ -91,6 +91,31 @@ await step('guided demo starts step 3 and the map shows that run', async () => {
   await page.waitForFunction(() => document.querySelectorAll('svg.map-svg g.car-g').length > 3, null, { timeout: 60_000 });
   await page.getByText('normal · fixed', { exact: false }).first().waitFor();
 });
+await step('the guided demo pauses the run to explain and resumes it', async () => {
+  await page.getByRole('button', { name: 'Pause to explain' }).click();
+  await page.getByRole('status').filter({ hasText: /^Paused$/ }).first().waitFor({ timeout: 15_000 }); // confirmed by the simulation
+  await page.getByText(/Paused at simulated second \d+/).waitFor();
+  const t1 = await page.locator('.banner .chip.num').first().textContent();
+  await page.waitForTimeout(2500); // the mock plays 2 simulated seconds per second when running
+  if ((await page.locator('.banner .chip.num').first().textContent()) !== t1) throw new Error('time went on while paused');
+  await page.getByRole('button', { name: 'Resume' }).click();
+  await page.getByRole('status').filter({ hasText: 'Now playing' }).first().waitFor({ timeout: 15_000 });
+});
+await step('run control changes the speed and restarts the run from the beginning', async () => {
+  await page.goto(`${url}/admin`);
+  const speed = page.getByRole('group', { name: 'Playback' }).getByRole('combobox');
+  await speed.selectOption('2');
+  await page.getByText('2× speed').waitFor({ timeout: 15_000 });
+  await speed.selectOption('1');
+  await page.getByText('2× speed').waitFor({ state: 'detached', timeout: 15_000 });
+  const runId = () => page.evaluate(async () => (await (await fetch('/api/live/status')).json()).entry?.run_id);
+  const before = await runId();
+  await page.getByRole('button', { name: 'Restart from the beginning' }).click();
+  await page.getByText('Restarted from the beginning with the same settings.').waitFor({ timeout: 20_000 });
+  await page.getByRole('status').filter({ hasText: 'Now playing' }).first().waitFor({ timeout: 20_000 });
+  const after = await runId();
+  if (!after || after === before) throw new Error(`no new run after the restart (${before} -> ${after})`);
+});
 await step('the bell counts important events and opens the event centre', async () => {
   await page.getByRole('link', { name: /event centre/ }).click();
   await page.waitForURL('**/events');

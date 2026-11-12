@@ -397,6 +397,7 @@ label.field input, label.field select {
 .copy-field { display: block; width: 100%; margin-top: 8px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); font-family: ui-monospace, monospace; font-size: 12px; }
 .truncate { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.bad { color: var(--bad-text); }
+.chip.warn { color: var(--warn-text); }
 
 /* ---------- Live traffic page ---------- */
 .status-strip { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); margin-bottom: 16px; }

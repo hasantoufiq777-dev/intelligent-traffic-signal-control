@@ -517,11 +517,14 @@ def run_simulation(
 
         # One-driver mode: a dashboard viewer drives one car (live only)
         driver_mgr: Optional[Any] = None
+        playback: Optional[Any] = None  # pause / resume / speed from the dashboard (wall-clock only)
         if driver and live:
+            from sim.commands import Playback
             from sim.driver import CommandReader, DriverManager
 
             if driver_commands is None:
                 driver_commands = CommandReader(sys.stdin)
+            playback = Playback(step_delay, emit_json_line, run_id)
             eco_cfg_drv = dict(base_config.get("eco", {}) or {})
             driver_mgr = DriverManager(
                 sumo_api=sumo_api,
@@ -717,7 +720,7 @@ def run_simulation(
 
             # Driver commands and the driven car (advice, ambulance warning, trip report)
             if driver_mgr is not None:
-                for cmd in driver_commands.poll():
+                for cmd in playback.split(driver_commands.poll(), t):
                     driver_mgr.handle(cmd, t)
                 driver_mgr.step(t, active_vehs)
                 for d_ev in driver_mgr.pop_events():
@@ -813,7 +816,7 @@ def run_simulation(
                                        col.type, col.lane)
             except Exception:
                 pass
-            delay = step_delay
+            delay = playback.step_delay if playback is not None else step_delay
             if driver_mgr is not None and driver_mgr.active_step_delay() is not None:
                 delay = float(driver_mgr.active_step_delay())  # slower pacing while someone drives
             if delay > 0.0:
@@ -821,6 +824,9 @@ def run_simulation(
                 import time as _time
 
                 _time.sleep(delay)
+            if playback is not None and playback.paused:
+                # Paused from the dashboard: SUMO is not stepped until resumed (or stopped)
+                playback.wait_while_paused(driver_commands, t, lambda: _STOP_REQUESTED)
 
             if t > 60.0 and sumo_api.simulation.getMinExpectedNumber() <= 0:
                 break

@@ -50,7 +50,8 @@ export default function UserPanel() {
   const np = live.nowPlaying;
   const running = Boolean(np?.running) && np?.lifecycle !== 'STOPPING';
   const stale = live.connection !== 'connected' ? 'Not connected: the map is not being updated'
-    : !running ? STALE[np?.lifecycle] ?? STALE.STOPPED : null;
+    : !running ? STALE[np?.lifecycle] ?? STALE.STOPPED
+      : np?.playback?.paused ? `Paused: the map shows simulated second ${latest?.t ?? '–'} until the run is resumed` : null;
 
   const selectCar = (id) => {
     follow(id);

@@ -113,6 +113,19 @@ export default function Admin() {
     }
   }
 
+  async function playback(fn, ok) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await fn();
+      if (ok) setMsg({ text: ok });
+    } catch (err) {
+      setMsg({ error: true, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // What the gateway reports, so the buttons never offer an operation that would be refused
   const np = live.nowPlaying;
   const lifecycle = np?.lifecycle;
@@ -123,6 +136,11 @@ export default function Admin() {
   const mine = np?.current?.started_by?.id === user.id;
   const canStart = isAdmin || !running || np?.current?.source !== 'admin' || mine;
   const canStop = isAdmin || (running && mine);
+  // Pause and speed as the simulation confirmed them; same ownership rule as Stop
+  const paused = Boolean(np?.playback?.paused);
+  const speed = np?.playback?.speed ?? 1;
+  const canPlayback = running && lifecycle === 'RUNNING' && canStop;
+  const canRestart = Boolean(np?.current) && !transitional && (isAdmin || mine);
 
   const sel = (k, list) => (
     <label className="field">{k}
@@ -169,8 +187,21 @@ export default function Admin() {
             <div className="row">
               <button type="submit" className="btn primary" disabled={busy || transitional || !canStart}>Start live run</button>
               <button type="button" className="btn danger" disabled={busy || transitional || !running || !canStop} onClick={stop}>Stop</button>
-              <span className="chip" role="status">simulation: {(lifecycle || 'unknown').toLowerCase()}</span>
+              <span className="chip" role="status">simulation: {paused ? 'paused' : (lifecycle || 'unknown').toLowerCase()}</span>
               {options.mock && <span className="chip">gateway uses the mock simulation</span>}
+            </div>
+            <div className="row" role="group" aria-label="Playback">
+              <button type="button" className="btn" aria-pressed={paused} disabled={busy || !canPlayback}
+                onClick={() => playback(paused ? api.resume : api.pause)}>{paused ? 'Resume' : 'Pause'}</button>
+              <label className="row small">Speed
+                <select value={String(speed)} disabled={busy || !canPlayback}
+                  onChange={(e) => playback(() => api.speed(Number(e.target.value)))}>
+                  {[0.5, 1, 2, 4].map((v) => <option key={v} value={String(v)}>{v}×</option>)}
+                </select>
+              </label>
+              <button type="button" className="btn" disabled={busy || !canRestart}
+                onClick={() => playback(api.restart, 'Restarted from the beginning with the same settings.')}>Restart from the beginning</button>
+              <span className="small muted">Pause and speed change only how fast the run is shown; its simulated results stay the same.</span>
             </div>
           </form>
         ) : (

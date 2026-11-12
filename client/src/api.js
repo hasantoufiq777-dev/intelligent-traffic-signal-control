@@ -78,6 +78,11 @@ export const api = {
   run: (id) => request(`/api/runs/${encodeURIComponent(id)}`),
   start: (entry) => post('/api/live/start', entry),
   stop: () => post('/api/live/stop'),
+  // Playback of the running simulation (wall-clock pacing only): pause, resume, speed 0.5/1/2/4, restart
+  pause: () => post('/api/live/pause'),
+  resume: () => post('/api/live/resume'),
+  speed: (speed) => post('/api/live/speed', { speed }),
+  restart: () => post('/api/live/restart'),
   sumoGui: () => request('/api/sumo/gui'),
   setSumoGui: (enabled) => post('/api/sumo/gui', { enabled }),
   driver: () => request('/api/driver'),

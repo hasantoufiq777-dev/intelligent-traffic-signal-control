@@ -78,7 +78,8 @@ await step('the server refuses the viewer\'s start, stop, user and settings requ
   const tries = [['POST', '/api/live/start', { scenario: 'normal', controller: 'fixed' }], ['POST', '/api/live/stop'],
     ['GET', '/api/users'], ['POST', '/api/users', { email: 'x@test.local', name: 'X', password: PW, role: 'ADMIN' }],
     ['PATCH', `/api/users/${ids.VIEWER}`, { role: 'ADMIN' }], ['PUT', '/api/settings', { allow_registration: true }],
-    ['GET', '/api/audit'], ['POST', '/api/driver', { enabled: false }]];
+    ['GET', '/api/audit'], ['POST', '/api/driver', { enabled: false }],
+    ['POST', '/api/live/pause'], ['POST', '/api/live/resume'], ['POST', '/api/live/speed', { speed: 2 }], ['POST', '/api/live/restart']];
   for (const [m, p, b] of tries) {
     const r = await call(vp, m, p, b);
     if (r.status !== 403) throw new Error(`${m} ${p} answered ${r.status}`);

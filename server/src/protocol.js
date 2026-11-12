@@ -31,7 +31,7 @@ export const RunEntrySchema = z
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 
-const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver']) }).passthrough();
+const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback']) }).passthrough();
 
 /** Road ids a driver may pick (normal edges: no ":" internal junction lanes). */
 const EdgeIdSchema = z.string().min(1).max(64).regex(/^[\w.#-]+$/);
@@ -47,6 +47,10 @@ export const DriverCommandSchema = z.object({
 }).strict();
 
 /** Vehicle ids a viewer may follow (also used as a Socket.io room name suffix). */
+// Live playback speed, relative to the run's normal pacing (the simulation accepts the same values)
+export const PLAYBACK_SPEEDS = [0.5, 1, 2, 4];
+export const PlaybackSpeedSchema = z.object({ speed: z.coerce.number().refine((v) => PLAYBACK_SPEEDS.includes(v), 'Speed must be 0.5, 1, 2 or 4') }).strict();
+
 export const VehicleIdSchema = z.string().min(1).max(64).regex(/^[\w.:#-]+$/);
 
 /**
@@ -89,7 +93,7 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--eco-fraction', String(entry.eco_fraction ?? 0),
     '--ev-routing', entry.ev_routing ?? 'off',
     '--live',
-    '--driver', // read drive commands on stdin (one-driver mode); harmless when nobody drives
+    '--driver', // read commands on stdin: one-driver mode and playback (pause, resume, speed)
   ];
   if (entry.network) args.push('--network', entry.network);
   if (cfg.USE_MOCK) {

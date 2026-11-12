@@ -15,7 +15,7 @@ import { createAuth } from './auth.js';
 import { loadConfig, makeLogger } from './config.js';
 import { openDatabase } from './db.js';
 import { LiveChannel } from './liveChannel.js';
-import { OPTIONS, PlaylistSchema, RunEntrySchema } from './protocol.js';
+import { OPTIONS, PLAYBACK_SPEEDS, PlaybackSpeedSchema, PlaylistSchema, RunEntrySchema } from './protocol.js';
 
 export function loadPlaylist(file, logger) {
   try {
@@ -233,6 +233,47 @@ export function createGateway(overrides = {}) {
     const stopped = await live.exclusive(() => live.stop());
     auth.audit(req, 'sim_stop', { target: cur?.run_id ?? null, detail: stopped ? 'stopped' : 'nothing was running' });
     return res.json({ stopped });
+  }));
+
+  // ---- playback: pause, resume, speed, restart (an administrator, or the researcher who started the run)
+  const ownsRun = (req, action) => {
+    if (req.user.role === 'ADMIN' || live.current?.started_by?.id === req.user.id) return true;
+    auth.audit(req, 'access_denied', { target: `POST /api/live/${action}`, detail: 'not the owner of the run' });
+    return false;
+  };
+  const notOwner = (res) => res.status(403).json({ error: 'Only an administrator can control a run you did not start', code: 'forbidden' });
+  const control = requireRole('ADMIN', 'RESEARCHER');
+  const sendPlayback = (action, makeCmd) => (req, res) => {
+    let cmd;
+    if (action === 'speed') {
+      const parsed = PlaybackSpeedSchema.safeParse(req.body ?? {});
+      if (!parsed.success) return res.status(400).json({ error: `Speed must be one of ${PLAYBACK_SPEEDS.join(', ')}`, code: 'invalid' });
+      cmd = { cmd: 'speed', speed: parsed.data.speed };
+    } else cmd = makeCmd();
+    if (!ownsRun(req, action)) return notOwner(res);
+    try {
+      live.playbackCommand(cmd);
+    } catch (err) {
+      if (err.code === 'not_running') return res.status(409).json({ error: err.message, code: 'not_running' });
+      throw err;
+    }
+    auth.audit(req, `sim_${action}`, { target: live.current?.run_id ?? null, detail: cmd.speed ? `speed ${cmd.speed}` : null });
+    return res.status(202).json({ requested: cmd.cmd, ...(cmd.speed ? { speed: cmd.speed } : {}) });
+  };
+  app.post('/api/live/pause', control, sendPlayback('pause', () => ({ cmd: 'pause' })));
+  app.post('/api/live/resume', control, sendPlayback('resume', () => ({ cmd: 'resume' })));
+  app.post('/api/live/speed', control, sendPlayback('speed'));
+  app.post('/api/live/restart', control, guarded(async (req, res) => {
+    if (!ownsRun(req, 'restart')) return notOwner(res);
+    let runId;
+    try {
+      runId = await live.exclusive(() => live.restart(req.user));
+    } catch (err) {
+      if (err.code === 'not_running') return res.status(409).json({ error: err.message, code: 'not_running' });
+      throw err;
+    }
+    auth.audit(req, 'sim_restart', { target: runId });
+    return res.status(202).json({ run_id: runId, entry: live.current?.entry });
   }));
 
   // ---- SUMO-GUI window (opens on the computer running the gateway; ADMIN) -------

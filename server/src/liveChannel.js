@@ -40,6 +40,8 @@ export class LiveChannel {
     // Simulation lifecycle shown to every client: STOPPED -> STARTING -> RUNNING -> STOPPING -> STOPPED,
     // FAILED after an error, RECOVERING while the playlist waits to retry.
     this.lifecycle = 'STOPPED';
+    // Pause and speed of the running simulation, as confirmed by it ('playback' messages)
+    this.playback = { paused: false, speed: 1 };
     this.failures = 0; // consecutive failed runs
     this._op = false; // a start/stop/restart request is in progress
     this.accept = null; // (socket) => boolean, set by the gateway (session rooms, connection cap)
@@ -117,6 +119,7 @@ export class LiveChannel {
       mock: this.cfg.USE_MOCK,
       gui: this.gui,
       driver: this.driver.public(),
+      playback: this.playback,
     };
   }
 
@@ -193,6 +196,7 @@ export class LiveChannel {
       this.failures = 0;
     }
     this.driver.onRunEnded(); // a drive belongs to one run
+    this.playback = { paused: false, speed: 1 }; // every run starts playing at normal speed
     this._setLifecycle('STARTING');
 
     this._dropPendingState(); // never deliver a state of the previous run after this one starts
@@ -247,6 +251,35 @@ export class LiveChannel {
     }
     this.io.to(ROOM).emit('now_playing', this.nowPlaying());
     return { enabled: this.gui, restarted };
+  }
+
+  /**
+   * Pause, resume or change the speed of the running simulation. This changes only wall-clock
+   * pacing (the simulated seconds are the same); the simulation confirms with a 'playback' message,
+   * which is what viewers are shown.
+   */
+  playbackCommand(cmd) {
+    if (!this.proc || this.lifecycle !== 'RUNNING') {
+      const err = new Error('No simulation is running');
+      err.code = 'not_running';
+      throw err;
+    }
+    if (!this.proc.send(cmd)) {
+      const err = new Error('The simulation is not accepting commands');
+      err.code = 'not_running';
+      throw err;
+    }
+    return true;
+  }
+
+  /** Start the current (or last) run again from its first second, with the same settings. */
+  async restart(user) {
+    if (!this.current) {
+      const err = new Error('There is no run to restart');
+      err.code = 'not_running';
+      throw err;
+    }
+    return this.start(this.current.entry, 'admin', user);
   }
 
   /** Admin stop: stop the run and pause the playlist until the next admin start. */
@@ -344,6 +377,10 @@ export class LiveChannel {
         break;
       case 'driver':
         this.driver.onSimMessage({ ...msg, run_id: runId });
+        break;
+      case 'playback':
+        this.playback = { paused: Boolean(msg.paused), speed: Number(msg.speed) || 1 };
+        this.io.to(ROOM).emit('now_playing', this.nowPlaying());
         break;
       case 'result':
         this.lastResult = msg;
