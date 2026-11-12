@@ -58,8 +58,10 @@ describe('sessions and sign-in', () => {
     const token = readCookie(s.cookie, COOKIE_NAME);
     const stored = gw.db.raw.prepare('SELECT token_hash FROM sessions').all().map((r) => r.token_hash);
     expect(stored).not.toContain(token);
-    // Stored passwords are bcrypt hashes
-    expect(gw.db.getUserByEmail(u.email).password_hash).toMatch(/^\$2[aby]\$/);
+    // Stored passwords are salted Argon2id hashes (scrypt on Node versions without Argon2)
+    expect(gw.db.getUserByEmail(u.email).password_hash).toMatch(/^\$(argon2id\$v=19\$m=19456,t=2,p=1|scrypt\$N=32768,r=8,p=1)\$/);
+    const other = await createUser(gw, 'VIEWER');
+    expect(gw.db.getUserByEmail(other.email).password_hash).not.toBe(gw.db.getUserByEmail(u.email).password_hash); // own salt
   });
 
   it('sets the Secure flag and HSTS when COOKIE_SECURE is on', async () => {
@@ -363,7 +365,54 @@ describe('user management', () => {
       ['login', 'login_fail', 'user_create', 'user_update', 'user_delete', 'password_change', 'password_reset',
         'password_reset_link', 'settings_update', 'session_revoke', 'register']));
     expect(JSON.stringify(audit)).not.toContain(PASSWORD);
-    expect(JSON.stringify(audit)).not.toMatch(/\$2[aby]\$/);
+    expect(JSON.stringify(audit)).not.toMatch(/\$(2[aby]|argon2id|scrypt)\$/);
+  });
+});
+
+describe('password hashes', () => {
+  it('accepts a bcrypt hash from an earlier version once and upgrades it at sign-in', async () => {
+    const { default: bcrypt } = await import('bcryptjs');
+    const { verifyPassword } = await import('../src/password.js');
+    const gw = createGateway({ ...base });
+    try {
+      const id = gw.db.createUser({ email: 'old@test.local', name: 'Old', role: 'VIEWER', password_hash: bcrypt.hashSync(PASSWORD, 6) });
+      await request(gw.app).post('/api/auth/login').send({ email: 'old@test.local', password: 'wrong-password-x' }).expect(401);
+      expect(gw.db.getUserById(id).password_hash).toMatch(/^\$2/); // a failed attempt changes nothing
+      await signIn(gw, 'old@test.local');
+      const upgraded = gw.db.getUserById(id).password_hash;
+      expect(upgraded).not.toMatch(/^\$2/);
+      await signIn(gw, 'old@test.local'); // and the new hash works
+      expect(await verifyPassword(PASSWORD, upgraded)).toEqual({ ok: true, rehash: false });
+      expect(await verifyPassword('not-it', upgraded)).toEqual({ ok: false, rehash: false });
+      for (const bad of ['', 'plain-text', '$argon2id$v=19$m=x$bad$bad', '$scrypt$N=1$$', null]) {
+        expect((await verifyPassword(PASSWORD, bad)).ok).toBe(false);
+      }
+    } finally {
+      await gw.close();
+    }
+  });
+
+  it('hashes many passwords at once without stalling other requests', async () => {
+    const { gw, url } = await start();
+    try {
+      const users = await Promise.all(Array.from({ length: 24 }, () => createUser(gw, 'VIEWER')));
+      const admin = await sessionFor(gw, 'ADMIN');
+      const post = (u) => fetch(`${url}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: u.email, password: PASSWORD }) });
+      const t0 = Date.now();
+      const logins = Promise.all(users.map(post));
+      const probes = [];
+      for (let i = 0; i < 5; i += 1) {
+        const s = Date.now();
+        expect((await fetch(`${url}/api/live/status`, { headers: { cookie: admin.cookie } })).status).toBe(200);
+        probes.push(Date.now() - s);
+      }
+      expect((await logins).every((r) => r.status === 200)).toBe(true);
+      expect(Math.max(...probes)).toBeLessThan(1000); // hashing runs on the thread pool, two at a time
+      expect(Date.now() - t0).toBeLessThan(15_000);
+    } finally {
+      await gw.close();
+    }
   });
 });
 

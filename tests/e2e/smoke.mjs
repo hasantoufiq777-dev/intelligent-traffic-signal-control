@@ -2,7 +2,8 @@
 // Usage: node tests/e2e/smoke.mjs <url> <email> <password> [screenshot dir]
 import { chromium } from 'playwright-core';
 
-const [url, email, password, shots = '.'] = process.argv.slice(2);
+const [url, email, password, shots] = process.argv.slice(2);
+const shot = (name) => (shots ? page.screenshot({ path: `${shots}/${name}` }) : null);
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const problems = [];
@@ -23,7 +24,7 @@ await step('redirects to the sign-in page', async () => {
   await page.goto(url);
   await page.waitForURL('**/login');
   await page.getByRole('heading', { name: 'Sign in' }).waitFor();
-  await page.screenshot({ path: `${shots}/01-login.png` });
+  await shot('01-login.png');
 });
 await step('refuses a wrong password', async () => {
   await page.getByLabel('Email').fill(email);
@@ -37,7 +38,7 @@ await step('signs in and shows the live map with cars', async () => {
   await page.locator('svg.map-svg').waitFor({ timeout: 20_000 });
   await page.waitForFunction(() => document.querySelectorAll('svg.map-svg g.car-g').length > 3, null, { timeout: 60_000 });
   await page.getByText('Live', { exact: true }).waitFor();
-  await page.screenshot({ path: `${shots}/02-map.png` });
+  await shot('02-map.png');
 });
 await step('cars move between frames', async () => {
   const snap = () => page.evaluate(() => [...document.querySelectorAll('svg.map-svg g.car-g')].map((g) => g.style.transform).join('|'));
@@ -55,7 +56,7 @@ await step('administration lists users and system health', async () => {
   await page.getByRole('cell', { name: email }).waitFor();
   await page.getByRole('tab', { name: 'System' }).click();
   await page.getByText('Live connections').waitFor();
-  await page.screenshot({ path: `${shots}/03-system.png` });
+  await shot('03-system.png');
 });
 await step('signs out and loses access', async () => {
   await page.getByRole('button', { name: /Administrator/ }).click();

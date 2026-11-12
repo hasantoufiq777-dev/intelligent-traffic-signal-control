@@ -19,7 +19,7 @@ export default function JunctionCard({ id, data, ev, maxQueue = 10 }) {
           const s = data.signal?.[d] || 'r';
           return [
             <span key={`${d}-s`} className={`sig sig-${s}`} title={`${d}: ${s}`}>{d}</span>,
-            <span key={`${d}-b`} className="qtrack" aria-label={`${d} queue ${q}, estimated ${est ?? 'n/a'}`}>
+            <span key={`${d}-b`} className="qtrack" role="img" aria-label={`${d} queue ${q}, estimated ${est ?? 'n/a'}`}>
               <span className="qbar" style={{ width: `${Math.min(100, (q / scale) * 100)}%` }} />
               {est != null && <span className="qbar est" style={{ width: `${Math.min(100, (est / scale) * 100)}%` }} />}
             </span>,

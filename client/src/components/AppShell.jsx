@@ -70,7 +70,7 @@ function UserMenu() {
     <div className="menu" ref={ref}>
       <button type="button" className="btn user-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className="avatar" aria-hidden="true">{user.name.trim().charAt(0).toUpperCase()}</span>
-        <span className="hide-sm">{user.name} <span className="small muted">· {ROLE_LABEL[user.role]}</span></span>
+        <span className="vh-sm">{user.name} <span className="small muted">· {ROLE_LABEL[user.role]}</span></span>
       </button>
       {open && (
         <div className="menu-list" role="menu">

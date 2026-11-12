@@ -1,10 +1,10 @@
-// Accounts and access control: bcrypt passwords, server-side sessions in an HttpOnly cookie,
+// Accounts and access control: Argon2id passwords (password.js), server-side sessions in an HttpOnly cookie,
 // roles (ADMIN / RESEARCHER / VIEWER), CSRF protection, login lockout, password-reset links,
 // user management and the audit trail. Sockets are authenticated with the same session cookie.
 import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
+import { hashPassword, verifyPassword } from './password.js';
 
 export const ROLES = ['ADMIN', 'RESEARCHER', 'VIEWER'];
 export const COOKIE_NAME = 'itsc_sid';
@@ -35,7 +35,7 @@ export function readCookie(header, name) {
   return null;
 }
 
-// bcrypt uses only the first 72 bytes of a password, so longer ones are refused, not truncated
+// The upper limit keeps hashing cost bounded (and matches what older bcrypt hashes could hold)
 const Password = z.string().min(10, 'Password must be at least 10 characters')
   .refine((p) => Buffer.byteLength(p, 'utf8') <= 72, 'Password must be at most 72 bytes');
 const Email = z.string().trim().toLowerCase().max(254).email('Enter a valid email address');
@@ -59,8 +59,7 @@ const publicUser = (u) => (u ? { id: u.id, email: u.email, name: u.name, role: u
 export function createAuth({ cfg, db, log, io }) {
   const ttlMs = cfg.SESSION_TTL_HOURS * 3_600_000;
   // Compared against when the email is unknown, so both cases take the same time
-  const dummyHash = bcrypt.hashSync(randomToken(8), cfg.BCRYPT_ROUNDS);
-  const hashPassword = (password) => bcrypt.hash(password, cfg.BCRYPT_ROUNDS);
+  const dummyHash = hashPassword(randomToken(8));
 
   const registrationOpen = () => db.getSetting('allow_registration', String(cfg.ALLOW_REGISTRATION)) === 'true';
   const ipOf = (req) => req.ip || req.socket?.remoteAddress || null;
@@ -234,6 +233,16 @@ export function createAuth({ cfg, db, log, io }) {
     return id;
   }
 
+  /** Insert an account; null when the email is already taken (also when two requests race). */
+  function insertUser(fields) {
+    try {
+      return db.createUser(fields);
+    } catch (err) {
+      if (/UNIQUE constraint failed: users\.email/.test(err.message)) return null;
+      throw err;
+    }
+  }
+
   // ------------------------------------------------------------------ routes
   function mount(app) {
     const body = (schema) => (req, res, next) => {
@@ -267,7 +276,7 @@ export function createAuth({ cfg, db, log, io }) {
       const user = db.getUserByEmail(email);
       const generic = () => res.status(401).json({ error: 'Invalid email or password', code: 'bad_credentials' });
       if (!user) {
-        await bcrypt.compare(password, dummyHash);
+        await verifyPassword(password, await dummyHash);
         audit(req, 'login_fail', { target: email, detail: 'unknown email' });
         return generic();
       }
@@ -275,7 +284,8 @@ export function createAuth({ cfg, db, log, io }) {
         audit(req, 'login_fail', { user, target: email, detail: 'account locked' });
         return res.status(429).json({ error: 'Too many failed attempts. Try again later.', code: 'locked' });
       }
-      if (!(await bcrypt.compare(password, user.password_hash))) {
+      const check = await verifyPassword(password, user.password_hash);
+      if (!check.ok) {
         const fails = user.failed_logins + 1;
         const lock = fails >= cfg.LOGIN_MAX_FAILS ? iso(Date.now() + cfg.LOGIN_LOCK_MINUTES * 60_000) : null;
         db.recordLoginFailure(user.id, lock);
@@ -288,6 +298,8 @@ export function createAuth({ cfg, db, log, io }) {
         return res.status(403).json({ error: 'This account is disabled. Contact an administrator.', code: 'disabled' });
       }
       db.recordLoginSuccess(user.id);
+      // A hash from an older scheme (bcrypt) is replaced now that the password is known to be right
+      if (check.rehash) db.updateUser(user.id, { password_hash: await hashPassword(password) });
       const csrf = startSession(req, res, user);
       audit(req, 'login', { user, target: email });
       return res.json({ user: publicUser(user), csrf });
@@ -306,7 +318,8 @@ export function createAuth({ cfg, db, log, io }) {
       if (!registrationOpen()) return res.status(403).json({ error: 'Registration is closed. Ask an administrator for an account.', code: 'registration_closed' });
       const { email, name, password } = req.valid;
       if (db.getUserByEmail(email)) return res.status(409).json({ error: 'An account with this email already exists', code: 'exists' });
-      const id = db.createUser({ email, name, password_hash: await hashPassword(password), role: 'VIEWER' });
+      const id = insertUser({ email, name, password_hash: await hashPassword(password), role: 'VIEWER' });
+      if (id === null) return res.status(409).json({ error: 'An account with this email already exists', code: 'exists' });
       const user = db.getUserById(id);
       const csrf = startSession(req, res, user);
       audit(req, 'register', { user, target: email });
@@ -344,7 +357,7 @@ export function createAuth({ cfg, db, log, io }) {
 
     app.post('/api/auth/password', requireAuth, authLimiter, body(ChangePasswordSchema), async (req, res) => {
       const user = db.getUserById(req.user.id);
-      if (!(await bcrypt.compare(req.valid.current_password, user.password_hash))) {
+      if (!(await verifyPassword(req.valid.current_password, user.password_hash)).ok) {
         audit(req, 'password_change_fail');
         return res.status(400).json({ error: 'The current password is not correct', code: 'bad_credentials' });
       }
@@ -364,7 +377,8 @@ export function createAuth({ cfg, db, log, io }) {
     app.post('/api/users', admin, body(CreateUserSchema), async (req, res) => {
       const { email, name, password, role } = req.valid;
       if (db.getUserByEmail(email)) return res.status(409).json({ error: 'An account with this email already exists', code: 'exists' });
-      const id = db.createUser({ email, name, role, password_hash: await hashPassword(password) });
+      const id = insertUser({ email, name, role, password_hash: await hashPassword(password) });
+      if (id === null) return res.status(409).json({ error: 'An account with this email already exists', code: 'exists' });
       audit(req, 'user_create', { target: email, detail: `role ${role}` });
       return res.status(201).json({ user: publicRow(id) });
     });

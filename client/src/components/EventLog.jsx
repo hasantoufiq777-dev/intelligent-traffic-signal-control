@@ -26,7 +26,7 @@ export default function EventLog({ events, limit = 80, filter }) {
       {list.length === 0 ? (
         <p className="muted small" style={{ margin: 0 }}>No events yet.</p>
       ) : (
-        <ul className="events">
+        <ul className="events" tabIndex={0} aria-label="Event list (scrolls)">
           {list.map((e, i) => {
             const [icon, label] = ICON[e.kind] || ['•', e.kind];
             return (

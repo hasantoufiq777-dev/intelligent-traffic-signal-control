@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-12T03:44:52.149Z",
+  "axe": "4.14.0",
+  "tags": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa"
+  ],
+  "audits": 45,
+  "violations_total": 0,
+  "rules": {},
+  "keyboard": {
+    "skip_link_first": true,
+    "skip_link_moves_focus": true,
+    "sidebar_links_reached": 18,
+    "focus_without_visible_outline": 0,
+    "map_keyboard_zoom_pan": true
+  }
+}

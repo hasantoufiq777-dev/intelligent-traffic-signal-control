@@ -106,7 +106,7 @@ function Users() {
       <section className="card stack" aria-labelledby="users-h">
         <div className="card-head"><h2 id="users-h">Users</h2><span className="small muted">{data ? `${data.total} accounts` : ''}</span></div>
         {error && <div className="notice error" role="alert">{error}</div>}
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
           <table className="data">
             <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead>
             <tbody>
@@ -175,7 +175,7 @@ function Sessions() {
       </div>
       {error && <div className="notice error" role="alert">{error}</div>}
       <Message msg={msg} />
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
         <table className="data">
           <thead><tr><th>User</th><th>Role</th><th>Signed in</th><th>Last active</th><th>Address</th><th>Browser</th><th></th></tr></thead>
           <tbody>
@@ -221,7 +221,7 @@ function Audit() {
         </span>
       </div>
       {error && <div className="notice error" role="alert">{error}</div>}
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
         <table className="data">
           <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th><th>Address</th></tr></thead>
           <tbody>
@@ -303,7 +303,7 @@ function SystemHealth() {
             <Tile k="Uptime" v={`${Math.round(s.uptime_s / 60)} min`} sub={`Node ${s.node} · ${s.env}`} />
             <Tile k="Live stream" v={`${s.live.states_broadcast} states`} sub={`${s.live.bad_lines} bad lines · ${s.live.runs_started} runs started`} />
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data">
               <thead><tr><th>Database migration</th><th>Applied</th></tr></thead>
               <tbody>

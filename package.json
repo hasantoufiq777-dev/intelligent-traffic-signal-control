@@ -21,6 +21,7 @@
     "sim:tune": "node scripts/py.mjs sim/optimizer/ga_tuner.py --target signals && node scripts/py.mjs sim/optimizer/ga_tuner.py --target aco"
   },
   "devDependencies": {
+    "axe-core": "^4.14.0",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
     "playwright-core": "^1.65.0"

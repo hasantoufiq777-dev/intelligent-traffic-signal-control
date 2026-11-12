@@ -43,13 +43,13 @@ On Windows set `PYTHON_BIN=../.venv/Scripts/python.exe`; on Linux `PYTHON_BIN=..
 | `COOKIE_SECURE` | follows `NODE_ENV` | Force the `Secure` cookie flag on or off |
 | `SESSION_TTL_HOURS` | `12` | Session lifetime |
 | `SESSIONS_PER_USER` | `10` | Older sessions of an account are ended beyond this number |
-| `BCRYPT_ROUNDS` | `12` | Password hashing cost |
 | `TRUST_PROXY` | `0` | Reverse proxies in front of the gateway (nginx: 1), so client addresses are right |
 | `LOGIN_MAX_FAILS` / `LOGIN_LOCK_MINUTES` | `5` / `15` | Failed sign-ins before an account is locked, and for how long |
 | `RATE_LIMIT_PER_MIN` | `600` | API requests per address per minute |
 | `AUTH_RATE_LIMIT` | `30` | Sign-in, registration and reset attempts per address per 15 minutes |
 | `RESET_LINK_MINUTES` | `60` | Lifetime of a password-reset link |
 | `AUDIT_RETENTION_DAYS` | `180` | Audit entries older than this are deleted |
+| `SAMPLE_RETENTION_DAYS` | `14` | State samples (telemetry) older than this are deleted; runs, results and events are kept |
 | `MAX_CONNECTIONS` | `1000` | Limit on concurrent Socket.io connections; more get `connect_error` with code `capacity` |
 | `MAX_SIM_FAILURES` | `3` | Failed runs in a row after which the playlist stops retrying (lifecycle `FAILED`) |
 | `LIVE_LOOP` | `false` | Loop `playlist.json` forever |
@@ -81,7 +81,7 @@ Every route except `/api/health` and `/api/auth/*` needs a signed-in session. Th
 token in an `HttpOnly`, `SameSite=Lax` cookie (`itsc_sid`; `Secure` in production); only its SHA-256 is
 stored. Every state-changing request must also send the session's CSRF token in `X-CSRF-Token`
 (returned by sign-in and by `/api/auth/me`) and, when the browser sends an `Origin`, it must be this
-site or one listed in `CORS_ORIGIN`. Passwords are bcrypt hashes (10 to 72 characters).
+site or one listed in `CORS_ORIGIN`. Passwords (10 to 72 characters) are stored as salted Argon2id hashes (scrypt on Node versions without built-in Argon2); hashing runs off the main thread. Older bcrypt hashes are accepted once and replaced at sign-in.
 
 | Role | May |
 |---|---|
@@ -227,3 +227,19 @@ Without nginx, the gateway also serves `client/dist` itself when that folder exi
 
 **Shutdown.** SIGINT/SIGTERM stops the simulation (on Windows the whole python + SUMO process tree
 is terminated), closes Socket.io and HTTP, then closes the database.
+
+## Backup and restore
+
+```bash
+npm run backup -- backups/gateway-2026-11-12.db   # consistent copy while the gateway runs
+```
+Restore: stop the gateway, copy the backup over `DB_PATH` (delete the old `-wal` and `-shm` files), start it again.
+
+## Load tests
+
+`node loadtest/steps.js --url http://127.0.0.1:4000 --email <admin> [--steps 10,50,...,1000] [--spike 1100]
+[--reconnect 500] [--logins 200] [--soak 30] [--out result.json]` (password from `LT_PASSWORD`). It signs in, opens
+the connections, calls the API while holding, and reports connection success, stream and API latency, CPU, memory
+and event-loop lag. Run the gateway with `AUTH_RATE_LIMIT`, `RATE_LIMIT_PER_MIN` and `SESSIONS_PER_USER` raised, since
+all test traffic comes from one address. Results: `docs/testing/PHASE_8_REPORT.md`.
+

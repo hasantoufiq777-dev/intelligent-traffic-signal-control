@@ -347,7 +347,7 @@ function TrafficMapInner({
 
           {/* Congestion: observed speed against the speed limit, per direction */}
           {layers.congestion && edgeSpeeds && (
-            <g aria-label="Congestion">
+            <g role="group" aria-label="Congestion">
               {Object.entries(edgeSpeeds).map(([id, v]) => {
                 const e = geo.edges[id];
                 if (!e) return null;
@@ -397,7 +397,7 @@ function TrafficMapInner({
 
           {/* Remaining route of each ambulance */}
           {layers.routes && evRoutes && Object.entries(evRoutes).map(([id, route]) => (
-            <g key={`route-${id}`} className="ev-route" aria-label={`Route of ${id}`}>
+            <g key={`route-${id}`} className="ev-route" role="group" aria-label={`Route of ${id}`}>
               {route.map((eid) => geo.edges[eid] && (
                 <path key={eid} d={geo.edges[eid].d} fill="none" stroke="var(--ev-route)" strokeWidth={2.6} strokeDasharray="7 5"
                   strokeLinecap="round" />
@@ -598,7 +598,7 @@ function ZoneOverlay({ z, st }) {
   }
   const midX = (z.sharedStart[0] + z.sharedEnd[0]) / 2;
   return (
-    <g aria-label="Accident zone">
+    <g role="group" aria-label="Accident zone">
       {crashShown && z.blocked.map((d, i) => (
         <path key={`b${i}`} d={d} stroke="var(--sig-red)" strokeOpacity={0.3} strokeWidth={8} fill="none" />
       ))}

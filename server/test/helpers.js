@@ -2,8 +2,8 @@
 import request from 'supertest';
 import { io as ioc } from 'socket.io-client';
 
-// Fast password hashing and no rate limiting in tests (the limits have their own tests)
-export const TEST_ENV = { BCRYPT_ROUNDS: '4', AUTH_RATE_LIMIT: '100000', RATE_LIMIT_PER_MIN: '1000000' };
+// No rate limiting in tests (the limits have their own tests)
+export const TEST_ENV = { AUTH_RATE_LIMIT: '100000', RATE_LIMIT_PER_MIN: '1000000' };
 export const PASSWORD = 'correct-horse-battery';
 
 let counter = 0;

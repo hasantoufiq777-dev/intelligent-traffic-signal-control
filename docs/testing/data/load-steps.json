@@ -1,0 +1,423 @@
+{
+  "date": "2026-11-12T02:56:29.873Z",
+  "url": "http://127.0.0.1:4100",
+  "mock": true,
+  "max_connections": 1000,
+  "hold_s": 20,
+  "api_rps_target": 40,
+  "hardware": {
+    "platform": "Windows_NT 10.0.26300",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "threads": 20,
+    "memory_gb": 15.7,
+    "node": "v24.14.1"
+  },
+  "steps": [
+    {
+      "users": 10,
+      "connected": 10,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 10,
+        "p50": 40.5,
+        "p95": 47.4,
+        "p99": 47.4,
+        "max": 47.4
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 200,
+        "p50": 1,
+        "p95": 3,
+        "p99": 4,
+        "max": 4
+      },
+      "seconds": 20,
+      "api": {
+        "n": 643,
+        "p50": 2.3,
+        "p95": 4.3,
+        "p99": 5.5,
+        "max": 9.3,
+        "errors": 0,
+        "rps": 32.1
+      },
+      "server": {
+        "viewers": 10,
+        "cpu_pct_one_core": 7,
+        "rss_mb": 76.5,
+        "heap_mb": 21.5,
+        "event_loop_lag_ms": {
+          "mean": 8.3,
+          "p99": 15.9,
+          "max": 15.9
+        },
+        "out_kb_s": 30,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 50,
+      "connected": 50,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 50,
+        "p50": 97.1,
+        "p95": 139.7,
+        "p99": 150.2,
+        "max": 150.2
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 1000,
+        "p50": 3,
+        "p95": 9,
+        "p99": 12,
+        "max": 13
+      },
+      "seconds": 20,
+      "api": {
+        "n": 641,
+        "p50": 2.2,
+        "p95": 4.4,
+        "p99": 7.9,
+        "max": 12.2,
+        "errors": 0,
+        "rps": 32
+      },
+      "server": {
+        "viewers": 50,
+        "cpu_pct_one_core": 4.8,
+        "rss_mb": 81.9,
+        "heap_mb": 23.1,
+        "event_loop_lag_ms": {
+          "mean": 8.2,
+          "p99": 15.5,
+          "max": 15.9
+        },
+        "out_kb_s": 164,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 100,
+      "connected": 100,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 100,
+        "p50": 112,
+        "p95": 197,
+        "p99": 226.5,
+        "max": 226.5
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 2000,
+        "p50": 6,
+        "p95": 11,
+        "p99": 13,
+        "max": 14
+      },
+      "seconds": 20,
+      "api": {
+        "n": 643,
+        "p50": 2.2,
+        "p95": 4.2,
+        "p99": 10.8,
+        "max": 17.6,
+        "errors": 0,
+        "rps": 32.1
+      },
+      "server": {
+        "viewers": 100,
+        "cpu_pct_one_core": 6.2,
+        "rss_mb": 91,
+        "heap_mb": 28.6,
+        "event_loop_lag_ms": {
+          "mean": 9.5,
+          "p99": 15.9,
+          "max": 80.7
+        },
+        "out_kb_s": 341,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 250,
+      "connected": 250,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 250,
+        "p50": 103.1,
+        "p95": 159.9,
+        "p99": 178.1,
+        "max": 185.8
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 5000,
+        "p50": 12,
+        "p95": 24,
+        "p99": 29,
+        "max": 35
+      },
+      "seconds": 20,
+      "api": {
+        "n": 643,
+        "p50": 2.1,
+        "p95": 5.1,
+        "p99": 23.6,
+        "max": 31.9,
+        "errors": 0,
+        "rps": 32.1
+      },
+      "server": {
+        "viewers": 250,
+        "cpu_pct_one_core": 4.8,
+        "rss_mb": 106.4,
+        "heap_mb": 35.9,
+        "event_loop_lag_ms": {
+          "mean": 10.5,
+          "p99": 49.8,
+          "max": 80.7
+        },
+        "out_kb_s": 883,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 500,
+      "connected": 500,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 500,
+        "p50": 102,
+        "p95": 159.8,
+        "p99": 181.1,
+        "max": 189.2
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 10000,
+        "p50": 20,
+        "p95": 43,
+        "p99": 51,
+        "max": 56
+      },
+      "seconds": 20,
+      "api": {
+        "n": 643,
+        "p50": 2.3,
+        "p95": 19.3,
+        "p99": 44.9,
+        "max": 56.3,
+        "errors": 0,
+        "rps": 32.1
+      },
+      "server": {
+        "viewers": 500,
+        "cpu_pct_one_core": 7.3,
+        "rss_mb": 140.6,
+        "heap_mb": 51.8,
+        "event_loop_lag_ms": {
+          "mean": 8.7,
+          "p99": 44.5,
+          "max": 49.8
+        },
+        "out_kb_s": 1740,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 750,
+      "connected": 750,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 750,
+        "p50": 101.1,
+        "p95": 173.2,
+        "p99": 198.5,
+        "max": 221.3
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 15000,
+        "p50": 36,
+        "p95": 68,
+        "p99": 77,
+        "max": 86
+      },
+      "seconds": 20,
+      "api": {
+        "n": 641,
+        "p50": 2.4,
+        "p95": 41.2,
+        "p99": 65.9,
+        "max": 85.8,
+        "errors": 0,
+        "rps": 32
+      },
+      "server": {
+        "viewers": 750,
+        "cpu_pct_one_core": 10.5,
+        "rss_mb": 149.8,
+        "heap_mb": 56,
+        "event_loop_lag_ms": {
+          "mean": 7.6,
+          "p99": 29.8,
+          "max": 35.9
+        },
+        "out_kb_s": 2657,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 1000,
+      "connected": 1000,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 1000,
+        "p50": 97.5,
+        "p95": 156.4,
+        "p99": 203,
+        "max": 241.5
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 20000,
+        "p50": 43,
+        "p95": 81,
+        "p99": 88,
+        "max": 101
+      },
+      "seconds": 20,
+      "api": {
+        "n": 643,
+        "p50": 2.2,
+        "p95": 55.1,
+        "p99": 83.5,
+        "max": 89.6,
+        "errors": 0,
+        "rps": 32.1
+      },
+      "server": {
+        "viewers": 1000,
+        "cpu_pct_one_core": 9.1,
+        "rss_mb": 209.7,
+        "heap_mb": 73.1,
+        "event_loop_lag_ms": {
+          "mean": 8,
+          "p99": 29,
+          "max": 48.3
+        },
+        "out_kb_s": 3614,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    }
+  ],
+  "reconnect": {
+    "dropped": 500,
+    "reconnected": 500,
+    "refused": 0,
+    "failed": 0,
+    "all_back_after_ms": 2829,
+    "connect_ms": {
+      "n": 500,
+      "p50": 1645.9,
+      "p95": 2604.1,
+      "p99": 2683.3,
+      "max": 2700.5
+    },
+    "viewers_after": 1000
+  },
+  "spike": {
+    "users": 1100,
+    "connected": 1000,
+    "refused": 100,
+    "failed": 0,
+    "success_pct": 90.91,
+    "all_connected_after_ms": 5659,
+    "connect_ms": {
+      "n": 1000,
+      "p50": 3161.7,
+      "p95": 5033.4,
+      "p99": 5230.4,
+      "max": 5364
+    },
+    "drops_during_hold": 0,
+    "stream_latency_ms": {
+      "n": 15000,
+      "p50": 45,
+      "p95": 83,
+      "p99": 89,
+      "max": 95
+    },
+    "seconds": 15,
+    "api": {
+      "n": 482,
+      "p50": 2.2,
+      "p95": 59.2,
+      "p99": 86.4,
+      "max": 99.8,
+      "errors": 0,
+      "rps": 32.1
+    },
+    "server": {
+      "viewers": 1000,
+      "cpu_pct_one_core": 9.9,
+      "rss_mb": 233.6,
+      "heap_mb": 77.1,
+      "event_loop_lag_ms": {
+        "mean": 25.9,
+        "p99": 499.2,
+        "max": 518.6
+      },
+      "out_kb_s": 3503,
+      "persist_errors": 0,
+      "bad_lines": 0
+    }
+  },
+  "logins": {
+    "concurrent": 200,
+    "ok": 200,
+    "failed": 0,
+    "total_ms": 13152,
+    "per_second": 15.2,
+    "latency_ms": {
+      "n": 200,
+      "p50": 6843.4,
+      "p95": 12585.1,
+      "p99": 13034.8,
+      "max": 13094.6
+    },
+    "api_probe_after_ms": 1.5
+  }
+}

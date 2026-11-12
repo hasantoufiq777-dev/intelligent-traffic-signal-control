@@ -193,6 +193,78 @@ describe('one-driver mode with the mock simulation', () => {
   }, 40_000);
 });
 
+describe('replies of the simulation are matched to drives in order', () => {
+  it('keeps a new drive when the previous drive, ended before its car was named, is answered late', async () => {
+    const { gw, url } = await startGateway();
+    const a = viewer(url);
+    const b = viewer(url);
+    try {
+      await waitFor(() => a.got.init && b.got.init);
+      const runId = await startRun(gw);
+      const seat = gw.live.driver;
+      const sent = [];
+      gw.live.proc.send = (cmd) => { sent.push(cmd.cmd); return true; }; // hold the commands: we play the simulation
+      const sim = (m) => seat.onSimMessage({ type: 'driver', run_id: runId, t: 1, message: '', ...m });
+
+      // A claims and leaves the seat before the simulation has named the car; B claims at once
+      expect((await a.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
+      expect((await a.ask('driver:release')).ok).toBe(true);
+      expect((await b.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
+      expect(sent).toEqual(['drive_start', 'drive_end', 'drive_start']);
+      const [tripB, tripA] = gw.db.listDriverTrips(2).map((r) => r.id);
+
+      // The simulation now answers in order: A's car appears and is handed back, then B's car appears
+      sim({ vid: 'drv1', status: 'waiting' });
+      expect(seat.public()).toMatchObject({ busy: true, vid: null }); // not B's car
+      sim({ vid: 'drv1', status: 'released', report: { finished: false } });
+      expect(seat.public().busy).toBe(true); // B is still driving
+      sim({ vid: 'drv2', status: 'waiting' });
+      expect(seat.public()).toMatchObject({ busy: true, vid: 'drv2' });
+      sim({ vid: 'drv2', status: 'driving', speed_kmh: 30 });
+      expect(seat.state.vid).toBe('drv2');
+
+      const trips = Object.fromEntries(gw.db.listDriverTrips(2).map((r) => [r.id, r]));
+      expect(trips[tripA]).toMatchObject({ vid: 'drv1', status: 'released', reason: 'released' });
+      expect(trips[tripA].report).toEqual({ finished: false });
+      expect(trips[tripB]).toMatchObject({ status: 'driving' });
+
+      // B arrives: only now does the seat become free, with B's report on B's trip
+      sim({ vid: 'drv2', status: 'finished', report: { finished: true } });
+      expect(seat.public().busy).toBe(false);
+      expect(gw.db.listDriverTrips(1)[0]).toMatchObject({ id: tripB, vid: 'drv2', status: 'finished', reason: 'finished' });
+      await waitFor(() => b.got.seat.some((x) => x.reason === 'finished'));
+      expect(a.got.seat.some((x) => x.reason === 'finished')).toBe(false);
+    } finally {
+      a.socket.close();
+      b.socket.close();
+      await gw.close();
+    }
+  }, 40_000);
+
+  it('ends only the drive whose start failed', async () => {
+    const { gw, url } = await startGateway();
+    const a = viewer(url);
+    try {
+      await waitFor(() => a.got.init);
+      const runId = await startRun(gw);
+      const seat = gw.live.driver;
+      gw.live.proc.send = () => true;
+      const sim = (m) => seat.onSimMessage({ type: 'driver', run_id: runId, t: 1, ...m });
+      expect((await a.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
+      expect((await a.ask('driver:release')).ok).toBe(true);
+      expect((await a.ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
+      sim({ vid: '', status: 'error', message: 'No route' }); // the first start failed: the second drive goes on
+      expect(seat.public().busy).toBe(true);
+      sim({ vid: '', status: 'error', message: 'No route' }); // the second start failed too
+      expect(seat.public().busy).toBe(false);
+      await waitFor(() => a.got.seat.some((x) => x.reason === 'error' && x.message === 'No route'));
+    } finally {
+      a.socket.close();
+      await gw.close();
+    }
+  }, 40_000);
+});
+
 describe('driver seat timeouts', () => {
   it('frees the seat after the idle time, and when the driver leaves (after the reconnect grace)', async () => {
     const { gw, url } = await startGateway({ DRIVER_IDLE_MS: '1000', DRIVER_RESUME_MS: '700' });

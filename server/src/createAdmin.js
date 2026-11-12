@@ -3,10 +3,10 @@
 // The password is read from the ADMIN_PASSWORD environment variable or asked for on the terminal
 // (it is never passed as an argument, so it does not end up in the shell history).
 import readline from 'node:readline';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { loadConfig } from './config.js';
 import { openDatabase } from './db.js';
+import { hashPassword } from './password.js';
 
 const [email, name = 'Administrator'] = process.argv.slice(2);
 const parsedEmail = z.string().trim().toLowerCase().email().safeParse(email ?? '');
@@ -35,7 +35,7 @@ if (password.length < 10 || Buffer.byteLength(password, 'utf8') > 72) {
 
 const db = openDatabase(cfg.DB_PATH);
 try {
-  const hash = await bcrypt.hash(password, cfg.BCRYPT_ROUNDS);
+  const hash = await hashPassword(password);
   const existing = db.getUserByEmail(parsedEmail.data);
   if (existing) {
     db.updateUser(existing.id, { role: 'ADMIN', status: 'active', password_hash: hash, failed_logins: 0, locked_until: null });

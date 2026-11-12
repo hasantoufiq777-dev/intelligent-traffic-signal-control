@@ -97,7 +97,7 @@ function ResultsTable({ suite, scen, cfgs, meta }) {
         <h2>Scenario: {scen}</h2>
         <span className="small muted">mean ± std (improvement vs baseline, paired p-value)</span>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
         <table className="data">
           <thead>
             <tr><th>Configuration</th>{metrics.map((m) => <th key={m}>{METRIC_LABEL[m] || m}</th>)}</tr>

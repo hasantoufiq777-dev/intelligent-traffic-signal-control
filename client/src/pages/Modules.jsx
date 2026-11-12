@@ -41,7 +41,7 @@ function EventTable({ events, kinds, title, empty }) {
     <section className="card stack" aria-label={title}>
       <div className="card-head"><h2>{title}</h2><span className="small muted">{list.length ? `latest ${list.length}` : ''}</span></div>
       {list.length === 0 ? <p className="muted small" style={{ margin: 0 }}>{empty}</p> : (
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
           <table className="data left">
             <thead><tr><th>Time</th><th>Where</th><th>Event</th><th>Detail</th></tr></thead>
             <tbody>
@@ -155,7 +155,7 @@ export function Vanet() {
         <div className="stack">
           <section className="card stack" aria-labelledby="rsu-h">
             <div className="card-head"><h2 id="rsu-h">Roadside units</h2><span className="small muted">queue from beacons against the true queue</span></div>
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
               <table className="data">
                 <thead><tr><th>RSU</th><th>True queue</th><th>Estimate</th><th>Error</th><th>Phase</th></tr></thead>
                 <tbody>
@@ -207,7 +207,7 @@ export function Emergency() {
       ))}
       <section className="card stack" aria-labelledby="prio-h">
         <div className="card-head"><h2 id="prio-h">Junction priority</h2></div>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
           <table className="data left">
             <thead><tr><th>Junction</th><th>Phase</th><th>Ambulance</th><th>ETA</th><th>Distance</th><th>From</th></tr></thead>
             <tbody>
@@ -337,7 +337,7 @@ export function WorkZone() {
       <section className="card stack" aria-labelledby="zres-h">
         <div className="card-head"><h2 id="zres-h">Evaluated results</h2><span className="small muted">10 seeds, mean; change against closing the road</span></div>
         {zoneResults && Object.keys(zoneResults).length > 0 ? (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data">
               <thead><tr><th>Configuration</th><th>Average trip (s)</th><th>Average waiting (s)</th><th>Ambulance trip (s)</th><th>Conflicts</th><th>Collisions</th></tr></thead>
               <tbody>
@@ -393,7 +393,7 @@ export function Glosa() {
       )}
       <section className="card stack" aria-labelledby="spat-h">
         <div className="card-head"><h2 id="spat-h">Signal phase and timing (SPaT)</h2><span className="small muted">as broadcast by each roadside unit</span></div>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
           <table className="data left">
             <thead><tr><th>Junction</th><th>From</th><th>Signal</th><th>Changes in</th><th>Next green in</th></tr></thead>
             <tbody>

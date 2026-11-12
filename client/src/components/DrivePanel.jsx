@@ -58,7 +58,7 @@ function TripReport({ report, ended, onAgain, onClose }) {
             <div><div className="k">CO₂</div><div className="v num">{fmt(report.co2_g, 0)} g</div></div>
           </div>
           {rows.length > 0 && (
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
               <table className="data">
                 <thead><tr><th /><th>You</th><th>Others{group ? <span className="small muted"> ({group})</span> : ''}</th></tr></thead>
                 <tbody>{rows.map(([k, you, others]) => <tr key={k}><td>{k}</td><td className="num">{you}</td><td className="num">{others}</td></tr>)}</tbody>

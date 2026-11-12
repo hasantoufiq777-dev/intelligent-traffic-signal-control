@@ -50,7 +50,8 @@ export class LiveChannel {
     this._lastViewerCount = -1;
 
     this.stats = { started_at: Date.now(), lines_in: 0, bad_lines: 0, states_in: 0, states_broadcast: 0,
-      events_broadcast: 0, bytes_broadcast: 0, runs_started: 0 };
+      events_broadcast: 0, bytes_broadcast: 0, runs_started: 0, persist_errors: 0 };
+    this._lastPersistLog = 0;
     // One-driver mode: the only thing a viewer can control (one at a time)
     this.driver = new DriverSeat({ cfg, io, db, logger, live: this, room: ROOM });
   }
@@ -266,6 +267,23 @@ export class LiveChannel {
     this.start(entry, 'playlist').catch((err) => this.log.error('Playlist start failed:', err.message));
   }
 
+  /**
+   * Store something about the run. A database failure must not stop the live stream or crash the
+   * gateway: it is counted, logged (at most once every 10 s) and the broadcast goes on.
+   */
+  _persist(what, fn) {
+    try {
+      return fn();
+    } catch (err) {
+      this.stats.persist_errors += 1;
+      if (Date.now() - this._lastPersistLog > 10_000) {
+        this._lastPersistLog = Date.now();
+        this.log.error(`Could not store ${what} (${this.stats.persist_errors} storage errors so far):`, err.message);
+      }
+      return null;
+    }
+  }
+
   // ------------------------------------------------------------------ messages
   _onMessage(proc, msg) {
     if (proc !== this.proc || !this.current) return; // late line from a replaced process
@@ -285,7 +303,7 @@ export class LiveChannel {
         const ev = { type: 'event', run_id: runId, t: msg.t, kind: msg.kind, tls: msg.tls, detail: msg.detail };
         this.events.push(ev);
         if (this.events.length > this.cfg.EVENT_HISTORY) this.events.splice(0, this.events.length - this.cfg.EVENT_HISTORY);
-        this.db.saveEvent(runId, ev);
+        this._persist('an event', () => this.db.saveEvent(runId, ev));
         this._emitReliable('event', ev);
         this.stats.events_broadcast += 1;
         break;
@@ -314,7 +332,7 @@ export class LiveChannel {
         break;
       case 'result':
         this.lastResult = msg;
-        this.db.saveResult(runId, msg.metrics);
+        this._persist('the result', () => this.db.saveResult(runId, msg.metrics));
         this._emitReliable('result', msg);
         break;
       default:
@@ -332,7 +350,7 @@ export class LiveChannel {
     if (drop) this.states.splice(0, drop);
     if (t - this.lastSampleT >= this.cfg.SAMPLE_EVERY_SIM_S) {
       this.lastSampleT = t;
-      this.db.saveSample(runId, msg);
+      this._persist('a state sample', () => this.db.saveSample(runId, msg));
     }
   }
 
@@ -427,7 +445,7 @@ export class LiveChannel {
       : 'Simulation completed';
     if (run) {
       run.status = status;
-      this.db.endRun(run.run_id, status, message);
+      this._persist('the end of the run', () => this.db.endRun(run.run_id, status, message));
       // Windows kills cannot be caught by Python, so report the final status ourselves if needed
       if (!this.sawFinalStatus) {
         this.lastStatus = { type: 'status', run_id: run.run_id, status, message };

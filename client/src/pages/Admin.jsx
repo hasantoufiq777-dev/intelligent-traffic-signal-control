@@ -40,7 +40,7 @@ function DriverAdmin({ seat }) {
           onClick={() => act(() => api.releaseDriver(), 'The drive was ended and the car handed back.')}>End current drive</button>
       </div>
       {msg && <div className={`notice${msg.error ? ' error' : ''}`} role="status">{msg.text}</div>}
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
         <table className="data">
           <thead><tr><th>Started</th><th>Car</th><th>From → to</th><th>Ended</th><th>Time</th><th>CO₂ g/km</th><th>Stops</th></tr></thead>
           <tbody>
@@ -183,7 +183,7 @@ export default function Admin() {
 
       <section className="card" aria-labelledby="pl-h">
         <div className="card-head"><h2 id="pl-h">Playlist</h2><span className="small muted">read-only · edit server/playlist.json</span></div>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
           <table className="data">
             <thead><tr><th>#</th><th>Label</th><th>Scenario</th><th>Controller</th><th>Nav</th><th>Seed</th><th>Eco</th><th>Ambulance routing</th></tr></thead>
             <tbody>

@@ -76,6 +76,19 @@ export function createGateway(overrides = {}) {
     return { mean: r(s.reduce((a, b) => a + b, 0) / s.length), p99: r(s[Math.min(s.length - 1, Math.floor(0.99 * s.length))]), max: r(s.at(-1)) };
   };
 
+  // Housekeeping: telemetry retention (at start-up, then every six hours)
+  const pruneTelemetry = () => {
+    try {
+      const n = db.pruneSamples(new Date(Date.now() - cfg.SAMPLE_RETENTION_DAYS * 86_400_000).toISOString());
+      if (n) log.info(`Retention: deleted ${n} state samples older than ${cfg.SAMPLE_RETENTION_DAYS} days`);
+    } catch (err) {
+      log.warn('Telemetry retention failed:', err.message);
+    }
+  };
+  pruneTelemetry();
+  const pruneTimer = setInterval(pruneTelemetry, 6 * 3_600_000);
+  pruneTimer.unref();
+
   app.disable('x-powered-by');
   if (cfg.TRUST_PROXY) app.set('trust proxy', cfg.TRUST_PROXY);
   app.use(helmet({
@@ -262,6 +275,7 @@ export function createGateway(overrides = {}) {
     let database = { ok: true };
     try {
       database = { ok: true, users: db.countUsers(), sessions: db.countSessions(), runs: db.countRuns(), audit_entries: db.countAudit(),
+        state_samples: db.countSamples(), sample_retention_days: cfg.SAMPLE_RETENTION_DAYS,
         migrations: db.raw.prepare('SELECT version, name, applied_at FROM schema_migrations ORDER BY version').all() };
     } catch (err) {
       log.error('Database health check failed:', err.message);
@@ -301,6 +315,7 @@ export function createGateway(overrides = {}) {
     closed = true;
     auth.close();
     clearInterval(lagTimer);
+    clearInterval(pruneTimer);
     await live.close();
     await new Promise((resolve) => io.close(() => resolve()));
     if (server.listening) await new Promise((resolve) => server.close(() => resolve()));

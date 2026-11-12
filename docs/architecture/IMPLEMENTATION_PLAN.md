@@ -31,7 +31,7 @@ in browser `sessionStorage`; `/api/metrics` and run history readable by anyone.
 | Database | **SQLite (WAL) kept** for all environments | One gateway instance; writes are small (events, 1 state sample / 2 s, sessions). PostgreSQL would add an operational dependency without a measured need. The data layer stays behind `db.js` so it can be swapped. |
 | Redis | **Not used** | Single gateway instance; the Socket.io adapter and connection cap are in-process. Needed only for horizontal scaling (documented in the deployment guide). |
 | Map | **SVG map kept and extended** (zoom, pan, layers) instead of Leaflet/OpenStreetMap | The networks are synthetic SUMO grids with no geographic coordinates; placing them on OSM tiles would show roads that do not exist. |
-| Password hashing | bcrypt (`bcryptjs`, cost 12, async) | Pure JavaScript, so no native build on Windows (the repo installs with `ignore-scripts`). |
+| Password hashing | Argon2id with Node's built-in `crypto.argon2` (19 MiB, 2 passes), scrypt on older Node; two hashes at a time on the thread pool | Phase 8 measured 2 sign-ins per second with pure-JavaScript bcrypt on the main thread; native hashing has no native build step either. Old bcrypt hashes are upgraded at sign-in |
 | Sessions | Opaque random token in an `HttpOnly`, `SameSite=Lax` cookie (`Secure` in production); only its SHA-256 is stored | Revocable server-side; nothing readable by scripts |
 | CSRF | Per-session token in `X-CSRF-Token` on every state-changing request + Origin check | Works with cookies and with the same-origin SPA |
 | Roles | `ADMIN`, `RESEARCHER`, `VIEWER`, enforced in backend middleware and on the socket | Frontend checks are only for presentation |
@@ -60,7 +60,7 @@ Role permissions:
 | 5 | Traffic map: zoom/pan/fit, layer controls, RSUs and radio range, queue counts, signal countdowns, junction and vehicle detail panels, closures, alternate and ambulance routes, smoother movement | **done** — `docs/testing/PHASE_4_5_REPORT.md` |
 | 6 | Module pages: signals, VANET, emergency, navigation, incidents, work zone, GLOSA, GA, experiments, notifications, documentation, administration (health, sessions) | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
 | 7 | Research dashboards and downloadable reports; guided teacher demonstration mode | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
-| 8 | Testing: Playwright end-to-end and screenshots at all viewports, security tests, database tests, failure/recovery tests, load tests 10 → 1000 authenticated users (k6/Artillery), reports in `docs/testing/` | planned |
+| 8 | Testing: Playwright end-to-end and screenshots at all viewports, security tests, database tests, failure/recovery tests, load tests 10 → 1000 authenticated users, reports in `docs/testing/` | **done** — `docs/testing/PHASE_8_REPORT.md` (load tests use a Node script, `server/loadtest/steps.js`, instead of k6/Artillery; one target not met: load time on a slow link, carried to Phase 9) |
 | 9 | Profiling and optimisation with before/after measurements | planned |
 | 10 | Deployment guide, production `.env.example`, backup/restore, final acceptance report | planned |
 

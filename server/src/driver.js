@@ -30,6 +30,10 @@ export class DriverSeat {
     this.seat = null; // { socketId, key, from, to, since, runId, vid, tripId, tokens, refillAt, timers }
     this.state = null; // latest driver message of the current drive
     this.tripByVid = new Map(); // vehicle id -> trip row id, until the simulation's final report
+    // Trips whose drive_start was sent but whose car the simulation has not named yet, oldest first.
+    // The simulation answers commands in order, so the next unknown car (or failed start) belongs
+    // to the oldest entry, which may be a drive that has already ended, not the current one.
+    this.pending = [];
   }
 
   // ------------------------------------------------------------------ public view
@@ -98,6 +102,7 @@ export class DriverSeat {
       tripId: this.db.insertDriverTrip(runId, from, to), tokens: this._burst(), refillAt: now, timers: {},
     };
     this.state = null;
+    this.pending.push(this.seat.tripId);
     this.seat.timers.max = setTimeout(() => this.end('time_limit'), this.cfg.DRIVER_MAX_MS);
     this._touch();
     this.log.info(`Driver seat taken in ${runId}: ${from} -> ${to}`);
@@ -188,27 +193,37 @@ export class DriverSeat {
   /** A "driver" message from the simulation. */
   onSimMessage(msg) {
     const seat = this.seat;
-    // The seat learns its car's id from the first message about a car that is not an earlier
-    // drive's: the previous drive's final report can arrive after the next viewer took the seat.
-    if (seat && !seat.vid && msg.vid && msg.run_id === seat.runId && !this.tripByVid.has(msg.vid)) {
+    // Which trip is this message about?
+    let tripId = null;
+    if (msg.status === 'error' && this.pending.length) {
+      tripId = this.pending.shift(); // a start that failed (the simulation names no car for it)
+    } else if (msg.vid && this.tripByVid.has(msg.vid)) {
+      tripId = this.tripByVid.get(msg.vid);
+    } else if (msg.vid && this.pending.length) {
+      tripId = this.pending.shift(); // first message about a new car: the oldest unanswered start
+      this.tripByVid.set(msg.vid, tripId);
+    } else if (!msg.vid) {
+      tripId = seat?.tripId ?? null; // a notice without a car (the run ended)
+    }
+    const mine = Boolean(seat) && tripId === seat.tripId;
+    if (mine && msg.vid && !seat.vid && msg.status !== 'error') {
       seat.vid = msg.vid;
-      this.tripByVid.set(msg.vid, seat.tripId);
       this._broadcast();
     }
+
     if (FINAL.has(msg.status)) {
-      const tripId = msg.vid ? this.tripByVid.get(msg.vid) : seat?.tripId;
       if (tripId) {
         this.db.endDriverTrip(tripId, { status: msg.status, reason: msg.status === 'finished' ? 'finished' : null,
           vid: msg.vid || null, report: msg.report ?? null });
-        this.tripByVid.delete(msg.vid);
       }
+      if (msg.vid) this.tripByVid.delete(msg.vid);
       // The simulation ended the current drive (arrived, failed to start, or the run ended)
-      if (seat && (seat.vid ? seat.vid === msg.vid : !msg.vid || msg.status === 'error')) {
+      if (mine) {
         const reason = msg.status === 'finished' ? 'finished' : msg.status === 'error' ? 'error' : 'run_ended';
         this.end(reason, { fromSim: true, message: msg.message ?? null });
       }
-      this.state = null;
-    } else {
+      if (mine || !this.seat) this.state = null;
+    } else if (mine) {
       this.state = msg;
     }
     this.io.to(this.room).emit('driver', msg);
@@ -218,6 +233,7 @@ export class DriverSeat {
   onRunEnded() {
     if (this.seat) this.end('run_ended', { fromSim: true });
     this.tripByVid.clear();
+    this.pending = [];
     this.state = null;
     this._broadcast();
   }

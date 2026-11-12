@@ -83,7 +83,7 @@ export default function Docs() {
         <section id="signals" className="card">
           <h2>Signal control</h2>
           <p>Every change is <strong>green → yellow 3 s → all red 2 s → green</strong>, and a state with conflicting greens is refused.</p>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data left">
               <thead><tr><th>Controller</th><th>Rule</th></tr></thead>
               <tbody>
@@ -152,7 +152,7 @@ export default function Docs() {
         <section id="results" className="card">
           <h2>Results</h2>
           <p className="small muted">Simulation results on the 2×2 grid, mean of 10 seeds. They describe these scenarios, not real roads. Full tables with tests: <Link to="/results">Results</Link>.</p>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data left">
               <thead><tr><th>Question</th><th>Result</th></tr></thead>
               <tbody>

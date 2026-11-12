@@ -50,7 +50,7 @@ export default function JunctionPanel({ ids, selected, onSelect, tlsState, ev, c
             <span className={`chip${preempting ? ' bad' : ''}`}>{PHASE_TEXT[data.phase] || data.phase}</span>
             {controller && <span className="small muted">Controller: {CONTROLLER_TEXT[controller] || controller}</span>}
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data approach-table">
               <thead><tr><th>From</th><th>Signal</th><th>Changes in</th><th>Waiting</th><th>VANET estimate</th></tr></thead>
               <tbody>

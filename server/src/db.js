@@ -177,6 +177,8 @@ export function openDatabase(dbPath) {
     listTrips: db.prepare(`SELECT * FROM driver_trips ORDER BY id DESC LIMIT ?`),
     closeOpenTrips: db.prepare(`UPDATE driver_trips SET status = 'released', reason = 'run_ended', ended_at = ? WHERE status = 'driving'`),
     countRuns: db.prepare('SELECT COUNT(*) AS n FROM runs'),
+    pruneSamples: db.prepare('DELETE FROM state_samples WHERE created_at < ?'),
+    countAllSamples: db.prepare('SELECT COUNT(*) AS n FROM state_samples'),
     // ---- accounts
     insertUser: db.prepare(`INSERT INTO users (email, name, password_hash, role, status, created_at, updated_at)
       VALUES (@email, @name, @password_hash, @role, @status, @at, @at)`),
@@ -255,6 +257,11 @@ export function openDatabase(dbPath) {
     listDriverTrips: (limit = 20) =>
       stmts.listTrips.all(limit).map((r) => ({ ...r, report: r.report ? JSON.parse(r.report) : null })),
     countRuns: () => stmts.countRuns.get().n,
+    /** Retention of high-volume telemetry: delete state samples stored before the given time. */
+    pruneSamples: (beforeIso) => stmts.pruneSamples.run(beforeIso).changes,
+    countSamples: () => stmts.countAllSamples.get().n,
+    /** Consistent copy of the whole database into a new file while the gateway keeps running. */
+    backup: (file) => db.backup(file),
 
     // ---- accounts ---------------------------------------------------------
     createUser: ({ email, name, password_hash, role = 'VIEWER', status = 'active' }) =>

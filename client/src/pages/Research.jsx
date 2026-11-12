@@ -78,7 +78,7 @@ function GaTarget({ target, data }) {
       {keys.length > 0 && (
         <div className="card stack">
           <div className="card-head"><h2>Parameters</h2></div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data">
               <thead><tr><th>Parameter</th><th>Default</th><th>Tuned</th></tr></thead>
               <tbody>{keys.map((k) => <tr key={k}><td>{k}</td><td>{fmt(h.default_chromosome?.[k], 3)}</td><td>{fmt(h.best_chromosome[k], 3)}</td></tr>)}</tbody>
@@ -90,7 +90,7 @@ function GaTarget({ target, data }) {
       {ev?.conditions?.length > 0 && (
         <div className="card stack">
           <div className="card-head"><h2>Check on held-out seeds</h2><span className="small muted">seeds {ev.seeds?.join(', ')} (not used for tuning)</span></div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data">
               <thead><tr><th>Condition</th><th>Default fitness</th><th>Tuned fitness</th><th>Improvement</th><th>Seeds tuned better</th><th>p-value</th></tr></thead>
               <tbody>
@@ -173,7 +173,7 @@ export function Runs() {
       {error && <div className="notice error" role="alert">{error.message}</div>}
       <section className="card stack" aria-labelledby="runs-h">
         <div className="card-head"><h2 id="runs-h">Runs</h2><span className="small muted">{data ? `${data.total} stored` : ''}</span></div>
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
           <table className="data left">
             <thead><tr><th>Select</th><th>Started</th><th>Scenario</th><th>Controller</th><th>Navigation</th><th>Seed</th><th>Connected</th><th>Source</th><th>Status</th></tr></thead>
             <tbody>
@@ -209,7 +209,7 @@ export function Runs() {
             <button type="button" className="btn" onClick={() => setPicked([])}>Clear selection</button>
           </div>
           {!a || (picked.length === 2 && !b) ? <p className="muted">Loading…</p> : (
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
               <table className="data">
                 <thead>
                   <tr><th>Metric</th><th>A: {describeRun(a.run)}</th>{b && <th>B: {describeRun(b.run)}</th>}{b && <th>B against A</th>}</tr>
@@ -292,7 +292,7 @@ export function EventsPage() {
           </div>
         </div>
         {list.length === 0 ? <p className="muted small" style={{ margin: 0 }}>No events{group !== 'all' || importantOnly ? ' match the filter' : ' in this run yet'}.</p> : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
             <table className="data left">
               <thead><tr><th>Time</th><th>Where</th><th>Event</th><th>Detail</th></tr></thead>
               <tbody>

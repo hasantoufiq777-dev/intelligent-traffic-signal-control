@@ -14,7 +14,8 @@
     "dev:mock": "cross-env USE_MOCK=true nodemon --watch src src/index.js",
     "test": "vitest run",
     "loadtest": "node loadtest/viewers.js",
-    "create-admin": "node src/createAdmin.js"
+    "create-admin": "node src/createAdmin.js",
+    "backup": "node src/backup.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

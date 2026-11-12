@@ -27,7 +27,6 @@ const EnvSchema = z.object({
   ALLOW_REGISTRATION: bool.default(false), // initial value; admins change it at run time (settings)
   SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
   SESSIONS_PER_USER: z.coerce.number().int().positive().default(10),
-  BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   COOKIE_SECURE: bool.optional(), // default: true when NODE_ENV=production (HTTPS only)
   TRUST_PROXY: z.coerce.number().int().min(0).default(0), // number of reverse proxies in front (nginx: 1)
   LOGIN_MAX_FAILS: z.coerce.number().int().positive().default(5),
@@ -36,6 +35,9 @@ const EnvSchema = z.object({
   RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(600), // API requests per IP per minute
   AUTH_RATE_LIMIT: z.coerce.number().int().positive().default(30), // login/register/reset attempts per IP per 15 min
   AUDIT_RETENTION_DAYS: z.coerce.number().positive().default(180),
+  // State samples (one per SAMPLE_EVERY_SIM_S per run) are the bulky telemetry: deleted after this
+  // many days. Runs, their results and their events are kept.
+  SAMPLE_RETENTION_DAYS: z.coerce.number().positive().default(14),
   // Hard cap on concurrent live connections (Socket.io); further connections are refused with "capacity"
   MAX_CONNECTIONS: z.coerce.number().int().positive().default(1000),
   // Consecutive failed runs after which the playlist stops retrying (lifecycle FAILED)
