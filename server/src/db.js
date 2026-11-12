@@ -126,6 +126,9 @@ const MIGRATIONS = [
     if (!cols.includes('ev_routing')) db.exec("ALTER TABLE runs ADD COLUMN ev_routing TEXT DEFAULT 'off'");
   } },
   { version: 3, name: 'users, sessions, password resets, audit log, settings, runs.started_by', up: (db) => db.exec(AUTH_SCHEMA) },
+  // The retention job deletes samples by age; without this index it read the whole table every time
+  { version: 4, name: 'index state_samples.created_at (retention)', up: (db) =>
+    db.exec('CREATE INDEX IF NOT EXISTS idx_samples_created ON state_samples(created_at)') },
 ];
 
 export function migrate(db) {

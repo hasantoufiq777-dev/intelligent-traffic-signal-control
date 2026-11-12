@@ -1,0 +1,220 @@
+{
+  "date": "2026-11-12T05:43:17.849Z",
+  "url": "http://127.0.0.1:4180",
+  "mock": true,
+  "max_connections": 1000,
+  "hold_s": 20,
+  "api_rps_target": 40,
+  "hardware": {
+    "platform": "Windows_NT 10.0.26300",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "threads": 20,
+    "memory_gb": 15.7,
+    "node": "v24.14.1"
+  },
+  "steps": [
+    {
+      "users": 100,
+      "connected": 100,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 100,
+        "p50": 26.3,
+        "p95": 32.5,
+        "p99": 33.2,
+        "max": 33.2
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 2000,
+        "p50": 3,
+        "p95": 6,
+        "p99": 8,
+        "max": 8
+      },
+      "seconds": 20,
+      "api": {
+        "n": 644,
+        "p50": 2.3,
+        "p95": 4.6,
+        "p99": 7.7,
+        "max": 15.2,
+        "errors": 0,
+        "rps": 32.2
+      },
+      "server": {
+        "viewers": 100,
+        "cpu_pct_one_core": 5.1,
+        "rss_mb": 96.1,
+        "heap_mb": 26.5,
+        "event_loop_lag_ms": {
+          "mean": 4.3,
+          "p99": 15.2,
+          "max": 15.8
+        },
+        "out_kb_s": 343,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 500,
+      "connected": 500,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 500,
+        "p50": 20.9,
+        "p95": 33.3,
+        "p99": 35,
+        "max": 36.2
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 0.9,
+      "stream_latency_ms": {
+        "n": 9000,
+        "p50": 11,
+        "p95": 25,
+        "p99": 29,
+        "max": 32
+      },
+      "seconds": 20,
+      "api": {
+        "n": 645,
+        "p50": 2.2,
+        "p95": 4.8,
+        "p99": 24.3,
+        "max": 71.6,
+        "errors": 0,
+        "rps": 32.2
+      },
+      "server": {
+        "viewers": 500,
+        "cpu_pct_one_core": 6.3,
+        "rss_mb": 133.3,
+        "heap_mb": 27.7,
+        "event_loop_lag_ms": {
+          "mean": 8.6,
+          "p99": 15.8,
+          "max": 17.2
+        },
+        "out_kb_s": 1643,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    },
+    {
+      "users": 1000,
+      "connected": 1000,
+      "refused": 0,
+      "failed": 0,
+      "success_pct": 100,
+      "connect_ms": {
+        "n": 1000,
+        "p50": 17.7,
+        "p95": 36.7,
+        "p99": 41.8,
+        "max": 42.4
+      },
+      "drops_during_hold": 0,
+      "states_per_user_per_s": 1,
+      "stream_latency_ms": {
+        "n": 20000,
+        "p50": 17,
+        "p95": 34,
+        "p99": 41,
+        "max": 46
+      },
+      "seconds": 20,
+      "api": {
+        "n": 645,
+        "p50": 2.2,
+        "p95": 15.5,
+        "p99": 34.1,
+        "max": 42.1,
+        "errors": 0,
+        "rps": 32.2
+      },
+      "server": {
+        "viewers": 1000,
+        "cpu_pct_one_core": 8.3,
+        "rss_mb": 184.1,
+        "heap_mb": 85.3,
+        "event_loop_lag_ms": {
+          "mean": 9.2,
+          "p99": 15.4,
+          "max": 18
+        },
+        "out_kb_s": 3157,
+        "persist_errors": 0,
+        "bad_lines": 0
+      }
+    }
+  ],
+  "reconnect": {
+    "dropped": 500,
+    "reconnected": 500,
+    "refused": 0,
+    "failed": 0,
+    "all_back_after_ms": 344,
+    "connect_ms": {
+      "n": 500,
+      "p50": 215.4,
+      "p95": 306,
+      "p99": 311.5,
+      "max": 312.5
+    },
+    "viewers_after": 1000
+  },
+  "spike": {
+    "users": 1100,
+    "connected": 1000,
+    "refused": 100,
+    "failed": 0,
+    "success_pct": 90.91,
+    "all_connected_after_ms": 700,
+    "connect_ms": {
+      "n": 1000,
+      "p50": 474.7,
+      "p95": 618.5,
+      "p99": 630.2,
+      "max": 632.7
+    },
+    "drops_during_hold": 0,
+    "stream_latency_ms": {
+      "n": 15000,
+      "p50": 19,
+      "p95": 36,
+      "p99": 39,
+      "max": 41
+    },
+    "seconds": 15,
+    "api": {
+      "n": 483,
+      "p50": 2.1,
+      "p95": 16.5,
+      "p99": 37.1,
+      "max": 42.6,
+      "errors": 0,
+      "rps": 32.1
+    },
+    "server": {
+      "viewers": 1000,
+      "cpu_pct_one_core": 5.4,
+      "rss_mb": 257.9,
+      "heap_mb": 73.7,
+      "event_loop_lag_ms": {
+        "mean": 9.1,
+        "p99": 18,
+        "max": 23.3
+      },
+      "out_kb_s": 3281,
+      "persist_errors": 0,
+      "bad_lines": 0
+    }
+  }
+}

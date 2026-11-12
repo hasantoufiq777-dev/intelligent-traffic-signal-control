@@ -1,0 +1,62 @@
+{
+ "date": "2026-11-12",
+ "tool": "tests/e2e/render.mjs, 20 s per page, Edge headless 1440x950, real SUMO congested run",
+ "normal_cpu": {
+  "/": {
+   "fps": 60,
+   "long_tasks": 0,
+   "cars_on_map": 46,
+   "dom_nodes": 678
+  },
+  "/live": {
+   "fps": 60.1,
+   "long_tasks": 0,
+   "dom_nodes": 581
+  },
+  "/signals": {
+   "fps": 60.1,
+   "long_tasks": 0,
+   "dom_nodes": 374
+  },
+  "/vanet": {
+   "fps": 60.1,
+   "long_tasks": 0,
+   "dom_nodes": 315
+  },
+  "/navigation": {
+   "fps": 60,
+   "long_tasks": 0,
+   "dom_nodes": 255
+  }
+ },
+ "cpu_slowed_4x": {
+  "/": {
+   "fps": 60.1,
+   "long_tasks": 0,
+   "cars_on_map": 52,
+   "dom_nodes": 722
+  },
+  "/live": {
+   "fps": 56.8,
+   "long_tasks": 20,
+   "long_task_ms_total": 1577,
+   "longest_ms": 103,
+   "dom_nodes": 566
+  },
+  "/signals": {
+   "fps": 59.9,
+   "long_tasks": 0,
+   "dom_nodes": 362
+  },
+  "/vanet": {
+   "fps": 60,
+   "long_tasks": 0,
+   "dom_nodes": 330
+  },
+  "/navigation": {
+   "fps": 60,
+   "long_tasks": 0,
+   "dom_nodes": 258
+  }
+ }
+}

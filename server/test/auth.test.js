@@ -229,7 +229,7 @@ describe('roles', () => {
     expect(denied.length).toBeGreaterThan(5);
     const sys = (await admin.get('/api/system').expect(200)).body;
     expect(sys.database).toMatchObject({ ok: true });
-    expect(sys.database.migrations.map((m) => m.version)).toEqual([1, 2, 3]);
+    expect(sys.database.migrations.map((m) => m.version)).toEqual([1, 2, 3, 4]);
     expect(sys.simulation.lifecycle).toBe('STOPPED');
     expect(sys.max_connections).toBe(1000);
   });
@@ -587,7 +587,8 @@ describe('database', () => {
     const old = openDatabase(file);
     // Simulate a database from before the accounts existed
     old.raw.exec('DROP TABLE users; DROP TABLE sessions; DROP TABLE password_resets; DROP TABLE audit_logs; DROP TABLE settings;');
-    old.raw.exec('ALTER TABLE runs DROP COLUMN started_by; DELETE FROM schema_migrations WHERE version = 3;');
+    old.raw.exec('ALTER TABLE runs DROP COLUMN started_by; DELETE FROM schema_migrations WHERE version >= 3;');
+    old.raw.exec('DROP INDEX idx_samples_created;');
     old.insertRun = null;
     old.raw.prepare(`INSERT INTO runs (id, scenario, controller, nav, seed, source, status, started_at)
       VALUES ('keep-me', 'normal', 'fixed', 'none', 1, 'admin', 'finished', '2026-01-01T00:00:00.000Z')`).run();
@@ -595,8 +596,10 @@ describe('database', () => {
 
     const db = openDatabase(file);
     try {
-      expect(db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3]);
+      expect(db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3, 4]);
       expect(db.getRun('keep-me').run.scenario).toBe('normal'); // existing data kept
+      const plan = db.raw.prepare('EXPLAIN QUERY PLAN DELETE FROM state_samples WHERE created_at < ?').all('2026').map((r) => r.detail).join();
+      expect(plan).toContain('idx_samples_created'); // retention uses the index, not a full scan
       expect(db.countUsers()).toBe(0);
       expect(migrate(db.raw)).toEqual([]); // nothing left to apply
     } finally {

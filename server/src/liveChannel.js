@@ -7,6 +7,21 @@ import { buildSimArgs, VehicleIdSchema } from './protocol.js';
 const ROOM = 'live';
 const VEHICLES_OFFSET_MS = 150; // keep the map frame out of the state broadcast's tick
 
+/**
+ * The part of a state that the dashboard's history charts read: time, metrics, each junction's
+ * phase and queues, the VANET delivery ratio and the navigation averages. A new viewer gets 120 of
+ * these in its first message; the full latest state is sent beside them. Signal timing (SPaT), road
+ * speeds and eco data are only shown for the current second, so the history leaves them out
+ * (about 2.9 KB -> 0.5 KB per state).
+ */
+export function historyRow(msg, runId = msg.run_id) {
+  const tls = {};
+  for (const [id, j] of Object.entries(msg.tls ?? {})) tls[id] = { phase: j?.phase, queues: j?.queues };
+  const nav = msg.nav ? { avg_tt_nav: msg.nav.avg_tt_nav, avg_tt_non: msg.nav.avg_tt_non, edge_load_cv: msg.nav.edge_load_cv } : undefined;
+  return { type: msg.type, run_id: msg.run_id ?? runId, t: msg.t, metrics: msg.metrics, tls,
+    comm: msg.comm ? { pdr: msg.comm.pdr } : undefined, nav };
+}
+
 export class LiveChannel {
   constructor({ cfg, io, db, logger, playlist }) {
     this.cfg = cfg;
@@ -31,7 +46,7 @@ export class LiveChannel {
     this.lastStatus = null;
     this.lastResult = null;
     this.latestState = null;
-    this.states = []; // last HISTORY_SECONDS of simulated time
+    this.states = []; // last HISTORY_SECONDS of simulated time, as chart rows (historyRow)
     this.events = []; // last EVENT_HISTORY events
     this.lastSampleT = -Infinity;
     this.sawFinalStatus = false;
@@ -342,7 +357,7 @@ export class LiveChannel {
 
   _recordState(runId, msg) {
     this.latestState = msg;
-    this.states.push(msg);
+    this.states.push(historyRow(msg, runId));
     const t = Number(msg.t) || 0;
     const minT = t - this.cfg.HISTORY_SECONDS;
     let drop = 0;

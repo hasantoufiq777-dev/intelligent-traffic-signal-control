@@ -16,8 +16,10 @@ const step = async (name, fn) => {
   } catch (err) {
     problems.push(`${name}: ${err.message.split('\n')[0]}`);
     console.log(`FAIL ${name}`);
-    for (const [i, c] of browser.contexts().entries()) {
-      for (const [j, pg] of c.pages().entries()) await pg.screenshot({ path: `${process.env.SHOTS || '.'}/fail-${problems.length}-${i}${j}.png` }).catch(() => {});
+    if (process.env.SHOTS) { // failure screenshots only when asked for (SHOTS=<dir>)
+      for (const [i, c] of browser.contexts().entries()) {
+        for (const [j, pg] of c.pages().entries()) await pg.screenshot({ path: `${process.env.SHOTS}/fail-${problems.length}-${i}${j}.png` }).catch(() => {});
+      }
     }
   }
 };
@@ -96,8 +98,13 @@ await step('viewer can follow a car and read its details', async () => {
 });
 await step('viewer reconnects after the connection drops', async () => {
   await viewer.ctx.setOffline(true);
-  await vp.getByText(/Reconnecting|Offline/).first().waitFor({ timeout: 30_000 });
-  await viewer.ctx.setOffline(false);
+  try {
+    // An open WebSocket is not closed by going offline; with no data flowing (simulation stopped)
+    // the client notices through the missing heartbeat: up to 25 s ping interval + 20 s timeout.
+    await vp.getByText(/Reconnecting|Offline/).first().waitFor({ timeout: 60_000 });
+  } finally {
+    await viewer.ctx.setOffline(false);
+  }
   await vp.getByRole('status').filter({ hasText: 'Live' }).first().waitFor({ timeout: 30_000 });
 });
 

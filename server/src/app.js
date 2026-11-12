@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -110,6 +111,8 @@ export function createGateway(overrides = {}) {
     strictTransportSecurity: cfg.COOKIE_SECURE ? { maxAge: 15_552_000, includeSubDomains: true } : false,
     crossOriginEmbedderPolicy: false,
   }));
+  // gzip/deflate for the API and the static build (the live stream is Socket.io, not touched here)
+  app.use(compression({ threshold: 1024 }));
   app.use(cors(corsOptions));
   app.use(express.json({ limit: '10kb' }));
   app.use('/api', auth.apiLimiter, auth.authenticate, auth.csrfProtect);
@@ -292,6 +295,8 @@ export function createGateway(overrides = {}) {
   // ---- optional static React build (production: nginx serves it, see README) --
   const dist = path.join(cfg.PROJECT_ROOT, 'client', 'dist');
   if (fs.existsSync(path.join(dist, 'index.html'))) {
+    // Vite puts a content hash in every file name under assets/, so those never change: cache for a year
+    app.use('/assets', express.static(path.join(dist, 'assets'), { immutable: true, maxAge: '365d', index: false, fallthrough: false }));
     app.use(express.static(dist, { maxAge: '1h', index: false }));
     app.get(/^\/(?!api\/|socket\.io\/).*/, (_req, res) => {
       res.set('Cache-Control', 'no-cache');

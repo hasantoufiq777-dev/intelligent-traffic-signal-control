@@ -143,7 +143,7 @@ connections are not affected). When a session ends, its sockets are disconnected
 
 | Event | Payload |
 |---|---|
-| `init` | `{network, vehicles, now_playing, status, latest, states[], events[], result, history_seconds}` on connect |
+| `init` | `{network, vehicles, now_playing, status, latest, states[], events[], result, history_seconds}` on connect. `latest` is the full latest state; `states` is the last `HISTORY_SECONDS` as chart rows (`run_id, t, metrics, tls{phase, queues}, comm.pdr, nav{avg_tt_nav, avg_tt_non, edge_load_cv}`) to keep the first message small |
 | `state` | Protocol state message + `sent_at` (server ms timestamp), at most 1/s, volatile |
 | `event` | `{type, run_id, t, kind, tls, detail}` |
 | `status` | `{type, run_id, status: started/finished/stopped/error, message}` |
@@ -223,7 +223,10 @@ server {
 Also set `worker_connections 4096;` (or higher) in nginx's `events {}` block. Each viewer uses one
 connection to the client and one to the upstream.
 
-Without nginx, the gateway also serves `client/dist` itself when that folder exists.
+Without nginx, the gateway also serves `client/dist` itself when that folder exists, with the same caching
+(`assets/` for a year, `index.html` never). HTTP responses over 1 KB are gzip-compressed by the gateway
+(`compression`); nginx can compress the static files too (`gzip on; gzip_types text/css application/javascript application/json;`).
+Socket.io messages are not compressed on purpose (per-message deflate would cost CPU per viewer and per message).
 
 **Shutdown.** SIGINT/SIGTERM stops the simulation (on Windows the whole python + SUMO process tree
 is terminated), closes Socket.io and HTTP, then closes the database.
@@ -241,5 +244,9 @@ Restore: stop the gateway, copy the backup over `DB_PATH` (delete the old `-wal`
 [--reconnect 500] [--logins 200] [--soak 30] [--out result.json]` (password from `LT_PASSWORD`). It signs in, opens
 the connections, calls the API while holding, and reports connection success, stream and API latency, CPU, memory
 and event-loop lag. Run the gateway with `AUTH_RATE_LIMIT`, `RATE_LIMIT_PER_MIN` and `SESSIONS_PER_USER` raised, since
-all test traffic comes from one address. Results: `docs/testing/PHASE_8_REPORT.md`.
+all test traffic comes from one address. Results: `docs/testing/PHASE_8_REPORT.md` and `PHASE_9_REPORT.md`.
+
+`node loadtest/initsize.js <url> <email> <password>` prints the size of a new viewer's first message, split by
+key. Browser-side measurements: `tests/e2e/loadtime.mjs` (time until cars show, local and on an emulated
+10 Mbit/s link) and `tests/e2e/render.mjs` (frames per second and long tasks per live page, optional CPU slowdown).
 

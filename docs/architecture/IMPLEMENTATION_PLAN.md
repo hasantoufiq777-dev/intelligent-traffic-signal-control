@@ -61,7 +61,7 @@ Role permissions:
 | 6 | Module pages: signals, VANET, emergency, navigation, incidents, work zone, GLOSA, GA, experiments, notifications, documentation, administration (health, sessions) | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
 | 7 | Research dashboards and downloadable reports; guided teacher demonstration mode | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
 | 8 | Testing: Playwright end-to-end and screenshots at all viewports, security tests, database tests, failure/recovery tests, load tests 10 → 1000 authenticated users, reports in `docs/testing/` | **done** — `docs/testing/PHASE_8_REPORT.md` (load tests use a Node script, `server/loadtest/steps.js`, instead of k6/Artillery; one target not met: load time on a slow link, carried to Phase 9) |
-| 9 | Profiling and optimisation with before/after measurements | planned |
+| 9 | Profiling and optimisation with before/after measurements | **done** — `docs/testing/PHASE_9_REPORT.md` (slow-link load 5.6–9.2 s → 1.1–1.9 s; first socket message 350 → 64 KB; HTTP gzip; retention index) |
 | 10 | Deployment guide, production `.env.example`, backup/restore, final acceptance report | planned |
 
 ## 4. Rules kept through all phases

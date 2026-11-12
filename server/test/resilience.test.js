@@ -390,7 +390,7 @@ describe('database maintenance', () => {
         expect(restored.db.getUserByEmail(user.email)).toMatchObject({ role: 'RESEARCHER', status: 'active' });
         expect(restored.db.getRun('kept').result.metrics.avg_waiting_time).toBe(3.5);
         expect(restored.db.raw.prepare('PRAGMA integrity_check').get().integrity_check).toBe('ok');
-        expect(restored.db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3]);
+        expect(restored.db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3, 4]);
         await signIn(restored, user.email); // the password still works
       } finally {
         await restored.close();
