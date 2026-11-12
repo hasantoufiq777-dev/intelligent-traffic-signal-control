@@ -8,7 +8,7 @@ Final run: 12 November 2026, on the final code (environment: [test plan §1](TES
 reproduced exactly.
 **Procedure.** `npm run test:py` (pytest, quiet), real SUMO.
 **Expected.** All tests pass; the regression test reproduces its 12 baseline runs exactly.
-**Actual.** **134 passed**, 1 warning (from the property-testing library), in 7 min 0 s.
+**Actual.** **138 passed**, 1 warning (from the property-testing library), in 7 min 42 s.
 **Status.** Pass.
 
 | File | Tests | Covers |
@@ -29,9 +29,10 @@ reproduced exactly.
 | `test_driver.py` | 7 | one-driver mode in the simulation |
 | `test_live_protocol.py` | 6 | the JSON-lines live protocol from the mock and the real simulation; incident, VANET alert and reroute events; a clear error for a missing parameters file |
 | `test_playback.py` | 5 | pause, resume and speed (Phase 10): applied and confirmed, invalid speeds ignored, driver commands kept while paused, the pause ends when the run stops, and **a paused and re-speeded real SUMO run gives the same states, second by second, and the same results as an undisturbed one** |
+| `test_live_extras.py` | 4 | demand factor scales every flow and is the identity at 1; 2× demand gives more than twice the cars of 0.5×; jitter is the standard deviation of delivered delays (incremental); the live state carries jitter and the latest ACO decision (probabilities sum to 1) **and the run's results equal those of a run without live output** |
 | `test_regression.py` | 1 | **12 reference runs identical to `regression_baseline.json`** |
 
-(Counts are test functions; pytest's 134 includes parametrised cases.)
+(Counts are test functions; pytest's 138 includes parametrised cases.)
 
 **Defect found by these tests (Phase 10, fixed before release):** driver commands that arrived while
 a run was paused were put in a list that was then replaced, so they were lost. The fix takes the

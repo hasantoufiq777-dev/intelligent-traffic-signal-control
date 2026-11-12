@@ -117,6 +117,7 @@ switches it to WAL mode and applies any schema migrations not yet recorded in
 | 2 | `runs.eco_fraction`, `runs.ev_routing` |
 | 3 | users, sessions, password resets, audit log, settings, `runs.started_by` |
 | 4 | index `state_samples.created_at` (retention) |
+| 5 | `runs.demand` (traffic demand factor) |
 
 Each migration runs once, inside a transaction. Migrations only add tables, columns and indexes,
 so an older gateway can still open a newer database (tested, §9). On a large existing database the

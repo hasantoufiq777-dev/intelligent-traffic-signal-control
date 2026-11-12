@@ -61,7 +61,7 @@ Request bodies are JSON (at most 10 KB) and are validated; unknown keys are reje
 | GET | `/api/runs/:id?samples=N` | session | Run, result, events (up to 500), state-sample count, optional samples |
 | GET | `/api/driver` | session | Driver seat and the last 20 drives with their trip reports |
 | GET | `/api/sumo/gui` | session | `{available, enabled, mock, running}`; `available` only for administrators with the real simulation |
-| POST | `/api/live/start` | ADMIN, RESEARCHER | Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?, ev_routing?, network?, label?}`; unknown keys are rejected. 202 `{run_id}`; 409 `busy` while another start/stop is in progress, 409 `in_use` for a researcher when another user's run is active |
+| POST | `/api/live/start` | ADMIN, RESEARCHER | Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?, ev_routing?, demand?, network?, label?}` (`demand` 0.25–2: every traffic flow of the scenario multiplied by it, default 1); unknown keys are rejected. 202 `{run_id}`; 409 `busy` while another start/stop is in progress, 409 `in_use` for a researcher when another user's run is active |
 | POST | `/api/live/stop` | ADMIN, RESEARCHER (own run) | Stops the run and pauses the playlist until the next start |
 | POST | `/api/live/pause` | ADMIN, RESEARCHER (own run) | 202; the simulation stops stepping until resumed; confirmed through `now_playing.playback` |
 | POST | `/api/live/resume` | ADMIN, RESEARCHER (own run) | 202; continues from the same simulated second |
@@ -96,7 +96,8 @@ connections are not affected). When a session ends, its sockets are disconnected
 |---|---|
 | `init` | `{network, vehicles, now_playing, status, latest, states[], events[], result, history_seconds}` on connect. `latest` is the full latest state; `states` is the last `HISTORY_SECONDS` as chart rows (`run_id, t, metrics, tls{phase, queues}, comm.pdr, nav{avg_tt_nav, avg_tt_non, edge_load_cv}`) to keep the first message small |
 | `state` | Protocol state message + `sent_at` (server ms timestamp), at most 1/s, volatile |
-| `event` | `{type, run_id, t, kind, tls, detail}` |
+| `event` | `{type, run_id, t, kind, tls, detail}`. Besides the simulation's own kinds, the gateway adds platform events with `system: true`: `sim_started`, `sim_finished`, `sim_stopped`, `sim_failed`, `sim_halted` (playlist stopped after repeated failures) and `capacity_reached` (at most once a minute); the run's events are stored with it |
+| `state` fields added in Phase 10 | `comm.jitter_ms`: measured spread (standard deviation) of the delay of delivered messages; `nav.reroutes`; `nav.last_decision`: the navigator's latest route search `{t, vid, mode, from, to, routes: [{path, cost_s, prob}], chosen, current_cost_s, applied}` (A\*: one route with probability 1; ACO: up to three alternatives) |
 | `status` | `{type, run_id, status: started/finished/stopped/error, message}` |
 | `result` | Final result message |
 | `now_playing` | `{running, lifecycle, current: {run_id, entry, source, started_at, status, started_by}, next, loop, viewers, mock, gui, driver, playback: {paused, speed}}`; `playback` is what the simulation confirmed (its `playback` message), not what was requested |

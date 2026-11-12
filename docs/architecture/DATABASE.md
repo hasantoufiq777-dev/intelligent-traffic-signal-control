@@ -19,6 +19,7 @@ timeout. The schema is created and upgraded by versioned migrations in
 | `relay` | TEXT | `on` / `off` (V2V relay of ambulance alerts) |
 | `eco_fraction` | REAL | share of eco (GLOSA) cars (migration 2) |
 | `ev_routing` | TEXT | ambulance route choice `on` / `off` (migration 2) |
+| `demand` | REAL | traffic demand factor, 1 = the scenario as defined (migration 5) |
 | `source` | TEXT | `admin` (started by a user) or `playlist` |
 | `status` | TEXT | `running`, `finished`, `stopped`, `error`, `interrupted` |
 | `message` | TEXT | reason for `stopped` / `error` / `interrupted` |
@@ -30,7 +31,7 @@ Index: `idx_runs_started (started_at)` for the newest-first run list.
 **`results`**: the final metrics of a run that finished (`run_id` PK → `runs.id` ON DELETE CASCADE,
 `metrics` JSON text, `created_at`).
 
-**`events`**: signal and incident events of a run (`id` PK, `run_id` → `runs.id` CASCADE, `t` simulated
+**`events`**: signal, incident and platform events (`sim_started`, `sim_failed`, …) of a run (`id` PK, `run_id` → `runs.id` CASCADE, `t` simulated
 second, `kind`, `tls` junction, `detail`, `created_at`). Index `idx_events_run (run_id, id)`.
 
 **`state_samples`**: one complete state message every `SAMPLE_EVERY_SIM_S` (2) simulated seconds (`id`
@@ -97,6 +98,7 @@ and reset links; their runs and audit entries stay.
 | 2 | `runs.eco_fraction`, `runs.ev_routing` | adds the columns if missing (older databases) |
 | 3 | users, sessions, password resets, audit log, settings, `runs.started_by` | accounts and security |
 | 4 | index `state_samples.created_at` | retention without a full scan (Phase 9: 1.1–3.9 s → 0.1 ms) |
+| 5 | `runs.demand` | the traffic demand factor of a run (Phase 10) |
 
 `migrate()` runs at every start. Each pending migration runs in its own transaction and is recorded
 in `schema_migrations`, so it runs once. Migrations only add things, so an older gateway version can

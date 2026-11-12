@@ -67,13 +67,13 @@ from the simulation's own positions once per second.
 |---|---|
 | Live overview | junction cards, event log, queue, waiting-time and throughput charts, VANET and navigation panels |
 | Signals | each junction's phase history and queues; how the current controller decides |
-| VANET | message delivery ratio, loss, delay; each roadside unit's estimated queue against the true one |
+| VANET | message delivery ratio, loss, delay and measured jitter; each roadside unit's estimated queue against the true one |
 | Emergency | the ambulance, its route, alerts and preemptions |
-| Navigation | trip times of navigating cars against the others; how evenly traffic spreads |
+| Navigation | trip times of navigating cars against the others; how evenly traffic spreads; the latest route decision (the A\* route, or ACO's alternatives with their probabilities and which was picked) |
 | Incidents | accidents, when they were detected and how traffic reacts |
 | Work zone | the shared lane: whose turn it is, queues at both ends, the ambulance's turn |
 | Eco-driving | speed advice (GLOSA), stops, CO₂ of eco cars against the others |
-| Events | all important events; the bell counts the new ones |
+| Events | all events, including when a simulation started, finished, was stopped or failed, and when the platform was full; the bell counts the important ones (not every start and finish) |
 | Guided demo | thirteen steps through the project ([teacher guide](TEACHER_DEMO_GUIDE.md)) |
 | Results | the stored experiment results over 10 seeds with statistics; CSV download |
 | GA optimisation | the genetic algorithm's convergence and its check on unseen seeds |
@@ -104,7 +104,8 @@ stops per km, fuel and CO₂.
 - navigation (none / A\* / ACO);
 - the seed;
 - VANET penetration, packet loss and relay;
-- the share of eco cars and the ambulance route choice.
+- the share of eco cars and the ambulance route choice;
+- the **demand**: how much traffic, as a factor of the scenario's own flows (0.25× to 2×; 1 = as defined).
 
 *Stop* ends your run.
 

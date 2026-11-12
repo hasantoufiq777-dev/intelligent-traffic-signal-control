@@ -14,19 +14,19 @@ so and why.
 - **Deployment instructions.** They are complete, but the Linux/nginx/systemd path was not run;
   the production configuration was verified locally on Windows behind an HTTPS test proxy.
 
-Deviations from the brief's *recommended* technologies are listed in §4, gaps in individual module
-items in §3, and work not done in §5.
+Deviations from the brief's *recommended* technologies are listed in §4, the module items finished
+last and the one remaining partial item in §3, and work not done in §5.
 
 ## 2. Acceptance criteria (brief §22)
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | Existing simulation functionality is preserved | **Met** | `sim/` changed only by display output and wall-clock playback; 12-run zero-regression test passes; live mode reproduces stored results; every published figure matches `results/summary.json` ([regression report §1](REGRESSION_TEST_REPORT.md#1-the-simulation-is-unchanged)) |
-| 2 | Existing Python tests pass | **Met** | 134 passed: the original 129 plus 5 for playback ([unit report](UNIT_TEST_REPORT.md)) |
-| 3 | Backend tests pass | **Met** | 80 passed, 2 skipped (the real-SUMO tests, run separately) ([integration report](INTEGRATION_TEST_REPORT.md)) |
+| 1 | Existing simulation functionality is preserved | **Met** | `sim/` changed only by display output, wall-clock playback and the optional demand factor (identity at 1); 12-run zero-regression test passes; live mode reproduces stored results; every published figure matches `results/summary.json` ([regression report §1](REGRESSION_TEST_REPORT.md#1-the-simulation-is-unchanged)) |
+| 2 | Existing Python tests pass | **Met** | 138 passed: the original 129 plus 9 for the Phase 10 additions ([unit report](UNIT_TEST_REPORT.md)) |
+| 3 | Backend tests pass | **Met** | 82 passed, 3 skipped (the real-SUMO tests, run separately) ([integration report](INTEGRATION_TEST_REPORT.md)) |
 | 4 | Frontend tests pass | **Met** | 13 passed; browser suites below |
 | 5 | Integration tests pass | **Met** | gateway with real SUMO: 3 passed (ambulance run, driven car, playback) |
-| 6 | End-to-end tests pass | **Met** | journey 10/10, every page 24/24, roles 14/14, production browser check ([E2E report](E2E_TEST_REPORT.md)) |
+| 6 | End-to-end tests pass | **Met** | journey 10/10, every page 24/24, roles 14/14, live details 4/4, production browser check ([E2E report](E2E_TEST_REPORT.md)) |
 | 7 | Security tests executed | **Met** (scope stated) | authentication, roles, CSRF/origin on API and sockets, hostile input, headers/CSP, production check 8/8, dependency audits 0 in production ([security report](SECURITY_TEST_REPORT.md)); no external penetration test or dynamic scanner |
 | 8 | Database tests executed | **Met** | migrations of older databases, constraints, cascades, transactions, retention with its index, failure while unavailable and during writes, online backup, restore, rollback over a newer schema ([integration](INTEGRATION_TEST_REPORT.md), [failure and recovery](FAILURE_RECOVERY_REPORT.md)) |
 | 9 | Responsive tests executed | **Met** | 18 pages × 6 widths (1920–360 px): 108/108; accessibility 0 violations in 45 + 2 audits ([responsiveness report](RESPONSIVENESS_REPORT.md)) |
@@ -48,19 +48,24 @@ items in §3, and work not done in §5.
 | 25 | Teacher demonstration mode works | **Met** | 13-step guided demo with start, pause-to-explain and resume; browser test starts a step and pauses it; [teacher guide](../guides/TEACHER_DEMO_GUIDE.md) |
 | 26 | Actual performance measurements documented | **Met** | [performance](PERFORMANCE_TEST_REPORT.md), [load](LOAD_TEST_REPORT.md), [Phase 9](PHASE_9_REPORT.md) with before/after; raw data in `data/` |
 
-## 3. Feature requirements (brief §6–§7, §16) with partial coverage
+## 3. Feature requirements (brief §6–§7, §9, §16) completed at the end of Phase 10
 
-Everything else in §6 and §7 is implemented (Phases 4–7 reports). These items are covered only in
-part:
+The first version of this report listed these as partly covered. They have since been built and
+tested; everything else in §6 and §7 was implemented in Phases 4–7.
+
+| Item | Now | Evidence |
+|---|---|---|
+| §6.6 Simulation playback | start, stop, pause, resume, speed 0.5×–4×, restart; clock, scenario, state; conflicting operations refused (409) | `sim/tests/test_playback.py`, `server/test/playback.test.js`, real-SUMO test, browser steps |
+| §7.5 VANET jitter | measured: standard deviation of the delay of delivered messages, shown on the VANET page | 1.41 ms in a real run (theory for the channel's 0–5 ms spread: 1.44 ms); unit test |
+| §7.7 ACO route probabilities | the Navigation page shows the latest route decision: A\* route, or ACO's up to three alternatives with estimated time, probability, the one picked and whether the car switched | real run: 45 % / 28 % / 27 %; Python test checks the probabilities sum to 1 and results are unchanged |
+| §7.13 Configure vehicle counts | *demand* setting 0.25×–2× multiplies every flow of the scenario; stored with the run | Python test: 2× gives more than twice the cars of 0.5×; 1× leaves route generation untouched (regression test) |
+| §7.15 Event centre: simulation started/stopped/failure, system warnings | platform events `sim_started`, `sim_finished`, `sim_stopped`, `sim_failed`, `sim_halted`, `capacity_reached` in the event list (group *Simulation and system*); stops, failures and warnings ring the bell, starts and finishes do not (a playlist would ring it every few minutes) | gateway test; browser step |
+
+Still partial:
 
 | Item | What exists | What does not |
 |---|---|---|
-| §6.6 Simulation playback | start, stop, **pause, resume, speed 0.5×–4×, restart** (added in Phase 10), clock, scenario, state; conflicting operations refused (409) | — |
-| §7.5 VANET jitter | configured jitter shown (base 10 ms, jitter 5 ms) with measured mean delay | measured jitter is not streamed by the simulation |
-| §7.7 ACO route probabilities | the method and formula are explained on the page | the probabilities stay inside the simulation; the page says so |
-| §7.13 Configure vehicle counts | scenarios define demand (normal, congested, …); every other listed parameter is configurable | no free vehicle-count input; demand is chosen through the scenario |
-| §7.15 Event centre: simulation started/stopped/failure, system warnings | the event centre's *Simulation* panel shows the run, its state, the last status and repeated failures; traffic events in the list and the bell | simulation status changes and system warnings (for example the connection limit) are not entries in the bell's count; administrators see them in the audit log and system health |
-| §9 entities `notifications`, `incidents`, `accident_zones`, `experiments` as tables | events (incidents, zone, preemption) are stored per run in `events`; experiments are `runs` + `results` | no separate tables for these; the data is in `events`, `runs` and `results` |
+| §9 entities `notifications`, `incidents`, `accident_zones`, `experiments` as tables | events (incidents, zone, preemption, platform events) are stored per run in `events`; experiments are `runs` + `results` | no separate tables for these; the data is in `events`, `runs` and `results` |
 
 ## 4. Deviations from the recommended architecture (brief §3, §11, §17)
 
@@ -89,7 +94,7 @@ part:
 | 6–7 | Administration titled "Run control"; VANET estimate shown for non-VANET controllers |
 | 8 | sign-in hashing blocked the server; duplicate-account race (500); second driver-seat race; database write failure stopped the stream; React Router advisories; 27 accessibility issues |
 | 9 | slow load on a slow link (5.6–9.2 s → 1.1–1.9 s); retention query scanned 1.6 GB |
-| 10 | live socket accepted other sites' pages; CSP allowed any WebSocket host; sign-in through the dev server refused; junction name without the visible *AMBULANCE* note; dev-tool critical advisories; **missing playback controls (§6.6)** built; driver commands sent while paused were dropped (found by the new test before release) |
+| 10 | live socket accepted other sites' pages; CSP allowed any WebSocket host; sign-in through the dev server refused; junction name without the visible *AMBULANCE* note; dev-tool critical advisories; **missing playback controls (§6.6)** built; driver commands sent while paused were dropped (found by the new test before release); measured jitter, ACO route decisions, the demand setting and platform events added (§3) |
 
 ## 7. How to reproduce
 

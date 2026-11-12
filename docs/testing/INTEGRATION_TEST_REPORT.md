@@ -9,8 +9,8 @@ works through the real Express, Socket.io and SQLite stack.
 **Procedure.** `npm run test:server` (vitest). Each test starts its own gateway on a free port with
 an in-memory or temporary database. The simulation is the mock, or a small fake Python script that
 crashes, fails to start or prints invalid output.
-**Expected.** All pass, with the 2 real-SUMO tests skipped here (run separately, §2).
-**Actual.** **80 passed, 2 skipped** (6 files) in 15.2 s.
+**Expected.** All pass, with the real-SUMO tests skipped here (run separately, §2).
+**Actual.** **82 passed, 3 skipped** (6 files; the 3 real-SUMO tests are skipped here) in 15.3 s.
 **Status.** Pass.
 
 | File | Tests | Covers |
@@ -19,8 +19,8 @@ crashes, fails to start or prints invalid output.
 | `gateway.test.js` | 13 | bad simulation lines ignored; health, options, playlist and status; start needs a researcher or administrator and a valid body; one run broadcast to all viewers, late viewers get history, the result is stored; road map and car positions to everyone, car details only to followers; stop; SUMO-GUI guard; simulation arguments; GA and summary endpoints; playlist advance and recovery from a crashed run; runs left running marked interrupted |
 | `driver.test.js` | 9 | one-driver seat: command validation; one viewer at a time, only their commands, rate limit, trip stored; drive to the destination; administrator switches driving off; drive ends when the run is replaced; reply ordering (two races found and fixed); seat freed after the idle time and when the driver leaves after the reconnect grace |
 | `resilience.test.js` | 18 | simulation crash, failed start, invalid output, exit without result, gateway restart, database unavailable and failing writes, hostile input, path traversal, stored XSS, socket abuse, concurrency, retention, backup and restore |
-| `playback.test.js` | 6 | pause, resume, speed and restart: refused to viewers and when nothing runs; the paused state is the one the simulation confirmed and simulated time stands still; only the speeds 0.5/1/2/4; restart from the first second; a researcher controls only their own run; audit entries; a paused run stops promptly |
-| `snapshot.test.js` | 4 | history rows, HTTP compression, security headers |
+| `playback.test.js` | 7 | platform events (run started, finished, connection limit) reach viewers and the run's history; pause, resume, speed and restart: refused to viewers and when nothing runs; the paused state is the one the simulation confirmed and simulated time stands still; only the speeds 0.5/1/2/4; restart from the first second; a researcher controls only their own run; audit entries; a paused run stops promptly |
+| `snapshot.test.js` | 5 | history rows, HTTP compression, security headers, the traffic demand setting (validation, simulation argument, stored with the run) |
 
 ## 2. Gateway with real SUMO (`server/test/e2e.real.test.js`)
 

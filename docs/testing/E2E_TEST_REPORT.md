@@ -79,6 +79,19 @@ axe (WCAG 2.0–2.2 A/AA) in the light and dark themes.
 **Expected / actual.** No violations, and the junction's name mentions the ambulance / **no
 violations in either theme**; name "Junction J0 ambulance priority. Show details". **Status: pass.**
 
+## 4b. Live details (`tests/e2e/live-details.mjs`)
+
+**Objective.** The details added at the end of Phase 10 show real simulation values.
+**Environment.** Gateway with real SUMO, no playlist; the script starts the run itself.
+**Expected / actual.** 4 of 4 / **4 of 4 passed**. **Status: pass.**
+
+| Step | Result |
+|---|---|
+| Run control starts `navigation` with ACO at **half the traffic demand** | the run's entry carries `demand: 0.5` |
+| The event centre lists the simulation start | *sim started* entry |
+| The VANET page shows the **measured jitter** | 1.41 ms (the channel adds 0–5 ms uniformly: theory 1.44 ms) |
+| The Navigation page shows the **latest ACO decision** | 3 alternatives at 45 %, 28 %, 27 % (sum 100 %), exactly one marked chosen |
+
 ## 5. Production configuration in the browser (`tests/deploy/prodcheck.mjs`, last check)
 
 **Objective.** With the production settings, a user can sign in over HTTPS and watch the live map,
@@ -101,6 +114,10 @@ with the strict CSP and `Secure` cookies.
 | 10 | **Junction name did not include the visible *AMBULANCE* note** (axe, only during preemption) | note drawn outside the button; name says "ambulance priority"; dedicated test |
 
 Test-script faults fixed along the way (not product defects):
+
+- the demo pause step read the clock before the state of the second in progress had arrived
+  (states go out at most once a second), so it saw one more tick; it now lets that state arrive
+  first;
 
 - the reconnect step waited 30 s, while a stopped simulation sends no data, so the client can
   take up to 45 s (heartbeat) to notice;
