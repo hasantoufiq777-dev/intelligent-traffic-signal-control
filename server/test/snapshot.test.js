@@ -63,3 +63,31 @@ describe('HTTP compression', () => {
     }
   });
 });
+
+describe('security headers', () => {
+  it('limit live connections to this host in the CSP, and send HSTS only with secure cookies', async () => {
+    const { default: request } = await import('supertest');
+    const { createGateway } = await import('../src/app.js');
+    const { TEST_ENV } = await import('./helpers.js');
+    const make = (extra) => createGateway({ USE_MOCK: 'true', LIVE_LOOP: 'false', DB_PATH: ':memory:', LOG_LEVEL: 'silent', ...TEST_ENV, ...extra });
+    const prod = make({ NODE_ENV: 'production' });
+    const dev = make({});
+    try {
+      const res = await request(prod.app).get('/api/health').set('Host', 'traffic.example.org');
+      const csp = res.headers['content-security-policy'];
+      expect(csp).toContain("connect-src 'self' wss://traffic.example.org ws://traffic.example.org");
+      expect(csp).not.toMatch(/connect-src[^;]* wss: /);
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(res.headers['strict-transport-security']).toContain('max-age=');
+      expect(res.headers['x-powered-by']).toBeUndefined();
+      const odd = await request(prod.app).get('/api/health').set('Host', 'x;script-src *');
+      expect(odd.status).toBe(200);
+      expect(odd.headers['content-security-policy']).toContain('wss://invalid.invalid');
+      const local = await request(dev.app).get('/api/health');
+      expect(local.headers['strict-transport-security']).toBeUndefined(); // plain HTTP in development
+    } finally {
+      await prod.close();
+      await dev.close();
+    }
+  });
+});

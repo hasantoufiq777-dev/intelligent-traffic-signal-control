@@ -412,7 +412,7 @@ function TrafficMapInner({
               const ev = st?.phase === 'EV_GREEN';
               return (
                 <g key={j.id} className="junction" role="button" tabIndex={0}
-                  aria-label={`Junction ${j.id}${st ? `, phase ${st.phase}` : ''}. Show details`} aria-pressed={sel}
+                  aria-label={`Junction ${j.id}${ev ? ' ambulance priority' : st ? `, phase ${st.phase}` : ''}. Show details`} aria-pressed={sel}
                   onClick={clickUnlessDragged(() => onSelectJunction?.(sel ? null : j.id))}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onSelectJunction?.(sel ? null : j.id); } }}>
                   {layers.range && j.R && (
@@ -422,7 +422,6 @@ function TrafficMapInner({
                   <rect x={j.X - geo.jHalf} y={j.Y - geo.jHalf} width={geo.jHalf * 2} height={geo.jHalf * 2}
                     fill="var(--junction)" stroke={ev ? 'var(--sig-red)' : sel ? 'var(--accent)' : 'none'} strokeWidth={ev || sel ? 2.5 : 0} />
                   <text x={j.X} y={j.Y + (ev ? 1 : 4.5)} textAnchor="middle" className="map-label junction-name">{j.id}</text>
-                  {ev && <text x={j.X} y={j.Y + 16} textAnchor="middle" className="map-label junction-note">AMBULANCE</text>}
                   {layers.rsu && geo.vanet?.active && (
                     <g transform={`translate(${j.X + geo.jHalf + 9},${j.Y - geo.jHalf - 9})`} pointerEvents="none">
                       <circle r={7} fill="var(--surface-1)" stroke="var(--rsu)" strokeWidth={1.2} />
@@ -434,6 +433,11 @@ function TrafficMapInner({
                 </g>
               );
             })}
+            {/* Ambulance note drawn beside the junction button, not inside it: the button's name says it */}
+            {geo.junctions.filter((j) => tlsState?.[j.id]?.phase === 'EV_GREEN').map((j) => (
+              <text key={`ev-${j.id}`} x={j.X} y={j.Y + 16} textAnchor="middle" className="map-label junction-note"
+                pointerEvents="none" aria-hidden="true">AMBULANCE</text>
+            ))}
           </g>
 
           {layers.vehicles && (

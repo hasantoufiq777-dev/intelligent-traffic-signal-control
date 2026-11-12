@@ -178,7 +178,9 @@ Load-test results are in [loadtest/REPORT.md](loadtest/REPORT.md).
 gateway, for example `ulimit -n 65535`, or `LimitNOFILE=65535` in a systemd unit. The default of
 1024 fails before 1000 viewers. Windows has no equivalent limit.
 
-**nginx reverse proxy** (WebSocket upgrade, cached static React build):
+**nginx reverse proxy** (WebSocket upgrade, cached static React build). The complete production files (HTTPS,
+systemd unit, production settings, backups) are in [`deploy/`](../deploy/) and explained in
+[`docs/deployment/DEPLOYMENT.md`](../docs/deployment/DEPLOYMENT.md). Minimal example:
 
 ```nginx
 map $http_upgrade $connection_upgrade { default upgrade; '' close; }
@@ -199,7 +201,7 @@ server {
 
     location /api/ {
         proxy_pass http://itsc_gateway;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;      # keeps the port: the gateway compares Origin with Host
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
@@ -208,7 +210,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_read_timeout 120s;           # longer than the 25 s ping interval
         proxy_buffering off;
     }

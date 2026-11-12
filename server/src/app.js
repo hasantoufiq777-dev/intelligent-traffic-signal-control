@@ -31,6 +31,12 @@ export function loadPlaylist(file, logger) {
   }
 }
 
+/** The request's host for the CSP, or a harmless placeholder if it holds anything but host characters. */
+const cspHost = (req) => {
+  const host = req.get('host') ?? '';
+  return /^[a-z0-9.\-]+(:\d{1,5})?$|^\[[0-9a-f:.]+\](:\d{1,5})?$/i.test(host) ? host : 'invalid.invalid';
+};
+
 export function createGateway(overrides = {}) {
   const cfg = loadConfig(overrides);
   const log = makeLogger(cfg.LOG_LEVEL);
@@ -101,7 +107,8 @@ export function createGateway(overrides = {}) {
         styleSrc: ["'self'", "'unsafe-inline'"], // React sets element styles (map transforms)
         imgSrc: ["'self'", 'data:'],
         fontSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'", 'ws:', 'wss:', ...cfg.ALLOWED_ORIGINS],
+        // The live socket on this host only ('self' does not cover ws:/wss: in every browser)
+        connectSrc: ["'self'", (req) => `wss://${cspHost(req)}`, (req) => `ws://${cspHost(req)}`, ...cfg.ALLOWED_ORIGINS],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],

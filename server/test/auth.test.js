@@ -464,6 +464,29 @@ describe('live sockets', () => {
     }
   });
 
+  it('accepts a browser Origin only from this site or an allowed origin', async () => {
+    const { gw, url } = await start({ CORS_ORIGIN: 'https://partner.example' });
+    const open = [];
+    const withOrigin = (s, origin) => {
+      const socket = connect(url, s, { extraHeaders: { Cookie: s.cookie, Origin: origin } });
+      open.push(socket);
+      return outcome(socket);
+    };
+    try {
+      const s = await sessionFor(gw, 'VIEWER');
+      expect(await withOrigin(s, 'https://evil.example')).toBe('bad_origin'); // valid cookie, foreign page
+      expect(await withOrigin(s, 'https://sub.127.0.0.1.example')).toBe('bad_origin');
+      expect(await withOrigin(s, url)).toBe('connected'); // this site
+      expect(await withOrigin(s, 'https://partner.example')).toBe('connected'); // CORS_ORIGIN
+      const plain = connect(url, s); // no Origin: not a browser (scripts, load tests)
+      open.push(plain);
+      expect(await outcome(plain)).toBe('connected');
+    } finally {
+      open.forEach((x) => x.close());
+      await gw.close();
+    }
+  });
+
   it('enforces the connection limit without disturbing existing viewers', async () => {
     const { gw, url } = await start({ MAX_CONNECTIONS: '3' });
     const open = [];

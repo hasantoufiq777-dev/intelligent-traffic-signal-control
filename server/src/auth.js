@@ -135,6 +135,17 @@ export function createAuth({ cfg, db, log, io }) {
     return next();
   };
 
+  /** A browser Origin is accepted when it is this site (same host as the request) or an allowed origin. */
+  function originAllowed(origin, requestHost) {
+    let host = null;
+    try {
+      host = new URL(origin).host;
+    } catch {
+      host = null;
+    }
+    return Boolean(host && host === requestHost) || cfg.ALLOWED_ORIGINS.includes(origin.replace(/\/$/, ''));
+  }
+
   /**
    * State-changing requests: the Origin (when the browser sends one) must be this site or an
    * allowed origin, and a signed-in request must carry its session's CSRF token.
@@ -142,17 +153,8 @@ export function createAuth({ cfg, db, log, io }) {
   function csrfProtect(req, res, next) {
     if (!MUTATING.has(req.method)) return next();
     const origin = req.get('origin');
-    if (origin) {
-      let host = null;
-      try {
-        host = new URL(origin).host;
-      } catch {
-        host = null;
-      }
-      const sameHost = host && host === req.get('host');
-      if (!sameHost && !cfg.ALLOWED_ORIGINS.includes(origin.replace(/\/$/, ''))) {
-        return res.status(403).json({ error: 'Request from an unknown origin was refused', code: 'bad_origin' });
-      }
+    if (origin && !originAllowed(origin, req.get('host'))) {
+      return res.status(403).json({ error: 'Request from an unknown origin was refused', code: 'bad_origin' });
     }
     if (req.session && !safeEqual(req.get('x-csrf-token'), req.session.csrf)) {
       return res.status(403).json({ error: 'Missing or invalid CSRF token. Reload the page and try again.', code: 'csrf' });
@@ -171,6 +173,14 @@ export function createAuth({ cfg, db, log, io }) {
   // ------------------------------------------------------------------ sockets
   /** Socket.io handshake: valid session required, and room for one more connection. */
   function socketMiddleware(socket, next) {
+    // A page on another site must not open a live connection with this user's cookie (the socket
+    // also carries driver commands). Clients that send no Origin (scripts, load tests) are not browsers.
+    const { origin, host } = socket.handshake.headers;
+    if (origin && !originAllowed(origin, host)) {
+      const err = new Error('bad_origin');
+      err.data = { code: 'bad_origin', message: 'Live connections are accepted only from this site' };
+      return next(err);
+    }
     const row = lookupSession(socket.handshake.headers.cookie);
     if (!row) {
       const err = new Error('unauthenticated');
