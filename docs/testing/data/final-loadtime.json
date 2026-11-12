@@ -1,33 +1,34 @@
 {
  "date": "2026-11-12",
+ "build": "Vite 8.3.8",
  "what": "time until cars show on the map (Edge headless, 3 runs); throttled = Chrome emulation 10 Mbit/s, 40 ms latency; real SUMO gateway",
  "results": {
   "local": [
    {
-    "sign_in_to_cars_ms": 667,
-    "cold_load_to_cars_ms": 634
+    "sign_in_to_cars_ms": 681,
+    "cold_load_to_cars_ms": 650
    },
    {
-    "sign_in_to_cars_ms": 682,
-    "cold_load_to_cars_ms": 636
+    "sign_in_to_cars_ms": 680,
+    "cold_load_to_cars_ms": 638
    },
    {
-    "sign_in_to_cars_ms": 638,
-    "cold_load_to_cars_ms": 614
+    "sign_in_to_cars_ms": 643,
+    "cold_load_to_cars_ms": 628
    }
   ],
   "10 Mbit/s + 40 ms": [
    {
-    "sign_in_to_cars_ms": 1182,
-    "cold_load_to_cars_ms": 1435
-   },
-   {
     "sign_in_to_cars_ms": 1168,
-    "cold_load_to_cars_ms": 1412
+    "cold_load_to_cars_ms": 1396
    },
    {
-    "sign_in_to_cars_ms": 1157,
-    "cold_load_to_cars_ms": 1423
+    "sign_in_to_cars_ms": 1159,
+    "cold_load_to_cars_ms": 1399
+   },
+   {
+    "sign_in_to_cars_ms": 1147,
+    "cold_load_to_cars_ms": 1442
    }
   ]
  }

@@ -1,5 +1,6 @@
 {
  "date": "2026-11-12",
+ "build": "Vite 8.3.8",
  "what": "20 s per page, Edge headless 1440x950, real SUMO run, normal CPU",
  "results": {
   "/": {
@@ -8,8 +9,8 @@
    "long_tasks": 0,
    "long_task_ms_total": 0,
    "longest_ms": 0,
-   "cars_on_map": 31,
-   "dom_nodes": 577
+   "cars_on_map": 27,
+   "dom_nodes": 538
   },
   "/live": {
    "seconds": 20,
@@ -18,25 +19,25 @@
    "long_task_ms_total": 0,
    "longest_ms": 0,
    "cars_on_map": 0,
-   "dom_nodes": 1098
+   "dom_nodes": 1100
   },
   "/signals": {
-   "seconds": 20,
-   "fps": 60,
-   "long_tasks": 0,
-   "long_task_ms_total": 0,
-   "longest_ms": 0,
-   "cars_on_map": 0,
-   "dom_nodes": 551
-  },
-  "/vanet": {
    "seconds": 20,
    "fps": 60.1,
    "long_tasks": 0,
    "long_task_ms_total": 0,
    "longest_ms": 0,
    "cars_on_map": 0,
-   "dom_nodes": 336
+   "dom_nodes": 381
+  },
+  "/vanet": {
+   "seconds": 20,
+   "fps": 60,
+   "long_tasks": 0,
+   "long_task_ms_total": 0,
+   "longest_ms": 0,
+   "cars_on_map": 0,
+   "dom_nodes": 525
   },
   "/navigation": {
    "seconds": 20,
@@ -45,7 +46,7 @@
    "long_task_ms_total": 0,
    "longest_ms": 0,
    "cars_on_map": 0,
-   "dom_nodes": 255
+   "dom_nodes": 257
   }
  }
 }
