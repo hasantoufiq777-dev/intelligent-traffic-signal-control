@@ -8,7 +8,7 @@ test suites are run and this file's status table is updated. Nothing is marked d
 
 | Area | State before this work |
 |---|---|
-| Simulation (`sim/`) | Complete and tested (129 pytest tests): controllers, VANET, preemption, navigation (A*, ACO), incidents, GLOSA, GA tuning, driver mode, accident zone. **Must not change behaviour.** |
+| Simulation (`sim/`) | Complete and tested (129 pytest tests at the start; 134 after Phase 10's playback tests): controllers, VANET, preemption, navigation (A*, ACO), incidents, GLOSA, GA tuning, driver mode, accident zone. **Must not change behaviour.** |
 | Gateway (`server/`) | Express 5 + Socket.io + SQLite. One shared simulation process, playlist loop, throttled broadcast (load-tested with 1000 viewers). 19 tests + 2 real-SUMO e2e. |
 | Dashboard (`client/`) | React 18 + Vite: My drive (map), Live overview, Results, Admin. 9 unit tests. |
 | Authentication | **None.** Everyone could watch; admin actions used one shared `X-Admin-Token` typed into the browser. |
@@ -62,7 +62,7 @@ Role permissions:
 | 7 | Research dashboards and downloadable reports; guided teacher demonstration mode | **done** — `docs/testing/PHASE_6_7_REPORT.md` |
 | 8 | Testing: Playwright end-to-end and screenshots at all viewports, security tests, database tests, failure/recovery tests, load tests 10 → 1000 authenticated users, reports in `docs/testing/` | **done** — `docs/testing/PHASE_8_REPORT.md` (load tests use a Node script, `server/loadtest/steps.js`, instead of k6/Artillery; one target not met: load time on a slow link, carried to Phase 9) |
 | 9 | Profiling and optimisation with before/after measurements | **done** — `docs/testing/PHASE_9_REPORT.md` (slow-link load 5.6–9.2 s → 1.1–1.9 s; first socket message 350 → 64 KB; HTTP gzip; retention index) |
-| 10 | Deployment guide, production `.env.example`, backup/restore, final acceptance report | planned |
+| 10 | Deployment guide, production `.env.example`, backup/restore, final acceptance report | **done** — `docs/deployment/DEPLOYMENT.md`, `deploy/`, `docs/testing/FINAL_ACCEPTANCE_REPORT.md` and the test reports; also built the missing playback controls (pause, resume, speed, restart) and fixed the defects found while verifying (socket origin, CSP, dev-server sign-in, accessibility, dev-tool advisories) |
 
 ## 4. Rules kept through all phases
 

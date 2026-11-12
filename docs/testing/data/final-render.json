@@ -1,6 +1,6 @@
 {
  "date": "2026-11-12",
- "build": "Vite 8.3.8",
+ "build": "final (commit 608564b, Vite 8.3.8)",
  "what": "20 s per page, Edge headless 1440x950, real SUMO run, normal CPU",
  "results": {
   "/": {
@@ -9,17 +9,17 @@
    "long_tasks": 0,
    "long_task_ms_total": 0,
    "longest_ms": 0,
-   "cars_on_map": 27,
-   "dom_nodes": 538
+   "cars_on_map": 46,
+   "dom_nodes": 793
   },
   "/live": {
    "seconds": 20,
-   "fps": 60.1,
+   "fps": 59.9,
    "long_tasks": 0,
    "long_task_ms_total": 0,
    "longest_ms": 0,
    "cars_on_map": 0,
-   "dom_nodes": 1100
+   "dom_nodes": 687
   },
   "/signals": {
    "seconds": 20,
@@ -28,7 +28,7 @@
    "long_task_ms_total": 0,
    "longest_ms": 0,
    "cars_on_map": 0,
-   "dom_nodes": 381
+   "dom_nodes": 600
   },
   "/vanet": {
    "seconds": 20,
@@ -37,11 +37,11 @@
    "long_task_ms_total": 0,
    "longest_ms": 0,
    "cars_on_map": 0,
-   "dom_nodes": 525
+   "dom_nodes": 335
   },
   "/navigation": {
    "seconds": 20,
-   "fps": 60.1,
+   "fps": 60,
    "long_tasks": 0,
    "long_task_ms_total": 0,
    "longest_ms": 0,

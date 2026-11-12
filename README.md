@@ -148,13 +148,15 @@ paragraphs there are written by hand, so regenerating replaces them with placeho
 ## 5. Tests
 
 `npm test` runs the Python tests (pytest), the gateway tests (vitest + supertest + socket.io-client, with the
-mock) and the dashboard tests. `npm run test:e2e` runs an end-to-end test with the **real** SUMO simulation:
-ambulance run through the admin API, states, alerts, preemption, stored result.
+mock) and the dashboard tests. `npm run test:e2e` runs the gateway with the **real** SUMO simulation (an
+ambulance run, a driven car, pause and speed). Browser, accessibility, load and production checks are in
+`tests/` and `server/loadtest/`; the [test plan](docs/testing/TEST_PLAN.md) lists them all with their commands,
+and the [final acceptance report](docs/testing/FINAL_ACCEPTANCE_REPORT.md) gives the results.
 
 ## 6. Configuration
 
 - **Simulation:** `sim/config.yaml` (controllers, VANET, eco, navigation, ACO, GA, evaluation) and `sim/scenarios/*.yaml`.
-- **Gateway:** `server/.env`, documented in `server/.env.example` and [server/README.md](server/README.md). The main ones:
+- **Gateway:** `server/.env`, documented in `server/.env.example` and [server/README.md](server/README.md); production values in `deploy/gateway.env.production.example`. The main ones:
 
 | Variable | Meaning |
 |---|---|
@@ -175,16 +177,9 @@ ambulance run through the admin API, states, alerts, preemption, stored result.
 
 ## 7. API (gateway)
 
-REST:
-- `GET /api/health`, `/api/live/status`, `/api/live/playlist`, `/api/options`
-- `GET /api/experiments/summary`, `/api/runs`, `/api/runs/:id`, `/api/metrics`
-- `GET` / `POST /api/sumo/gui`
-- `GET /api/driver` (driver seat and recent drives)
-- admin: `POST /api/live/start`, `POST /api/live/stop`, `POST /api/driver {enabled}`, `POST /api/driver/release`
-
-Socket.io (room `live`): `init`, `state`, `event`, `status`, `result`, `now_playing`, `viewers`, `network`, `vehicles`,
-`vehicle` (after `follow`), `driver`, `driver_lock`, `driver_seat`. The driver sends `driver:claim`, `driver:cmd`,
-`driver:release` and `driver:resume`. Full reference: [server/README.md](server/README.md).
+Every REST route with its role, the error codes and the Socket.io events: [docs/architecture/API.md](docs/architecture/API.md).
+Production deployment (nginx, HTTPS, systemd, backups): [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md).
+All documentation: [docs/README.md](docs/README.md).
 
 ## 8. Repository
 
@@ -206,7 +201,8 @@ sim/                 SUMO + Python simulation
 server/              Node gateway (src/, test/, loadtest/, playlist.json)
 client/              React dashboard (src/pages, src/components, src/hooks, src/lib)
 results/             experiment outputs (summary.json, summary.md, plots, ga/)
-docs/                method.md, demo_script.md, results_discussion.md
+docs/                guides, architecture, deployment, testing reports, research (index: docs/README.md)
+deploy/              production settings, systemd unit, nginx site, backup script
 ```
 
 ## 9. Windows and Linux notes

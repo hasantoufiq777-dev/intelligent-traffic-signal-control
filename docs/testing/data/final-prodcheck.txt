@@ -1,5 +1,5 @@
-# node tests/deploy/prodcheck.mjs https://localhost:8445 <admin> <password> --insecure
-# 2026-11-12, final build (Vite 8.3.8); gateway with deploy/gateway.env.production.example values
+# node tests/deploy/prodcheck.mjs https://localhost:8446 <admin> <password> --insecure
+# 2026-11-12, final code (commit 608564b, Vite 8.3.8); gateway with deploy/gateway.env.production.example values
 # (NODE_ENV=production, TRUST_PROXY=1, COOKIE_SECURE=true), real SUMO, behind tests/deploy/tls-proxy.mjs
 # with a self-signed certificate
 ok   index page: security headers (CSP, HSTS, nosniff, no X-Powered-By, index not cached)

@@ -86,89 +86,17 @@ site or one listed in `CORS_ORIGIN`. Passwords (10 to 72 characters) are stored 
 | Role | May |
 |---|---|
 | `VIEWER` | Watch the live simulation and results, follow a car, drive in one-driver mode |
-| `RESEARCHER` | Also start runs; stop and replace only their own runs (and replace playlist runs) |
+| `RESEARCHER` | Also start runs; stop, pause, resume, change the speed of and restart only their own runs (and replace playlist runs) |
 | `ADMIN` | Everything: any run, driver mode, SUMO-GUI, users, sessions, audit log, settings, system health |
 
 Errors are JSON `{error, code}` with `code` one of `unauthenticated` (401), `forbidden` (403), `csrf`,
-`bad_origin`, `invalid` (400, with `issues`), `rate_limited` / `locked` (429), `busy` (409), `not_found`.
+`bad_origin`, `invalid` (400, with `issues`), `rate_limited` / `locked` (429), `busy` / `not_running` (409), `not_found`. The live socket checks
+the browser `Origin` too. Full list: [docs/architecture/API.md](../docs/architecture/API.md).
 
-## API
+## API and Socket.io events
 
-| Method | Path | Access | Notes |
-|---|---|---|---|
-| GET | `/api/health` | public | `{ok, uptime_s, mock, live_running, lifecycle, viewers, max_connections}` |
-| GET | `/api/auth/me` | public | `{user, csrf, expires_at, registration}`; `user` is null when not signed in |
-| GET | `/api/auth/config` | public | `{registration}` |
-| POST | `/api/auth/login` | public | `{email, password}` → sets the cookie, `{user, csrf}`. 401 wrong, 429 locked, 403 disabled |
-| POST | `/api/auth/logout` | session | Ends the session and its live connections |
-| POST | `/api/auth/register` | public | `{email, name, password}`; only when registration is open; the role is always `VIEWER` |
-| POST | `/api/auth/forgot` | public | `{email}`; records a request for the administrators (same answer for unknown emails) |
-| POST | `/api/auth/reset` | public | `{token, password}` with a reset link's token (single use) |
-| PATCH | `/api/auth/profile` | session | `{name}` |
-| POST | `/api/auth/password` | session | `{current_password, new_password}`; ends the account's other sessions |
-| GET | `/api/live/status` | session | `{running, lifecycle, entry, next, loop, viewers, status}` |
-| GET | `/api/live/playlist` | session | Playlist and loop flag |
-| GET | `/api/options` | session | Allowed scenarios, controllers, nav modes, relay, defaults, playlist |
-| GET | `/api/experiments/summary` | session | `results/summary.json`, or 404 with how to create it |
-| GET | `/api/experiments/ga` | session | GA tuning output per target (`signals`, `aco`): `{history, evaluation}` from `results/ga/`, or null when not run |
-| GET | `/api/runs?limit=&offset=` | session | Stored runs, newest first, with `total` |
-| GET | `/api/runs/:id?samples=N` | session | Run, result, events (up to 500), state-sample count, optional samples |
-| GET | `/api/driver` | session | Driver seat and the last 20 drives with their trip reports |
-| GET | `/api/sumo/gui` | session | `{available, enabled, mock, running}`; `available` only for administrators with the real simulation |
-| POST | `/api/live/start` | ADMIN, RESEARCHER | Body `{scenario, controller, nav?, seed?, penetration?, loss?, relay?, eco_fraction?, ev_routing?, network?, label?}`; unknown keys are rejected. 202 `{run_id}`; 409 `busy` while another start/stop is in progress, 409 `in_use` for a researcher when another user's run is active |
-| POST | `/api/live/stop` | ADMIN, RESEARCHER (own run) | Stops the run and pauses the playlist until the next start |
-| POST | `/api/sumo/gui` | ADMIN | `{enabled}`: show the live run in the SUMO-GUI window on the gateway's computer (the run restarts); 409 with the mock |
-| POST | `/api/driver` | ADMIN | `{enabled}` switches driver mode; switching off ends the current drive |
-| POST | `/api/driver/release` | ADMIN | Ends the current drive |
-| GET | `/api/users?limit=&offset=` | ADMIN | Accounts (no password data) |
-| POST | `/api/users` | ADMIN | `{email, name, password, role?}` |
-| PATCH | `/api/users/:id` | ADMIN | `{name?, role?, status?: active\|disabled}`; `active` also unlocks; the last active administrator is protected |
-| DELETE | `/api/users/:id` | ADMIN | Not yourself, not the last administrator |
-| POST | `/api/users/:id/reset-link` | ADMIN | `{path, expires_at}`: single-use password-reset link to hand to the user |
-| GET | `/api/sessions` | ADMIN | Active sessions; `DELETE /api/sessions/:id` signs one out |
-| GET | `/api/audit?limit=&offset=&action=` | ADMIN | Audit trail |
-| GET / PUT | `/api/settings` | ADMIN | `{allow_registration}` |
-| GET | `/api/metrics` | ADMIN | Connections, CPU, memory, event-loop lag, broadcast counters (used by the load test) |
-| GET | `/api/system` | ADMIN | The metrics plus database status and migrations, simulation lifecycle |
-
-**Simulation lifecycle** (`lifecycle` in `now_playing`, `/api/health`, `/api/live/status`): `STOPPED` → `STARTING` →
-`RUNNING` → `STOPPING` → `STOPPED`; `FAILED` after a run that ended with an error; `RECOVERING` while the playlist waits
-to retry. After `MAX_SIM_FAILURES` failed runs in a row the playlist stops until an administrator starts a run.
-
-## Socket.io (authenticated; viewers are read-only except the one driver seat; everyone joins room `live`)
-
-The handshake must carry the session cookie; otherwise the connection fails with `connect_error` whose
-`data.code` is `unauthenticated`. Beyond `MAX_CONNECTIONS` it fails with `data.code = capacity` (existing
-connections are not affected). When a session ends, its sockets are disconnected.
-
-| Event | Payload |
-|---|---|
-| `init` | `{network, vehicles, now_playing, status, latest, states[], events[], result, history_seconds}` on connect. `latest` is the full latest state; `states` is the last `HISTORY_SECONDS` as chart rows (`run_id, t, metrics, tls{phase, queues}, comm.pdr, nav{avg_tt_nav, avg_tt_non, edge_load_cv}`) to keep the first message small |
-| `state` | Protocol state message + `sent_at` (server ms timestamp), at most 1/s, volatile |
-| `event` | `{type, run_id, t, kind, tls, detail}` |
-| `status` | `{type, run_id, status: started/finished/stopped/error, message}` |
-| `result` | Final result message |
-| `now_playing` | `{running, current: {run_id, entry, source, started_at, status}, next, loop, viewers, mock}` |
-| `viewers` | `{count}`, at most every 5 s when it changes |
-| `network` | Road geometry of the current run (junctions, edge shapes, bounds) |
-| `vehicles` | Map frame `{run_id, t, rows: [[id, x, y, angle, flags]], sent_at}`, at most 1/s, volatile, sent 150 ms after the state |
-| `vehicle` | Full row of the followed car (next light, distance, fuel, CO2, advice), every map frame, only to its followers |
-| `driver` | The driven car's state from the simulation (speed, mode, next light, advice, ambulance warning, fuel, CO2), every simulated second, to everyone; the final one (`finished`/`released`/`error`) carries the trip report |
-| `driver_lock` | The seat `{enabled, available, busy, vid, since, idle_ms, max_ms}` when it changes (also in `now_playing.driver` and `init.driver`) |
-| `driver_seat` | To the driver only: `{mine: false, reason, message}` when their drive ends (released, idle, left, admin, time_limit, run_ended, finished, error) |
-
-Viewers can send `follow` (a vehicle id) and `unfollow`. This is a subscription to one car's details, not control of it.
-
-One-driver mode (`src/driver.js`), all with an acknowledgement callback `{ok, error?}`:
-- `driver:claim {from, to}`: take the seat with a car from one road to another (`from`/`to` are edge ids of the current
-  network). Refused when driving is off, no run is live, or someone else drives. Answer: `{ok, key, idle_ms, max_ms}`.
-- `driver:cmd {action: go|ease|stop, speed_kmh?}`: only from the seat holder; rate limited (`retry_ms` when refused).
-- `driver:release`: hand the car back. `driver:resume <key>`: reclaim the seat after a reconnect within `DRIVER_RESUME_MS`.
-
-The gateway passes commands to Python as JSON lines on stdin (`--driver`). SQLite table `driver_trips` keeps each drive
-(run, car, roads, status, reason, report).
-Volatile messages are dropped while a socket is still writing the previous one, so the map frame is kept out of the
-state broadcast's tick, and follower details are sent reliably.
+The full reference (every route with its role, the error codes and the socket events) is in
+[`docs/architecture/API.md`](../docs/architecture/API.md).
 
 ## Production notes (1000+ viewers)
 
