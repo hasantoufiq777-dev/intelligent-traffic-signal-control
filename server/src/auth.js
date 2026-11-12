@@ -194,6 +194,7 @@ export function createAuth({ cfg, db, log, io }) {
   }
 
   let lastCapacityLog = 0;
+  let capacityListener = null; // set by the gateway: a system event for viewers (at most once a minute)
   let capacityRejected = 0;
   function capacityError() {
     capacityRejected += 1;
@@ -201,6 +202,7 @@ export function createAuth({ cfg, db, log, io }) {
       lastCapacityLog = Date.now();
       log.warn(`Connection limit reached (${cfg.MAX_CONNECTIONS}); refusing new live connections`);
       audit(null, 'capacity_reject', { detail: `limit ${cfg.MAX_CONNECTIONS}, ${capacityRejected} refused so far` });
+      capacityListener?.(`The platform reached its limit of ${cfg.MAX_CONNECTIONS} live connections; new visitors are asked to try again later`);
     }
     const err = new Error('capacity');
     err.data = { code: 'capacity', message: `The platform is at its limit of ${cfg.MAX_CONNECTIONS} live connections. Try again in a few minutes.`,
@@ -481,7 +483,7 @@ export function createAuth({ cfg, db, log, io }) {
 
   return {
     authenticate, requireAuth, requireRole, csrfProtect, apiLimiter, socketMiddleware, onSocketConnected,
-    bootstrapAdmin, mount, audit, hashPassword, sweep,
+    bootstrapAdmin, mount, audit, hashPassword, sweep, onCapacity: (fn) => { capacityListener = fn; },
     stats: () => ({ capacity_rejected: capacityRejected }),
     close: () => clearInterval(sweepTimer),
   };

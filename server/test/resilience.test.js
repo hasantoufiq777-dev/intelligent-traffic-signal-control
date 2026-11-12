@@ -105,7 +105,9 @@ describe('simulation failures', () => {
       expect(gw.live.lifecycle).toBe('STOPPED');
       const stored = gw.db.getRun(res.body.run_id);
       expect(stored.result.metrics).toEqual({ avg_waiting_time: 1.5 });
-      expect(stored.events).toEqual([{ t: 3, kind: 'alert_sent', tls: 'J1', detail: '' }]);
+      // the simulation's own event, plus the platform's run events (event centre and bell)
+      expect(stored.events.filter((e) => !e.kind.startsWith('sim_'))).toEqual([{ t: 3, kind: 'alert_sent', tls: 'J1', detail: '' }]);
+      expect(stored.events.map((e) => e.kind).filter((k) => k.startsWith('sim_'))).toContain('sim_finished');
       expect(gw.live.latestState.metrics.n_vehicles).toBe(3);
     } finally {
       await gw.close();
@@ -390,7 +392,7 @@ describe('database maintenance', () => {
         expect(restored.db.getUserByEmail(user.email)).toMatchObject({ role: 'RESEARCHER', status: 'active' });
         expect(restored.db.getRun('kept').result.metrics.avg_waiting_time).toBe(3.5);
         expect(restored.db.raw.prepare('PRAGMA integrity_check').get().integrity_check).toBe('ok');
-        expect(restored.db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3, 4]);
+        expect(restored.db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3, 4, 5]);
         await signIn(restored, user.email); // the password still works
       } finally {
         await restored.close();

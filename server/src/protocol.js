@@ -9,7 +9,9 @@ export const OPTIONS = {
   ev_routing: ['on', 'off'],
   networks: ['single', 'grid2x2', 'grid2x2_zone'],
   defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 1.0, loss: 0.0, relay: 'off',
-    eco_fraction: 0.0, ev_routing: 'off' },
+    eco_fraction: 0.0, ev_routing: 'off', demand: 1.0 },
+  // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
+  demand: { min: 0.25, max: 2.0, step: 0.25 },
 };
 
 /** A live run request (admin start body, playlist entry). Unknown keys are rejected. */
@@ -24,6 +26,7 @@ export const RunEntrySchema = z
     relay: z.enum(OPTIONS.relay).default('off'),
     eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
     ev_routing: z.enum(OPTIONS.ev_routing).default('off'), // ambulances pick their route on the TMC map
+    demand: z.coerce.number().min(0.25).max(2).default(1.0), // traffic demand factor (number of cars)
     network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
     label: z.string().max(120).optional(),
   })
@@ -96,6 +99,7 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--driver', // read commands on stdin: one-driver mode and playback (pause, resume, speed)
   ];
   if (entry.network) args.push('--network', entry.network);
+  if (entry.demand != null && entry.demand !== 1) args.push('--demand', String(entry.demand));
   if (cfg.USE_MOCK) {
     args.push('--step-delay', String(cfg.MOCK_STEP_DELAY), '--max-steps', String(cfg.MOCK_MAX_STEPS));
   } else {

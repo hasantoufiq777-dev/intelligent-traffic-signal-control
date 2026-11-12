@@ -229,7 +229,7 @@ describe('roles', () => {
     expect(denied.length).toBeGreaterThan(5);
     const sys = (await admin.get('/api/system').expect(200)).body;
     expect(sys.database).toMatchObject({ ok: true });
-    expect(sys.database.migrations.map((m) => m.version)).toEqual([1, 2, 3, 4]);
+    expect(sys.database.migrations.map((m) => m.version)).toEqual([1, 2, 3, 4, 5]);
     expect(sys.simulation.lifecycle).toBe('STOPPED');
     expect(sys.max_connections).toBe(1000);
   });
@@ -619,7 +619,7 @@ describe('database', () => {
 
     const db = openDatabase(file);
     try {
-      expect(db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3, 4]);
+      expect(db.raw.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((r) => r.version)).toEqual([1, 2, 3, 4, 5]);
       expect(db.getRun('keep-me').run.scenario).toBe('normal'); // existing data kept
       const plan = db.raw.prepare('EXPLAIN QUERY PLAN DELETE FROM state_samples WHERE created_at < ?').all('2026').map((r) => r.detail).join();
       expect(plan).toContain('idx_samples_created'); // retention uses the index, not a full scan

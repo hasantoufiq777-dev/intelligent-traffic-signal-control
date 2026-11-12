@@ -148,6 +148,25 @@ def generate_grid_routes(
     return vehicles
 
 
+def scale_demand(config: Dict[str, Any], factor: float) -> Dict[str, Any]:
+    """Return a copy of a scenario config with every traffic flow multiplied by ``factor``
+    (the dashboard's demand setting). Factor 1 returns the config unchanged."""
+    if factor == 1.0:
+        return config
+    import copy
+
+    out = copy.deepcopy(config)
+    traffic = out.setdefault("traffic", {})
+    if isinstance(traffic.get("rates"), dict):
+        traffic["rates"] = {k: float(v) * factor for k, v in traffic["rates"].items()}
+    if "rate_per_od" in traffic:
+        traffic["rate_per_od"] = float(traffic["rate_per_od"]) * factor
+    for flow in traffic.get("od_flows") or []:
+        if isinstance(flow, dict) and "rate" in flow:
+            flow["rate"] = float(flow["rate"]) * factor
+    return out
+
+
 def generate_routes(
     config: Dict[str, Any],
     output_path: Path,

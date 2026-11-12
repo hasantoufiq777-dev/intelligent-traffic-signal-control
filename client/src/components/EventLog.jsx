@@ -16,6 +16,13 @@ const ICON = {
   zone_guided: ['↰', 'Cars guided past the crash'],
   zone_ev_priority: ['🚑', 'Ambulance priority at the zone'],
   zone_deactivated: ['✔', 'Zone cleared'],
+  // Platform events (from the gateway)
+  sim_started: ['▶', 'Simulation started'],
+  sim_finished: ['🏁', 'Simulation finished'],
+  sim_stopped: ['⏹', 'Simulation stopped'],
+  sim_failed: ['⛔', 'Simulation failed'],
+  sim_halted: ['⛔', 'Playlist halted after repeated failures'],
+  capacity_reached: ['⚠', 'Connection limit reached'],
 };
 
 export default function EventLog({ events, limit = 80, filter }) {

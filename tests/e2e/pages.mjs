@@ -95,6 +95,9 @@ await step('the guided demo pauses the run to explain and resumes it', async () 
   await page.getByRole('button', { name: 'Pause to explain' }).click();
   await page.getByRole('status').filter({ hasText: /^Paused$/ }).first().waitFor({ timeout: 15_000 }); // confirmed by the simulation
   await page.getByText(/Paused at simulated second \d+/).waitFor();
+  // the second in progress when the pause arrived is still delivered (states go out at most once a
+  // second), so let it arrive before taking the time
+  await page.waitForTimeout(1500);
   const t1 = await page.locator('.banner .chip.num').first().textContent();
   await page.waitForTimeout(2500); // the mock plays 2 simulated seconds per second when running
   if ((await page.locator('.banner .chip.num').first().textContent()) !== t1) throw new Error('time went on while paused');

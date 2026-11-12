@@ -124,3 +124,37 @@ describe('live playback control', () => {
     expect(Date.now() - t0).toBeLessThan(5_000);
   });
 });
+
+describe('system events', () => {
+  it('records run start, end, failure streaks and the connection limit as events for the event centre', async () => {
+    const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-sysev-'));
+    const gw2 = createGateway({
+      USE_MOCK: 'true', LIVE_LOOP: 'false', DB_PATH: ':memory:', MOCK_STEP_DELAY: '0.02', MOCK_MAX_STEPS: '30',
+      STATE_INTERVAL_MS: '50', MAX_CONNECTIONS: '1', PLAYLIST_PATH: path.join(tmp2, 'none.json'),
+      SUMMARY_PATH: path.join(tmp2, 'summary.json'), LOG_LEVEL: 'silent', ...TEST_ENV,
+    });
+    const addr = await gw2.listen(0, '127.0.0.1');
+    const u = `http://127.0.0.1:${addr.port}`;
+    const adm = await sessionFor(gw2, 'ADMIN');
+    const got = [];
+    const first = connect(u, adm);
+    first.on('event', (e) => got.push(e));
+    try {
+      await waitFor(() => first.connected);
+      const second = connect(u, adm); // over the limit of 1
+      await new Promise((r) => second.on('connect_error', r));
+      second.close();
+      await adm.post('/api/live/start').send(ENTRY).expect(202);
+      await waitFor(() => got.some((e) => e.kind === 'sim_finished'), 15_000);
+      const kinds = got.map((e) => e.kind);
+      expect(kinds).toEqual(expect.arrayContaining(['sim_started', 'sim_finished']));
+      expect(got.find((e) => e.kind === 'sim_started').detail).toContain('normal with fixed');
+      expect(gw2.live.events.map((e) => e.kind)).toContain('sim_finished'); // in the history for late joiners
+      // the capacity warning went to the event list too (before the run, so it is not in this run's events)
+      expect(kinds.indexOf('capacity_reached')).toBeGreaterThanOrEqual(0);
+    } finally {
+      first.close();
+      await gw2.close();
+    }
+  });
+});

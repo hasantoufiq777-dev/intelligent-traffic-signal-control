@@ -91,3 +91,25 @@ describe('security headers', () => {
     }
   });
 });
+
+describe('traffic demand setting', () => {
+  it('accepts 0.25 to 2, passes it to the simulation only when it differs from 1, and stores it with the run', async () => {
+    const { buildSimArgs, RunEntrySchema } = await import('../src/protocol.js');
+    const { openDatabase } = await import('../src/db.js');
+    const ok = RunEntrySchema.parse({ scenario: 'normal', controller: 'fixed', demand: 0.5 });
+    expect(ok.demand).toBe(0.5);
+    expect(RunEntrySchema.parse({ scenario: 'normal', controller: 'fixed' }).demand).toBe(1);
+    for (const bad of [0.1, 3, 'many']) expect(RunEntrySchema.safeParse({ scenario: 'normal', controller: 'fixed', demand: bad }).success).toBe(false);
+    const cfg = { USE_MOCK: false, SIM_ENTRY: 'sim/main.py', SIM_STEP_DELAY: 0, SIM_GUI: false };
+    const args = buildSimArgs(ok, 'r1', cfg);
+    expect(args[args.indexOf('--demand') + 1]).toBe('0.5');
+    expect(buildSimArgs({ ...ok, demand: 1 }, 'r1', cfg)).not.toContain('--demand');
+    const db = openDatabase(':memory:');
+    try {
+      db.insertRun({ id: 'd1', scenario: 'normal', controller: 'fixed', nav: 'none', seed: 1, penetration: 1, loss: 0, relay: 'off', source: 'admin', demand: 1.5 });
+      expect(db.getRun('d1').run.demand).toBe(1.5);
+    } finally {
+      db.close();
+    }
+  });
+});

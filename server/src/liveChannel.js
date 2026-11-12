@@ -218,7 +218,8 @@ export class LiveChannel {
     this._pendingVehicles = null;
     this.db.insertRun({ id: runId, scenario: entry.scenario, controller: entry.controller, nav: entry.nav,
       seed: entry.seed, penetration: entry.penetration, loss: entry.loss, relay: entry.relay,
-      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', source, started_by: user?.id ?? null });
+      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', demand: entry.demand ?? 1, source,
+      started_by: user?.id ?? null });
     this.stats.runs_started += 1;
 
     const args = buildSimArgs(entry, runId, this.cfg, { gui: this.gui });
@@ -280,6 +281,21 @@ export class LiveChannel {
       throw err;
     }
     return this.start(this.current.entry, 'admin', user);
+  }
+
+  /**
+   * A platform event (run started, ended, failed; connection limit reached) in the same list as the
+   * simulation's own events, so the event centre and the bell show it. Kinds start with sim_ or
+   * are system warnings; `system: true` marks them.
+   */
+  systemEvent(kind, detail) {
+    const runId = this.current?.run_id ?? null;
+    const ev = { type: 'event', run_id: runId, t: Number(this.latestState?.t) || 0, kind, tls: null, detail, system: true };
+    this.events.push(ev);
+    if (this.events.length > this.cfg.EVENT_HISTORY) this.events.splice(0, this.events.length - this.cfg.EVENT_HISTORY);
+    if (runId) this._persist('an event', () => this.db.saveEvent(runId, ev));
+    this._emitReliable('event', ev);
+    this.stats.events_broadcast += 1;
   }
 
   /** Admin stop: stop the run and pause the playlist until the next admin start. */
@@ -361,6 +377,10 @@ export class LiveChannel {
         if (msg.status === 'started' && this.lifecycle === 'STARTING') {
           this._setLifecycle('RUNNING');
           this.io.to(ROOM).emit('now_playing', this.nowPlaying());
+        }
+        if (msg.status === 'started') {
+          const e = this.current?.entry;
+          this.systemEvent('sim_started', e ? `${e.label ? `${e.label}: ` : ''}${e.scenario} with ${e.controller}` : msg.message);
         }
         if (['finished', 'stopped', 'error'].includes(msg.status)) {
           this.sawFinalStatus = true;
@@ -510,6 +530,7 @@ export class LiveChannel {
       this.log.info('SUMO-GUI window was closed; continuing without the window');
     }
     this.log.info(`Live run ${run?.run_id} ended: ${status} (code ${code})`);
+    if (run) this.systemEvent(status === 'finished' ? 'sim_finished' : status === 'stopped' ? 'sim_stopped' : 'sim_failed', message);
 
     // Bounded recovery: after MAX_SIM_FAILURES failed runs in a row the playlist stops retrying
     this.failures = status === 'error' ? this.failures + 1 : 0;
@@ -518,6 +539,7 @@ export class LiveChannel {
       loops = false;
       this.paused = true;
       this.log.error(`${this.failures} runs failed in a row: the playlist is paused until an administrator starts a run`);
+      this.systemEvent('sim_halted', `${this.failures} runs failed in a row: the playlist is paused until a run is started from Run control`);
     }
     if (status === 'error') this._setLifecycle(loops ? 'RECOVERING' : 'FAILED');
     else this._setLifecycle('STOPPED');

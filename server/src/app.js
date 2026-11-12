@@ -66,6 +66,7 @@ export function createGateway(overrides = {}) {
   const playlist = loadPlaylist(cfg.PLAYLIST_PATH, log);
   const live = new LiveChannel({ cfg, io, db, logger: log, playlist });
   live.attach({ accept: auth.onSocketConnected });
+  auth.onCapacity((detail) => live.systemEvent('capacity_reached', detail));
 
   // Event-loop lag: how late a 500 ms timer fires (0 when the loop is idle); last minute
   const lag = { samples: [], last: performance.now() };

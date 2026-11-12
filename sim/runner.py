@@ -21,7 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import yaml
 from sim.analytics.metrics import StepMetricsLogger, parse_tripinfo
 from sim.controllers.fixed import FixedTimeController
-from sim.scenarios.generate_routes import generate_routes, load_scenario_config
+from sim.scenarios.generate_routes import generate_routes, load_scenario_config, scale_demand
 from sim.sensing import OracleStateProvider, StateProvider
 from sim.vanet.nodes import internal_lane_junction, is_vehicle_equipped
 
@@ -176,6 +176,7 @@ def run_simulation(
     ev_routing: bool = False,
     driver: bool = False,
     driver_commands: Optional[Any] = None,
+    demand: float = 1.0,
 ) -> Dict[str, Any]:
     """Run a single simulation run and return performance metrics.
 
@@ -272,7 +273,8 @@ def run_simulation(
     # overwriting each other's route and tripinfo files.
     file_tag = f"{run_id}_{os.getpid()}"
     routes_path = project_root / "sim" / "sumo" / f"routes_{file_tag}.rou.xml"
-    generate_routes(scenario_cfg, routes_path, override_seed=seed, network_override=network)
+    # demand: multiply every traffic flow of the scenario (1 = the scenario as defined)
+    generate_routes(scale_demand(scenario_cfg, float(demand)), routes_path, override_seed=seed, network_override=network)
 
     # 3. Setup outputs
     results_dir = Path(output_dir) if output_dir is not None else project_root / "results"
@@ -740,7 +742,8 @@ def run_simulation(
                 avg_speed_kmh = round(3.6 * float(sum(moving) / len(moving)), 1) if moving else None
 
                 if is_vanet_controller and vanet_net is not None:
-                    comm_dict = vanet_net.get_comm_stats()
+                    # Live display only: the measured delay variation (jitter) of delivered messages
+                    comm_dict = {**vanet_net.get_comm_stats(), "jitter_ms": round(vanet_net.channel.get_jitter_ms(), 2)}
                 else:
                     comm_dict = {
                         "pdr": 1.0,

@@ -129,6 +129,10 @@ const MIGRATIONS = [
   // The retention job deletes samples by age; without this index it read the whole table every time
   { version: 4, name: 'index state_samples.created_at (retention)', up: (db) =>
     db.exec('CREATE INDEX IF NOT EXISTS idx_samples_created ON state_samples(created_at)') },
+  { version: 5, name: 'runs.demand (traffic demand factor)', up: (db) => {
+    const cols = db.prepare('PRAGMA table_info(runs)').all().map((c) => c.name);
+    if (!cols.includes('demand')) db.exec('ALTER TABLE runs ADD COLUMN demand REAL DEFAULT 1');
+  } },
 ];
 
 export function migrate(db) {
@@ -159,8 +163,8 @@ export function openDatabase(dbPath) {
   migrate(db);
 
   const stmts = {
-    insertRun: db.prepare(`INSERT INTO runs (id, scenario, controller, nav, seed, penetration, loss, relay, eco_fraction, ev_routing, source, status, started_at, started_by)
-      VALUES (@id, @scenario, @controller, @nav, @seed, @penetration, @loss, @relay, @eco_fraction, @ev_routing, @source, 'running', @started_at, @started_by)`),
+    insertRun: db.prepare(`INSERT INTO runs (id, scenario, controller, nav, seed, penetration, loss, relay, eco_fraction, ev_routing, demand, source, status, started_at, started_by)
+      VALUES (@id, @scenario, @controller, @nav, @seed, @penetration, @loss, @relay, @eco_fraction, @ev_routing, @demand, @source, 'running', @started_at, @started_by)`),
     endRun: db.prepare(`UPDATE runs SET status = @status, message = @message, ended_at = @ended_at WHERE id = @id AND status = 'running'`),
     markInterrupted: db.prepare(`UPDATE runs SET status = 'interrupted', message = 'gateway restarted while running', ended_at = ? WHERE status = 'running'`),
     upsertResult: db.prepare(`INSERT INTO results (run_id, metrics, created_at) VALUES (?, ?, ?)
@@ -233,7 +237,7 @@ export function openDatabase(dbPath) {
       stmts.closeOpenTrips.run(now());
       return stmts.markInterrupted.run(now()).changes;
     },
-    insertRun: (run) => stmts.insertRun.run({ eco_fraction: 0, ev_routing: 'off', started_by: null, ...run, started_at: now() }),
+    insertRun: (run) => stmts.insertRun.run({ eco_fraction: 0, ev_routing: 'off', demand: 1, started_by: null, ...run, started_at: now() }),
     endRun: (id, status, message = null) => stmts.endRun.run({ id, status, message, ended_at: now() }).changes,
     saveResult: (runId, metrics) => stmts.upsertResult.run(runId, JSON.stringify(metrics ?? {}), now()),
     saveEvent: (runId, ev) =>

@@ -143,7 +143,8 @@ export function Vanet() {
         <Tile k="Cars with a radio" v={isNum(comm?.penetration) ? `${fmt(comm.penetration * 100, 0)} %` : vanet ? `${fmt(vanet.penetration * 100, 0)} %` : '–'} />
         <Tile k="Delivered" v={used && isNum(comm.pdr) ? `${fmt(comm.pdr * 100, 1)} %` : '–'} sub="packet delivery ratio" />
         <Tile k="Lost" v={used ? `${comm.lost} of ${comm.sent}` : '–'} sub={used ? `${fmt((100 * comm.lost) / comm.sent, 1)} % loss` : undefined} />
-        <Tile k="Average delay" v={used ? `${fmt(comm.latency_ms, 1)} ms` : '–'} sub="base 10 ms, jitter 5 ms" />
+        <Tile k="Average delay" v={used ? `${fmt(comm.latency_ms, 1)} ms` : '–'} sub="channel: base 10 ms + up to 5 ms" />
+        <Tile k="Jitter" v={used && isNum(comm.jitter_ms) ? `${fmt(comm.jitter_ms, 2)} ms` : '–'} sub="measured: spread (standard deviation) of the delay" />
         <Tile k="Relay hops" v={used && isNum(comm.avg_hops) ? fmt(comm.avg_hops, 2) : '–'} sub="ambulance alerts, V2V" />
         <Tile k="Alert lead time" v={used && isNum(comm.ev_alert_delivery_time) ? `${fmt(comm.ev_alert_delivery_time, 1)} s` : '–'}
           sub="alert reached the junction before the ambulance" />
@@ -235,6 +236,40 @@ export function Emergency() {
 }
 
 // ---------------------------------------------------------------- navigation
+/** The navigator's latest route search: the A* route, or the ACO alternatives with their probabilities. */
+function RouteDecision({ d }) {
+  return (
+    <section className="card stack" aria-labelledby="dec-h">
+      <div className="card-head"><h2 id="dec-h">Latest route decision</h2>
+        {d && <span className="small muted">t = {d.t} s · car {d.vid}</span>}</div>
+      {!d ? <p className="muted" style={{ margin: 0 }}>No route search yet in this run.</p> : (
+        <>
+          <p className="small" style={{ margin: 0 }}>
+            From <strong>{d.from}</strong> to <strong>{d.to}</strong> with {d.mode === 'astar' ? 'A*' : 'ACO'}.
+            {d.current_cost_s != null && <> Current route: {fmt(d.current_cost_s, 1)} s.</>}{' '}
+            {d.applied ? 'The car switched to the chosen route.' : 'The car kept its route (the new one was not at least 5 % faster).'}
+          </p>
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Route alternatives">
+            <table className="data">
+              <thead><tr><th>Route</th><th>Estimated time</th><th>Probability</th><th>Chosen</th></tr></thead>
+              <tbody>
+                {d.routes.map((r, i) => (
+                  <tr key={r.path.join('>')}>
+                    <td className="small">{r.path.join(' → ')}</td>
+                    <td className="num">{fmt(r.cost_s, 1)} s</td>
+                    <td className="num">{fmt(r.prob * 100, 0)} %</td>
+                    <td>{i === d.chosen ? '✓' : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function Navigation() {
   const live = useLive();
   const nav = live.latest?.nav;
@@ -253,11 +288,8 @@ export function Navigation() {
               <li><strong>ACO</strong>: an ant takes a turn with probability ∝ τ<sup>α</sup> · (1 ÷ cost)<sup>β</sup>; the best three routes are offered, each with a probability inversely proportional to its travel time.</li>
               <li><strong>Switching</strong>: only to a route at least 5 % faster, and at most once every 15 s.</li>
             </ul>
-            <p className="small muted" style={{ margin: 0 }}>
-              The live stream carries the totals shown here and each route change as an event. The individual ACO alternatives and
-              their probabilities stay inside the simulation and are not streamed.
-            </p>
           </section>
+          <RouteDecision d={nav?.last_decision} />
           <IncidentList incidents={live.latest?.incidents} zone={live.latest?.zone} />
         </div>
       </div>

@@ -67,6 +67,7 @@ def main() -> None:
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
     parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
     parser.add_argument("--ev-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
+    parser.add_argument("--demand", type=float, default=1.0, help="Traffic demand factor (scales the mock's cars)")
     parser.add_argument("--driver", action="store_true", help="One-driver mode: drive commands as JSON lines on stdin")
 
     args = parser.parse_args()
@@ -261,6 +262,7 @@ def main() -> None:
                     })
 
             n_vehicles = max(10, int(20 + 5 * rng.random() + (q_n + q_s + q_e + q_w)))
+            n_vehicles = max(1, int(round(n_vehicles * args.demand)))  # demand setting (fake numbers)
             avg_wait = round(float(8.0 + (t / 10.0) % 6 + rng.random()), 1)
             throughput = round(float(950.0 + (t * 5.0) + rng.randint(0, 50)), 1)
 

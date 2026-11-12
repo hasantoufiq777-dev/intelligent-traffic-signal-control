@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import ChartTooltip from '../components/ChartTooltip.jsx';
 import { SERIES } from '../components/LiveCharts.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
-import { IMPORTANT_EVENTS } from '../lib/events.js';
+import { IMPORTANT_EVENTS, SYSTEM_EVENTS } from '../lib/events.js';
 import { fmt, fmtP, isNum } from '../lib/format.js';
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '–');
@@ -252,9 +252,11 @@ export const EVENT_GROUPS = {
   Ambulance: ['preempt_start', 'preempt_end', 'ev_reroute', 'alert_sent', 'alert_delivered', 'alert_lost'],
   Navigation: ['reroute'],
   Driving: ['driver_start', 'driver_end'],
+  'Simulation and system': SYSTEM_EVENTS,
 };
 const SEVERITY = { incident_start: 'bad', alert_lost: 'bad', zone_activated: 'warn', incident_detected: 'warn', preempt_start: 'warn',
-  zone_ev_priority: 'warn', incident_end: 'good', zone_deactivated: 'good', preempt_end: 'good' };
+  zone_ev_priority: 'warn', incident_end: 'good', zone_deactivated: 'good', preempt_end: 'good',
+  sim_failed: 'bad', sim_halted: 'bad', capacity_reached: 'warn', sim_stopped: 'warn', sim_finished: 'good' };
 
 export function EventsPage() {
   const live = useLive();

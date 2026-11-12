@@ -88,6 +88,7 @@ export default function Admin() {
         penetration: Number(form.penetration),
         loss: Number(form.loss),
         eco_fraction: Number(form.eco_fraction),
+        demand: Number(form.demand ?? 1),
       };
       if (!body.network) delete body.network;
       const res = await api.start(body);
@@ -183,6 +184,7 @@ export default function Admin() {
               {num('penetration', { min: 0, max: 1, step: 0.1 })}
               {num('loss', { min: 0, max: 1, step: 0.05 })}
               {num('eco_fraction', { min: 0, max: 1, step: 0.1 })}
+              {num('demand', { min: 0.25, max: 2, step: 0.25, title: 'Traffic demand: every flow of the scenario multiplied by this (1 = as defined)' })}
             </div>
             <div className="row">
               <button type="submit" className="btn primary" disabled={busy || transitional || !canStart}>Start live run</button>
