@@ -3,9 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import request from 'supertest';
-import { io as ioc } from 'socket.io-client';
 import { describe, expect, it } from 'vitest';
 import { createGateway } from '../src/app.js';
+import { adminSession, connect, TEST_ENV } from './helpers.js';
 import { SERVER_ROOT } from '../src/config.js';
 
 const enabled = process.env.E2E_REAL === '1';
@@ -25,12 +25,13 @@ const waitFor = async (pred, timeoutMs, stepMs = 200) => {
 describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
   it('runs an ambulance scenario on the grid: states, V2I alerts, preemption, stored result', async () => {
     const gw = createGateway({
-      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ADMIN_TOKEN: 'e2e', LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
       SIM_STEP_DELAY: '0', SIM_MAX_STEPS: '260', STATE_INTERVAL_MS: '200', LOG_LEVEL: 'warn',
       PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
     });
     const addr = await gw.listen(0, '127.0.0.1');
-    const socket = ioc(`http://127.0.0.1:${addr.port}`, { transports: ['websocket'], forceNew: true });
+    const S = await adminSession(gw);
+    const socket = connect(`http://127.0.0.1:${addr.port}`, S);
     const got = { state: 0, kinds: new Set(), result: null, network: null };
     socket.on('state', () => { got.state += 1; });
     socket.on('event', (e) => got.kinds.add(e.kind));
@@ -38,7 +39,7 @@ describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
     socket.on('network', (n) => { got.network = n; });
     try {
       await new Promise((r) => socket.on('init', r));
-      const res = await request(gw.app).post('/api/live/start').set('X-Admin-Token', 'e2e')
+      const res = await S.post('/api/live/start')
         .send({ scenario: 'emergency', network: 'grid2x2', controller: 'adaptive_ev_vanet', seed: 1 }).expect(202);
       await waitFor(() => got.result !== null, 170_000);
 
@@ -48,8 +49,8 @@ describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
       expect(got.kinds.has('preempt_start')).toBe(true);
       expect(got.result.metrics.missed_preemptions).toBe(0);
 
-      await waitFor(async () => (await request(gw.app).get(`/api/runs/${res.body.run_id}`)).body.run?.status === 'finished', 20_000);
-      const stored = (await request(gw.app).get(`/api/runs/${res.body.run_id}`)).body;
+      await waitFor(async () => (await S.get(`/api/runs/${res.body.run_id}`)).body.run?.status === 'finished', 20_000);
+      const stored = (await S.get(`/api/runs/${res.body.run_id}`)).body;
       expect(stored.result.metrics).toHaveProperty('ev_travel_time');
       expect(stored.events.some((e) => e.kind === 'preempt_start')).toBe(true);
     } finally {
@@ -57,4 +58,106 @@ describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
       await gw.close();
     }
   }, 200_000);
+
+  it('lets a viewer drive a car through the grid and stores the trip report', async () => {
+    const gw = createGateway({
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      SIM_STEP_DELAY: '0.02', DRIVER_STEP_DELAY: '0.02', SIM_MAX_STEPS: '320', STATE_INTERVAL_MS: '200',
+      LOG_LEVEL: 'warn', PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
+    });
+    const addr = await gw.listen(0, '127.0.0.1');
+    const S = await adminSession(gw);
+    const socket = connect(`http://127.0.0.1:${addr.port}`, S);
+    const drv = [];
+    const seat = [];
+    socket.on('driver', (m) => drv.push(m));
+    socket.on('driver_seat', (m) => seat.push(m));
+    const ask = (name, body) => new Promise((resolve) => socket.emit(name, body, resolve));
+    try {
+      await new Promise((r) => socket.on('init', r));
+      await S.post('/api/live/start')
+        .send({ scenario: 'emergency', network: 'grid2x2', controller: 'adaptive_ev_vanet', seed: 1 }).expect(202);
+      await waitFor(() => gw.live.network !== null && gw.live.driver.public().available, 60_000);
+      expect((await ask('driver:claim', { from: 'bottom0J0', to: 'J3top1' })).ok).toBe(true);
+      await waitFor(() => drv.some((m) => m.status === 'driving'), 30_000);
+      expect((await ask('driver:cmd', { action: 'ease', speed_kmh: 25 })).ok).toBe(true);
+      await waitFor(() => drv.some((m) => m.mode === 'ease' && Math.abs(m.speed_kmh - 25) < 0.5), 30_000);
+      await waitFor(() => seat.some((s) => s.reason === 'finished'), 120_000);
+      const final = drv.find((m) => m.status === 'finished');
+      expect(final.report).toMatchObject({ finished: true, from: 'bottom0J0', to: 'J3top1' });
+      expect(final.report.compare).not.toBeNull();
+      const trip = (await S.get('/api/driver')).body.trips[0];
+      expect(trip).toMatchObject({ status: 'finished', reason: 'finished', vid: 'drv1' });
+      expect(trip.report.distance_m).toBeGreaterThan(400);
+    } finally {
+      socket.close();
+      await gw.close();
+    }
+  }, 200_000);
+  it('pauses, speeds up and resumes a real SUMO run without losing a simulated second', async () => {
+    const gw = createGateway({
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      SIM_STEP_DELAY: '0.1', SIM_MAX_STEPS: '600', STATE_INTERVAL_MS: '100', LOG_LEVEL: 'warn',
+      PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
+    });
+    await gw.listen(0, '127.0.0.1');
+    const S = await adminSession(gw);
+    try {
+      await S.post('/api/live/start').send({ scenario: 'normal', network: 'grid2x2', controller: 'fixed', seed: 1 }).expect(202);
+      await waitFor(() => gw.live.lifecycle === 'RUNNING' && gw.live.latestState?.t >= 5, 60_000, 50);
+      await S.post('/api/live/pause').expect(202);
+      await waitFor(() => gw.live.playback.paused, 10_000, 20);
+      const frozen = gw.live.latestState.t;
+      await new Promise((r) => setTimeout(r, 1500)); // 15 simulated seconds at this pace if it were running
+      expect(gw.live.latestState.t).toBeLessThanOrEqual(frozen + 1);
+      await S.post('/api/live/speed').send({ speed: 4 }).expect(202);
+      await waitFor(() => gw.live.playback.speed === 4, 10_000, 20);
+      await S.post('/api/live/resume').expect(202);
+      await waitFor(() => !gw.live.playback.paused, 10_000, 20);
+      const t0 = Date.now();
+      const tResume = gw.live.latestState.t;
+      await waitFor(() => gw.live.latestState.t >= tResume + 20, 20_000, 20);
+      const rate = 20 / ((Date.now() - t0) / 1000); // simulated seconds per second
+      expect(rate).toBeGreaterThan(15); // 4x of 10 s/s = 40 s/s nominal; SUMO's own step time limits it
+      const seconds = gw.live.states.map((x) => x.t);
+      expect(seconds.every((t, i) => i === 0 || t === seconds[i - 1] + 1)).toBe(true); // history has no gap
+    } finally {
+      await gw.close();
+    }
+  }, 120_000);
+
+  it('sends an ambulance into a running fixed-time run: green at every junction, trip in the stored result', async () => {
+    const gw = createGateway({
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      SIM_STEP_DELAY: '0', SIM_MAX_STEPS: '120', STATE_INTERVAL_MS: '100', LOG_LEVEL: 'warn',
+      PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
+    });
+    await gw.listen(0, '127.0.0.1');
+    const S = await adminSession(gw);
+    try {
+      const res = await S.post('/api/live/start')
+        .send({ scenario: 'normal', network: 'grid2x2', controller: 'fixed', seed: 1 }).expect(202);
+      const runId = res.body.run_id;
+      // paused right after the start, so the ambulance is sent at a known, early second
+      await waitFor(() => gw.live.lifecycle === 'RUNNING' && gw.live.latestState?.t >= 1, 60_000, 10);
+      await S.post('/api/live/pause').expect(202);
+      await waitFor(() => gw.live.playback.paused, 10_000, 10);
+      await S.post('/api/live/ambulance').expect(202);
+      await S.post('/api/live/resume').expect(202);
+      await waitFor(async () => (await S.get(`/api/runs/${runId}`)).body.result, 120_000);
+      const stored = (await S.get(`/api/runs/${runId}`)).body;
+      const m = stored.result.metrics;
+      expect(m.dispatched_ambulances).toBe(1);
+      expect(m.dispatched_priority_added).toEqual(['J0', 'J1', 'J2', 'J3']);
+      const trip = m.dispatched_trips[0];
+      expect(trip.junctions).toHaveLength(3);
+      expect(trip.travel_time).toBeGreaterThan(0);
+      expect(trip.priority_at).toEqual(trip.junctions);
+      expect(m.collisions).toBe(0);
+      const kinds = stored.events.map((e) => e.kind);
+      expect(kinds).toEqual(expect.arrayContaining(['ambulance_dispatched', 'preempt_start', 'preempt_end', 'ambulance_arrived']));
+    } finally {
+      await gw.close();
+    }
+  }, 180_000);
 });

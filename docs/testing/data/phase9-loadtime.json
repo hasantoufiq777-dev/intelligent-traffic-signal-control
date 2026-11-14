@@ -1,0 +1,65 @@
+{
+ "date": "2026-11-12",
+ "what": "time from clicking Sign in (and from a cold page load) until cars show on the map; Edge headless, 3 runs each; throttled link = Chrome network emulation 10 Mbit/s up/down, 40 ms latency",
+ "gateway": "real SUMO run, grid2x2, same machine",
+ "before (phase 8 code)": {
+  "local": [
+   {
+    "sign_in_to_cars_ms": 747,
+    "cold_load_to_cars_ms": 627
+   },
+   {
+    "sign_in_to_cars_ms": 770,
+    "cold_load_to_cars_ms": 680
+   },
+   {
+    "sign_in_to_cars_ms": 762,
+    "cold_load_to_cars_ms": 663
+   }
+  ],
+  "10 Mbit/s + 40 ms": [
+   {
+    "sign_in_to_cars_ms": 5752,
+    "cold_load_to_cars_ms": 5641
+   },
+   {
+    "sign_in_to_cars_ms": 5761,
+    "cold_load_to_cars_ms": 5650
+   },
+   {
+    "sign_in_to_cars_ms": 5790,
+    "cold_load_to_cars_ms": 9158
+   }
+  ]
+ },
+ "after (phase 9 code)": {
+  "local": [
+   {
+    "sign_in_to_cars_ms": 715,
+    "cold_load_to_cars_ms": 632
+   },
+   {
+    "sign_in_to_cars_ms": 656,
+    "cold_load_to_cars_ms": 636
+   },
+   {
+    "sign_in_to_cars_ms": 647,
+    "cold_load_to_cars_ms": 625
+   }
+  ],
+  "10 Mbit/s + 40 ms": [
+   {
+    "sign_in_to_cars_ms": 1161,
+    "cold_load_to_cars_ms": 1443
+   },
+   {
+    "sign_in_to_cars_ms": 1155,
+    "cold_load_to_cars_ms": 1918
+   },
+   {
+    "sign_in_to_cars_ms": 1145,
+    "cold_load_to_cars_ms": 1894
+   }
+  ]
+ }
+}

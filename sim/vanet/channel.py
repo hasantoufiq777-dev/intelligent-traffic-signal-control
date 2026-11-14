@@ -137,6 +137,24 @@ class WirelessChannel:
             return 1.0
         return float(self.stats["delivered"] / sent)
 
+    def get_jitter_ms(self) -> float:
+        """Delay variation of delivered messages: standard deviation of their one-way delay (ms).
+        Read-only statistic for the live dashboard; updated incrementally from new deliveries."""
+        if not hasattr(self, "_jit"):
+            self._jit = [0, 0.0, 0.0]  # messages counted, sum, sum of squares
+        n, total, squares = self._jit
+        if n > len(self.latencies_ms):  # the list was replaced: count again
+            n, total, squares = 0, 0.0, 0.0
+        for d in self.latencies_ms[n:]:
+            total += d
+            squares += d * d
+        n = len(self.latencies_ms)
+        self._jit = [n, total, squares]
+        if n < 2:
+            return 0.0
+        var = (squares - total * total / n) / (n - 1)
+        return float(max(0.0, var) ** 0.5)
+
     def get_avg_latency_ms(self) -> float:
         """Compute average latency of successfully delivered messages."""
         if not self.latencies_ms:

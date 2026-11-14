@@ -1,0 +1,38 @@
+# systemd unit for the gateway (Node) and its simulation child process (Python + SUMO).
+# Install:  sudo cp deploy/itsc-gateway.service /etc/systemd/system/
+#           sudo systemctl daemon-reload && sudo systemctl enable --now itsc-gateway
+# Logs:     journalctl -u itsc-gateway -f
+[Unit]
+Description=VANET traffic platform gateway (Node + SUMO simulation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=itsc
+Group=itsc
+WorkingDirectory=/srv/itsc/server
+EnvironmentFile=/etc/itsc/gateway.env
+ExecStart=/usr/bin/node src/index.js
+# SIGTERM: the gateway stops the simulation, closes sockets and the database (index.js), within 10 s
+KillSignal=SIGTERM
+TimeoutStopSec=20
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+# One file descriptor per live connection: 1000 viewers need more than the default 1024
+LimitNOFILE=65535
+
+# Hardening: the service writes only the database directory and what each run produces
+# (route files in sim/sumo/, trip and metrics files in results/)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/itsc /srv/itsc/results /srv/itsc/sim/sumo
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

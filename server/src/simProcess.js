@@ -5,6 +5,7 @@ import readline from 'node:readline';
 import { parseLine } from './protocol.js';
 
 /**
+ * send(obj) writes a command line to the simulation's stdin (one-driver mode).
  * Events: 'message' (parsed protocol object), 'bad_line' (raw text), 'stderr' (line),
  * 'exit' ({ code, signal, stopped }).
  */
@@ -19,9 +20,10 @@ export class SimProcess extends EventEmitter {
       env: { ...process.env, ...env, PYTHONUNBUFFERED: '1' }, // SUMO_HOME passes through
       shell: false,
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'], // stdin: drive commands (one-driver mode)
     });
     this.pid = this.child.pid;
+    this.child.stdin.on('error', () => {}); // EPIPE when the process has already exited
 
     readline.createInterface({ input: this.child.stdout }).on('line', (line) => {
       const msg = parseLine(line);
@@ -35,6 +37,15 @@ export class SimProcess extends EventEmitter {
       this._exit(-1, null);
     });
     this.child.on('close', (code, signal) => this._exit(code, signal));
+  }
+
+  /** Send one command to the simulation as a JSON line on stdin. Returns false if it cannot be sent. */
+  send(obj) {
+    const stdin = this.child.stdin;
+    if (this.exited || this.stopped || !stdin || !stdin.writable) return false;
+    stdin.write(`${JSON.stringify(obj)}
+`);
+    return true;
   }
 
   _exit(code, signal) {

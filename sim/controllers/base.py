@@ -148,6 +148,11 @@ class BaseController:
                             direction = "E"
                         elif "W2" in from_lane or "left" in from_lane or from_lane in ("J0J1_0", "J0J1_1", "J2J3_0", "J2J3_1"):
                             direction = "W"
+                        else:
+                            # Other names (e.g. the split roads of grid2x2_zone): from the lane geometry
+                            from sim.vanet.network import resolve_lane_direction
+
+                            direction = resolve_lane_direction(from_lane, self.tls_id, self.sumo_api)
 
                 self._link_directions.append(direction)
                 if direction in ("N", "S"):

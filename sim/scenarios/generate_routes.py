@@ -50,7 +50,12 @@ GRID_DEFAULT_OD_ROUTES: Dict[Tuple[str, str], List[str]] = {
     ("bottom1J1", "top1J3"): ["bottom1J1", "J1J3", "J3top1"],
     ("left0J0", "right0J1"): ["left0J0", "J0J1", "J1right0"],
     ("left1J2", "right1J3"): ["left1J2", "J2J3", "J3right1"],
+    # Eastbound through J2-J3 from the north and west (used by the accident_zone scenario)
+    ("top0J2", "right1J3"): ["top0J2", "J2J3", "J3right1"],
+    ("left1J2", "top1J3"): ["left1J2", "J2J3", "J3top1"],
 }
+
+GRID_NETWORKS = ("grid2x2", "grid2x2_zone")  # grid2x2_zone: the grid with the accident work zone
 
 
 def load_scenario_config(scenario_path: Path) -> Dict[str, Any]:
@@ -143,6 +148,25 @@ def generate_grid_routes(
     return vehicles
 
 
+def scale_demand(config: Dict[str, Any], factor: float) -> Dict[str, Any]:
+    """Return a copy of a scenario config with every traffic flow multiplied by ``factor``
+    (the dashboard's demand setting). Factor 1 returns the config unchanged."""
+    if factor == 1.0:
+        return config
+    import copy
+
+    out = copy.deepcopy(config)
+    traffic = out.setdefault("traffic", {})
+    if isinstance(traffic.get("rates"), dict):
+        traffic["rates"] = {k: float(v) * factor for k, v in traffic["rates"].items()}
+    if "rate_per_od" in traffic:
+        traffic["rate_per_od"] = float(traffic["rate_per_od"]) * factor
+    for flow in traffic.get("od_flows") or []:
+        if isinstance(flow, dict) and "rate" in flow:
+            flow["rate"] = float(flow["rate"]) * factor
+    return out
+
+
 def generate_routes(
     config: Dict[str, Any],
     output_path: Path,
@@ -158,7 +182,7 @@ def generate_routes(
 
     rng = np.random.default_rng(seed)
 
-    if network == "grid2x2":
+    if network in GRID_NETWORKS:
         vehicles = generate_grid_routes(config, rng, duration)
     else:
         vehicles = generate_single_routes(config, rng, duration)
@@ -170,7 +194,7 @@ def generate_routes(
         for ev in ev_list:
             ev_id = ev.get("id", "amb1")
             depart_time = float(ev.get("depart", 120.0))
-            if network == "grid2x2":
+            if network in GRID_NETWORKS:
                 from_edge = ev.get("from_edge", "bottom0J0")
                 to_edge = ev.get("to_edge", "top1J3")
                 if from_edge in ("S2J0", "N2J0", "E2J0", "W2J0"):
@@ -190,6 +214,13 @@ def generate_routes(
                 "depart": round(depart_time, 2),
                 "route": route_str,
             })
+
+    if network == "grid2x2_zone":
+        # The zone network splits J2J3 and J3J2 into three parts each
+        from sim.scenarios.accident_zone import expand_route
+
+        for veh in vehicles:
+            veh["route"] = " ".join(expand_route(veh["route"].split()))
 
     # Sort strictly by departure time
     vehicles.sort(key=lambda v: (v["depart"], v["id"]))

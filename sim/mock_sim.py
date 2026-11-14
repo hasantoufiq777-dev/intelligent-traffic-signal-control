@@ -36,6 +36,74 @@ def emit_json(data: Dict[str, Any]) -> None:
     print(json.dumps(data), flush=True)
 
 
+class MockAmbulances:
+    """Ambulances sent from the dashboard (fake timing, same events and result fields as sim/dispatch.py)."""
+
+    MAX_ACTIVE = 3
+
+    def __init__(self, tls_ids: List[str], controller: str) -> None:
+        self.tls_ids = list(tls_ids)
+        self.native = controller.startswith("adaptive_ev")
+        self.trips: List[Dict[str, Any]] = []
+        self.wrapped: List[str] = []
+
+    def handle(self, cmd: Dict[str, Any], t: int) -> List[Dict[str, Any]]:
+        active = [r for r in self.trips if r["arrived_t"] is None]
+        if len(active) >= self.MAX_ACTIVE:
+            return [("ambulance_rejected", "", f"Ambulance not sent: {self.MAX_ACTIVE} dispatched ambulances "
+                                                "are already on the road")]
+        origin, dest = str(cmd.get("from") or "S2J0"), str(cmd.get("to") or "J02N")
+        if origin == dest:
+            return [("ambulance_rejected", "", "Ambulance not sent: start and destination are the same road")]
+        if not self.trips and not self.native:
+            self.wrapped = list(self.tls_ids)
+        vid = f"amb_dispatch_{len(self.trips) + 1}"
+        self.trips.append({"id": vid, "from": origin, "to": dest, "dispatched_t": t, "depart_t": t,
+                           "arrived_t": None, "travel_time": None, "junctions": [self.tls_ids[0]], "priority_at": []})
+        how = ("ambulance priority switched on at " + ", ".join(self.wrapped)) if self.wrapped else \
+            "the junctions' own ambulance priority"
+        return [("ambulance_dispatched", self.tls_ids[0],
+                 f"Ambulance {vid} sent from {origin} to {dest} through {self.tls_ids[0]} ({how})")]
+
+    def step(self, t: int) -> List[Any]:
+        out: List[Any] = []
+        for r in self.trips:
+            if r["arrived_t"] is not None:
+                continue
+            age = t - r["dispatched_t"]
+            j = r["junctions"][0]
+            if age == 3:
+                r["priority_at"] = [j]
+                out.append(("preempt_start", j, f"Emergency preemption initiated for {r['id']} on approach S"))
+            elif age == 10:
+                out.append(("preempt_end", j, f"Emergency vehicle {r['id']} cleared intersection; preemption ended"))
+            elif age >= 12:
+                r["arrived_t"], r["travel_time"] = t, age
+                out.append(("ambulance_arrived", j, f"Ambulance {r['id']} reached {r['to']} after {age} s; "
+                                                    f"green given at 1 of 1 junctions"))
+        return out
+
+    def ev_list(self, t: int) -> List[Dict[str, Any]]:
+        out = []
+        for r in self.trips:
+            age = t - r["dispatched_t"]
+            if r["arrived_t"] is None and age < 10:
+                dist = max(0.0, 150.0 - age * 15.0)
+                out.append({"id": r["id"], "tls": r["junctions"][0], "eta": round(dist / 15.0, 1),
+                            "dist": dist, "speed": 15.0, "alert_age": 0.2})
+        return out
+
+    def metrics(self) -> Dict[str, Any]:
+        done = [r for r in self.trips if r["travel_time"] is not None]
+        return {
+            "dispatched_ambulances": len(self.trips),
+            "dispatched_arrived": len(done),
+            "dispatched_avg_travel_time": round(sum(r["travel_time"] for r in done) / len(done), 1) if done else None,
+            "dispatched_priority_added": self.wrapped,
+            "dispatched_trips": [dict(r) for r in self.trips],
+        }
+
+
 def main() -> None:
     global _STOP_REQUESTED
 
@@ -67,6 +135,8 @@ def main() -> None:
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
     parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
     parser.add_argument("--ev-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
+    parser.add_argument("--demand", type=float, default=1.0, help="Traffic demand factor (scales the mock's cars)")
+    parser.add_argument("--driver", action="store_true", help="One-driver mode: drive commands as JSON lines on stdin")
 
     args = parser.parse_args()
 
@@ -76,7 +146,8 @@ def main() -> None:
     except (ValueError, AttributeError):
         pass
 
-    valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation"}
+    valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation", "ev_incident", "ev_congested",
+                       "accident_zone"}
     if args.scenario not in valid_scenarios and not Path(args.scenario).exists():
         err_msg = f"Unknown scenario: {args.scenario}"
         logger.error(err_msg)
@@ -101,11 +172,14 @@ def main() -> None:
                     network = sc_data.get("network", "single")
             except Exception:
                 network = "single"
-        elif args.scenario in ("navigation", "incident"):
+        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested", "accident_zone"):
             network = "grid2x2"
         else:
             network = "single"
 
+    if network == "grid2x2_zone":
+        # The mock has no accident work zone (no shared-lane model): it shows the plain grid
+        network = "grid2x2"
     tls_ids = ["J0", "J1", "J2", "J3"] if network == "grid2x2" else ["J0"]
     try:
         from sim.mock_traffic import MockTraffic, mock_spat
@@ -113,6 +187,16 @@ def main() -> None:
         from mock_traffic import MockTraffic, mock_spat  # type: ignore
     traffic = MockTraffic(network, random.Random(args.seed + 7), args.penetration, args.eco_fraction, args.nav,
                           with_ev=args.scenario in ("emergency", "incident"))
+    commands = None
+    playback = None  # pause / resume / speed from the dashboard (wall-clock only)
+    if args.driver and args.live:
+        try:
+            from sim.commands import CommandReader, Playback
+        except ImportError:  # run as a script from sim/
+            from commands import CommandReader, Playback  # type: ignore
+        commands = CommandReader(sys.stdin)
+        playback = Playback(args.step_delay, emit_json, args.run_id)
+    ambulances = MockAmbulances(tls_ids, args.controller)
 
     if args.live:
         emit_json({
@@ -247,6 +331,7 @@ def main() -> None:
                     })
 
             n_vehicles = max(10, int(20 + 5 * rng.random() + (q_n + q_s + q_e + q_w)))
+            n_vehicles = max(1, int(round(n_vehicles * args.demand)))  # demand setting (fake numbers)
             avg_wait = round(float(8.0 + (t / 10.0) % 6 + rng.random()), 1)
             throughput = round(float(950.0 + (t * 5.0) + rng.randint(0, 50)), 1)
 
@@ -258,7 +343,23 @@ def main() -> None:
             pdr = round(float((total_sent - total_lost) / max(total_sent, 1)), 2)
 
             spat = mock_spat(t, preempted=preempt_active)
+            if commands is not None:
+                amb_events: List[Any] = []
+                for cmd in playback.split(commands.poll(), t):
+                    if cmd.get("cmd") == "ambulance":
+                        amb_events += ambulances.handle(cmd, t)
+                    else:
+                        traffic.handle_driver(cmd, t)
+                amb_events += ambulances.step(t)
+                ev_list += ambulances.ev_list(t)
+                if args.live:
+                    for kind, tls_ev, detail in amb_events:
+                        emit_json({"type": "event", "run_id": args.run_id, "t": t, "kind": kind,
+                                   "tls": tls_ev, "detail": detail})
             traffic.step(t, spat)
+            if args.live:
+                for line in traffic.pop_driver_output(args.run_id):
+                    emit_json(line)
             tls_data: Dict[str, Any] = {}
             for j_idx, jid in enumerate(tls_ids):
                 # Vary the fake queues per junction so charts show distinct series
@@ -313,12 +414,23 @@ def main() -> None:
                     },
                 })
                 emit_json(traffic.vehicles_message(args.run_id, t))
+                drv_msg = traffic.driver_message(args.run_id, t)
+                if drv_msg is not None:
+                    emit_json(drv_msg)
 
-            if args.step_delay > 0:
-                time.sleep(args.step_delay)
+            delay = playback.step_delay if playback is not None else args.step_delay
+            if delay > 0:
+                time.sleep(delay)
+            if playback is not None and playback.paused:
+                playback.wait_while_paused(commands, t, lambda: _STOP_REQUESTED)
 
     finally:
         pass
+
+    if args.live and traffic.driver is not None:
+        traffic.handle_driver({"cmd": "drive_end", "reason": "run_ended"}, t)
+        for line in traffic.pop_driver_output(args.run_id):
+            emit_json(line)
 
     result_metrics = {
         "avg_waiting_time": round(float(9.5 + rng.random() * 2), 2),
@@ -343,7 +455,11 @@ def main() -> None:
         "route_search_expansions": 14 if args.nav != "none" else None,
         "route_search_ms": 2.1 if args.nav != "none" else None,
         "reroute_count": 8 if args.nav != "none" else None,
+        "collisions": 0,
     }
+
+    if ambulances.trips:  # ambulances sent from the dashboard
+        result_metrics.update(ambulances.metrics())
 
     # Eco-driving / emission fields
     eco_on = args.eco_fraction > 0

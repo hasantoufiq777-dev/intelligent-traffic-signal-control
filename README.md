@@ -8,8 +8,10 @@ junctions, V2V/V2I messages with range, loss and delay) drives the decisions:
 - **Ambulance route choice:** the ambulance plans its route with A\* on the VANET traffic map, around closures and congested roads, and preemption follows the new route.
 - **Navigation** with A\* heuristic search and ant colony optimisation (ACO) on the VANET traffic map.
 - **Incident detection** from beacons (stopped vehicles), with rerouting and signal reaction.
+- **Accident work zone:** when a crash blocks one side of a road, the other side's open lane is shared one direction at a time, with automatic signals at both ends, queue-based turn lengths, ambulance priority and rerouting (scenario `accident_zone`).
 - **Eco-driving (GLOSA):** roadside units broadcast signal timing (SPaT) and eco cars get speed advice to arrive on green.
 - **Offline GA tuning** of signal/VANET and ACO parameters, and a multi-seed **evaluation** with statistics.
+- **Driver mode:** one viewer at a time takes a car into the live run and drives it with Go / Ease off / Stop, with speed advice, ambulance warnings and a trip report.
 - **Live web dashboard:** traffic map, follow a car, its advice, fuel and CO₂, junction cards, VANET and navigation panels, results. One shared stream for 1000+ viewers.
 
 Simulation: **SUMO** controlled through TraCI on a **2×2 signalised grid** (and a single junction for early tests).
@@ -61,7 +63,14 @@ Then, from the project folder:
 npm run setup
 ```
 This creates `.venv`, installs `sim/requirements.txt`, runs `npm install` in `server/` and `client/`, and writes
-`server/.env`. The `.env` gets the venv's Python and a random `ADMIN_TOKEN`; open it to see or change the token.
+`server/.env` with the venv's Python.
+
+Everyone signs in. Create the first administrator account once:
+```bash
+npm --prefix server run create-admin -- you@example.org "Your Name"   # asks for a password (at least 10 characters)
+```
+or set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `server/.env` before the first start. Further accounts are added on the
+Administration page (roles: administrator, researcher, viewer), or by self-registration when an administrator opens it.
 
 Check SUMO and TraCI: `.venv/Scripts/python.exe sim/smoke_test.py` (Linux: `.venv/bin/python sim/smoke_test.py`).
 
@@ -74,10 +83,18 @@ Check SUMO and TraCI: `.venv/Scripts/python.exe sim/smoke_test.py` (Linux: `.ven
 | `npm start` | Builds the dashboard and serves everything from the gateway: http://localhost:4000 |
 
 Pages:
-- `/`: **My drive**. Traffic map; tap a car to follow it and see its next light, countdown, eco advice, fuel and CO₂.
+- `/`: **Live traffic**. Large map with zoom, pan and layer switches: cars, signals with countdowns, queue counts,
+  congestion, accidents and closures, ambulance routes, roadside units and radio range. Select a junction for its
+  signals and queues, or a car for its road, next light, eco advice, fuel and CO₂; drive a car from the Vehicle tab.
 - `/live`: junction cards, VANET and navigation panels, charts, event log.
-- `/results`: experiment results.
-- `/admin`: start/stop runs; needs `ADMIN_TOKEN` from `server/.env`.
+- Module pages: `/signals`, `/vanet`, `/emergency`, `/navigation`, `/incidents`, `/work-zone`, `/glosa` (eco-driving) and `/events`.
+- `/demo`: **Guided demo**, thirteen steps for a teacher or evaluator; each scenario step starts its run and says what to watch.
+- `/ga`: genetic-algorithm tuning (convergence, parameters, held-out check); `/runs`: stored runs with a side-by-side comparison;
+  `/docs`: project documentation with the algorithms and formulas.
+- `/results`: experiment results, with CSV and JSON download.
+- `/admin`: **Run control** (administrators and researchers): start and stop runs on the shared simulation.
+- `/administration`: users and roles, active sessions, audit log, settings, system health (administrators).
+- `/account`: your name and password.
 
 With `LIVE_LOOP=true` (in `server/.env`) the playlist in `server/playlist.json` loops through baseline,
 VANET-adaptive, ambulance, ambulance around a road closure, eco-driving, A\*, ACO and road closure.
@@ -92,8 +109,8 @@ The simulation always uses real sizes.
 ## 3. Command line (one simulation)
 
 ```bash
-python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev_incident|ev_congested> --controller <controller>
-                   [--network single|grid2x2] [--nav none|astar|aco|aco_tuned] [--seed 1]
+python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev_incident|ev_congested|accident_zone> --controller <controller>
+                   [--network single|grid2x2|grid2x2_zone] [--nav none|astar|aco|aco_tuned] [--seed 1]
                    [--penetration 0.5] [--loss 0.1] [--range 300] [--relay on|off] [--nav-fraction 0.3]
                    [--eco-fraction 0.6] [--ev-routing on|off] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
 ```
@@ -131,34 +148,38 @@ paragraphs there are written by hand, so regenerating replaces them with placeho
 ## 5. Tests
 
 `npm test` runs the Python tests (pytest), the gateway tests (vitest + supertest + socket.io-client, with the
-mock) and the dashboard tests. `npm run test:e2e` runs an end-to-end test with the **real** SUMO simulation:
-ambulance run through the admin API, states, alerts, preemption, stored result.
+mock) and the dashboard tests. `npm run test:e2e` runs the gateway with the **real** SUMO simulation (an
+ambulance run, a driven car, pause and speed). Browser, accessibility, load and production checks are in
+`tests/` and `server/loadtest/`; the [test plan](docs/testing/TEST_PLAN.md) lists them all with their commands,
+and the [final acceptance report](docs/testing/FINAL_ACCEPTANCE_REPORT.md) gives the results.
 
 ## 6. Configuration
 
 - **Simulation:** `sim/config.yaml` (controllers, VANET, eco, navigation, ACO, GA, evaluation) and `sim/scenarios/*.yaml`.
-- **Gateway:** `server/.env`, documented in `server/.env.example` and [server/README.md](server/README.md). The main ones:
+- **Gateway:** `server/.env`, documented in `server/.env.example` and [server/README.md](server/README.md); production values in `deploy/gateway.env.production.example`. The main ones:
 
 | Variable | Meaning |
 |---|---|
 | `PYTHON_BIN` | Python with the requirements; a relative path is relative to `server/` |
 | `USE_MOCK` | `true` = mock simulation, no SUMO |
-| `ADMIN_TOKEN` | Required for start/stop (header `X-Admin-Token`) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | First administrator, created at start-up when none exists |
+| `ALLOW_REGISTRATION` | Let visitors create viewer accounts (administrators can switch it at run time) |
+| `NODE_ENV=production` | Secure (HTTPS-only) session cookies and HSTS |
+| `TRUST_PROXY` | Number of reverse proxies in front (nginx or a tunnel: 1) |
+| `MAX_CONNECTIONS` | Limit on concurrent live connections (default 1000); more are refused with a clear message |
 | `LIVE_LOOP` | Loop `server/playlist.json` |
 | `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 0.25) |
 | `SIM_GUI` | Open live runs in SUMO-GUI from the start |
+| `DRIVER_MODE` | Allow one viewer to drive a car (default true; the admin can switch it off at run time) |
+| `DRIVER_IDLE_MS`, `DRIVER_MAX_MS` | Free the driver seat after 2 min without input / 10 min in total |
+| `DRIVER_STEP_DELAY` | Live pacing while someone drives (default 0.5 s per simulated second, 2x real time) |
 | `PORT`, `HOST` | Listen address (default 4000, 0.0.0.0) |
 
 ## 7. API (gateway)
 
-REST:
-- `GET /api/health`, `/api/live/status`, `/api/live/playlist`, `/api/options`
-- `GET /api/experiments/summary`, `/api/runs`, `/api/runs/:id`, `/api/metrics`
-- `GET` / `POST /api/sumo/gui`
-- admin: `POST /api/live/start`, `POST /api/live/stop`
-
-Socket.io (room `live`): `init`, `state`, `event`, `status`, `result`, `now_playing`, `viewers`, `network`, `vehicles`,
-`vehicle` (after `follow`). Full reference: [server/README.md](server/README.md).
+Every REST route with its role, the error codes and the Socket.io events: [docs/architecture/API.md](docs/architecture/API.md).
+Production deployment (nginx, HTTPS, systemd, backups): [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md).
+All documentation: [docs/README.md](docs/README.md).
 
 ## 8. Repository
 
@@ -167,11 +188,11 @@ PROJECT_CONTEXT.md   project rules, interfaces and protocol
 package.json         root scripts (setup, dev, test, experiments)
 scripts/             setup.mjs, py.mjs
 sim/                 SUMO + Python simulation
-  sumo/              networks (net.xml single junction, grid2x2.net.xml), GUI settings
+  sumo/              networks (net.xml single junction, grid2x2.net.xml, grid2x2_zone.net.xml from generate_zone_net.py), GUI settings
   sensing.py         StateProvider (oracle) interface
   vanet/             channel, messages, nodes (RSU/TMC), network, alerts, glosa (eco-driving), sensing_vanet
   navigation/        graph, astar, aco, navigator
-  controllers/       base, fixed, adaptive, preemption
+  controllers/       base, fixed, adaptive, preemption, zone (accident work zone)
   optimizer/         ga_tuner
   analytics/         metrics, plots, evaluate, vanet_experiments
   scenarios/         *.yaml, generate_routes, route_alternatives, incident
@@ -180,7 +201,8 @@ sim/                 SUMO + Python simulation
 server/              Node gateway (src/, test/, loadtest/, playlist.json)
 client/              React dashboard (src/pages, src/components, src/hooks, src/lib)
 results/             experiment outputs (summary.json, summary.md, plots, ga/)
-docs/                method.md, demo_script.md, results_discussion.md
+docs/                guides, architecture, deployment, testing reports, research (index: docs/README.md)
+deploy/              production settings, systemd unit, nginx site, backup script
 ```
 
 ## 9. Windows and Linux notes
@@ -202,4 +224,6 @@ docs/                method.md, demo_script.md, results_discussion.md
 - **A\* = Dijkstra in path quality.** A\* returns the same optimal path as Dijkstra for the same edge costs. Its gain is fewer node expansions; the contribution here is the VANET-derived edge costs and the comparison with ACO.
 - **Eco-driving needs predictable signals.** GLOSA helps most with fixed-time signals. Adaptive control and preemption make the timing uncertain, so the advisor gives less advice.
 - **Estimates only.** Fuel and CO₂ come from SUMO's HBEFA4 emission model.
+- **One accident zone.** The alternating one-way control runs on one road (J2-J3) of its own network variant, `grid2x2_zone`; the mock simulation shows the plain grid for it. Details and results: [docs/method.md](docs/method.md) section 13.
+- **Driver mode is a demo feature.** Only one viewer drives at a time (one shared simulation). The driven car is left out of the run's result metrics, but it does affect the traffic around it, so live runs with a driver are not used for evaluation.
 - **Simplified emergency vehicles.** Other cars do not form a rescue lane (no SUMO bluelight device), and ambulances obey red lights. Preemption is what clears their way.

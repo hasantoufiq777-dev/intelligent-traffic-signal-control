@@ -85,6 +85,19 @@ eco:
   queue_lookahead_m: 60.0   # no advice when a vehicle within this distance ahead ...
   queue_speed: 3.0          # ... is slower than this (m/s): the queue, not the signal, sets the arrival time
 
+# Accident work zone (scenario accident_zone, network grid2x2_zone; sim/controllers/zone.py)
+accident_zone:
+  min_green: 8.0              # s, shortest turn of one direction on the shared lane
+  max_green: 40.0             # s, longest turn while the other side waits
+  green_per_vehicle_s: 2.5    # s of green per queued vehicle at the start of a turn
+  yellow: 3.0                 # s
+  min_all_red: 2.0            # s; the next turn also waits until the shared lane is empty
+  max_clearance_s: 90.0       # only logged: the lane must really be empty before switching
+  starvation_s: 90.0          # a side that waited this long ends the other turn at min_green
+  gap_out_m: 40.0             # a turn ends early when no vehicle of that side is this close and the other side waits
+  ev_eta_s: 25.0              # an ambulance this many seconds from the zone gets the next turn
+  headway_s: 2.0              # s per queued vehicle in the expected wait given to navigation
+
 aco:
   alpha: 1.0
   beta: 2.0
@@ -182,6 +195,13 @@ evaluation:
     # Ambulance route choice: scenario route vs A* on the TMC map, with and without preemption
     scenarios: [emergency, ev_incident, ev_congested]
     controllers: [adaptive_ev_vanet, adaptive_vanet]
+    penetration: 1.0
+  zone:
+    # Accident work zone: the same crash handled by closing the road vs alternating one-way traffic
+    scenario: accident_zone
+    controller: adaptive_ev_vanet
+    nav: astar
+    nav_fraction: 0.3
     penetration: 1.0
   quick:
     seeds: [1, 2]

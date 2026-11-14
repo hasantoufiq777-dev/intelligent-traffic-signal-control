@@ -6,5 +6,6 @@
   {"label": "Eco-driving: 60% of cars follow GLOSA speed advice", "scenario": "normal", "network": "grid2x2", "controller": "fixed", "nav": "none", "seed": 1, "eco_fraction": 0.6},
   {"label": "Navigation with A*", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "astar", "seed": 3},
   {"label": "Navigation with ACO", "scenario": "navigation", "controller": "adaptive_vanet", "nav": "aco", "seed": 3},
-  {"label": "Road closure detected through VANET", "scenario": "incident", "controller": "adaptive_ev_vanet", "nav": "astar", "seed": 1}
+  {"label": "Road closure detected through VANET", "scenario": "incident", "controller": "adaptive_ev_vanet", "nav": "astar", "seed": 1},
+  {"label": "Accident: alternating one-way traffic past the crash", "scenario": "accident_zone", "controller": "adaptive_ev_vanet", "nav": "none", "seed": 1}
 ]

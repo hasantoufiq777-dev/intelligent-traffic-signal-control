@@ -1,0 +1,43 @@
+name: accident_zone
+# 2x2 grid with an 80 m work zone on the J2-J3 road (sim/sumo/generate_zone_net.py)
+network: grid2x2_zone
+simulation:
+  duration: 900
+  step_length: 1.0
+
+# Traffic in both directions through J2-J3 (westbound from J3, eastbound from J2), plus cross traffic
+traffic:
+  seed: 1
+  od_flows:
+    # westbound through the zone (J3 -> J2)
+    - {from: "bottom1J1", to: "top0J2", rate: 110}
+    - {from: "top1J3", to: "bottom0J0", rate: 110}
+    - {from: "right0J1", to: "left1J2", rate: 110}
+    - {from: "right1J3", to: "left0J0", rate: 110}
+    # eastbound through the zone (J2 -> J3)
+    - {from: "left1J2", to: "right1J3", rate: 140}
+    - {from: "top0J2", to: "right1J3", rate: 110}
+    - {from: "left1J2", to: "top1J3", rate: 110}
+    # cross traffic on the other roads
+    - {from: "bottom0J0", to: "top1J3", rate: 150}
+    - {from: "left0J0", to: "right0J1", rate: 120}
+    - {from: "bottom0J0", to: "top0J2", rate: 100}
+    - {from: "bottom1J1", to: "top1J3", rate: 100}
+
+# The ambulance crosses the zone westbound while the accident is in place (route right1J3 -> J3J2 -> J2J0 -> J0left0)
+emergency:
+  enabled: true
+  vehicles:
+    - id: amb1
+      depart: 290.0
+      from_edge: right1J3
+      to_edge: left0J0
+      approach_direction: E
+
+# The accident: both westbound lanes blocked at the east end of the zone, debris on the inner
+# eastbound lane. One lane is left for both directions.
+accident_zone:
+  enabled: true
+  control: alternating   # alternating (one direction at a time on the shared lane) | closure (westbound road closed at J3)
+  start_time: 150.0
+  duration: 360.0

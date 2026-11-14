@@ -6,7 +6,9 @@ const { cfg, log } = gw;
 
 const addr = await gw.listen();
 log.info(`Gateway listening on http://${addr.address}:${addr.port} (mock=${cfg.USE_MOCK}, loop=${cfg.LIVE_LOOP})`);
-if (!cfg.ADMIN_TOKEN) log.warn('ADMIN_TOKEN is empty: admin endpoints are disabled');
+if (process.env.ADMIN_TOKEN) log.warn('ADMIN_TOKEN is no longer used: sign in with an administrator account instead');
+if (cfg.NODE_ENV === 'production' && !cfg.COOKIE_SECURE) log.warn('COOKIE_SECURE is off in production: session cookies need HTTPS');
+await gw.auth.bootstrapAdmin();
 if (cfg.LIVE_LOOP) gw.live.startLoop();
 
 let shuttingDown = false;

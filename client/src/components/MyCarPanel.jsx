@@ -76,9 +76,15 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
   return (
     <section className="card stack" aria-labelledby="mycar-h" aria-live="polite">
       <div className="card-head">
-        <h2 id="mycar-h">My car</h2>
-        <span className="chip" title={KIND_LABEL[kind]}>{detail.id} · {KIND_LABEL[kind]}</span>
+        <h2 id="mycar-h">Vehicle {detail.id}</h2>
+        <span className="chip" title={KIND_LABEL[kind]}>{KIND_LABEL[kind]}</span>
       </div>
+      {(detail.road || detail.to) && (
+        <p className="small muted" style={{ margin: 0 }}>
+          {detail.road && (detail.road.startsWith(':') ? 'Crossing a junction' : `On road ${detail.road}`)}
+          {detail.to && ` · going to ${detail.to}`}
+        </p>
+      )}
 
       <div className="kv">
         <div><div className="k">Speed</div><div className="v num">{kmh(detail.speed) ?? '–'} km/h</div></div>
@@ -114,7 +120,8 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
       ) : (
       <div className={`advice advice-${advice.advice}`}>
         <span className="small muted">
-          {isEco ? 'Advice from the roadside unit (this car follows it)' : 'Suggested advice (this car is not an eco car and drives normally)'}
+          {kind === 'driven' ? 'Advice this car gets (a viewer is driving it and decides)'
+            : isEco ? 'Advice from the roadside unit (this car follows it)' : 'Suggested advice (this car is not an eco car and drives normally)'}
         </span>
         <span className="headline">{adviceHeadline(advice, detail.dist)}</span>
         {advice.advice === 'slow' && (

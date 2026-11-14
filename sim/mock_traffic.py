@@ -3,6 +3,9 @@
 Cars drive fixed routes over the same node layout as the real nets, stop at the stop line when
 their approach is not green, and eco cars get GLOSA-style advice. Emissions are rough
 (CO2 ~ 2.6 g/s moving, 0.9 g/s idling; fuel ml = CO2 g / 2.31). Standard library only.
+
+One-driver mode (MockTraffic.handle_driver): fake movement of the driven car with the same
+"driver" messages as sim/driver.py, so the gateway and dashboard can be tested without SUMO.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
                   "advice", "adv_speed", "green_in"]
-FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED = 1, 2, 4, 8, 16
+FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
 LANE_OFFSET = 3.2
 STOP_LINE = 11.0  # metres before the junction centre
 V_FREE = 12.5
@@ -68,6 +71,11 @@ class MockTraffic:
         self.with_ev = with_ev
         self.cars: List[Dict[str, Any]] = []
         self.n = 0
+        self.driver: Optional[Dict[str, Any]] = None  # the driven car (one-driver mode)
+        self.n_drv = 0
+        self._t = 0
+        self.notices: List[Dict[str, Any]] = []
+        self.events: List[Dict[str, Any]] = []
 
     def network_message(self, run_id: str) -> Dict[str, Any]:
         edges: Dict[str, Dict[str, Any]] = {}
@@ -112,6 +120,7 @@ class MockTraffic:
                           "co2": 0.0, "advice": None, "adv_speed": None, "green_in": None})
 
     def step(self, t: int, spat: Dict[str, Dict[str, Any]]) -> None:
+        self._t = t
         self._spawn(t)
         alive = []
         # Leaders first on each edge, so followers can keep a 7 m gap (simple car-following)
@@ -125,9 +134,14 @@ class MockTraffic:
             sig = spat.get(approach, {}) if dist is not None else {}
             ev = bool(c["flags"] & FLAG_EMERGENCY)
             target = V_FREE * (1.25 if ev else 1.0)
+            if c.get("drv"):
+                if c["mode"] == "stop":
+                    target = 0.0
+                elif c["mode"] == "ease" and c["target"] is not None:
+                    target = min(V_FREE, c["target"])
             c["advice"] = c["adv_speed"] = c["green_in"] = None
             c["flags"] &= ~FLAG_ADVISED
-            if dist is not None and sig and c["flags"] & FLAG_ECO and dist <= 300:
+            if dist is not None and sig and (c["flags"] & FLAG_ECO or c.get("drv")) and dist <= 300:
                 green_in = sig.get("next_green_min_s")
                 c["green_in"] = green_in
                 if sig.get("signal") == "G" and (sig.get("min_s") or 0) > dist / V_FREE + 1:
@@ -135,8 +149,10 @@ class MockTraffic:
                 elif green_in is not None and dist / V_FREE < green_in + 1:
                     v = dist / (green_in + 1)
                     if v >= 5.0:
-                        c["advice"], c["adv_speed"], target = "slow", round(v, 1), v
-                        c["flags"] |= FLAG_ADVISED
+                        c["advice"], c["adv_speed"] = "slow", round(v, 1)
+                        if not c.get("drv"):  # the driver decides for themselves
+                            target = v
+                            c["flags"] |= FLAG_ADVISED
                     else:
                         c["advice"] = "stop"
                 else:
@@ -148,12 +164,17 @@ class MockTraffic:
                 move = max(0.0, min(move, leader_s[(a, b)] - 7.0 - c["s"]))
             c["speed"] = move
             c["s"] += move
+            c["odo"] = c.get("odo", 0.0) + move
             leader_s[(a, b)] = c["s"]
             c["co2"] += 2.6 if move > 0.5 else 0.9
+            if c.get("drv"):
+                self._driver_tick(c, move)
             if c["s"] >= length:
                 c["s"] -= length
                 c["seg"] += 1
                 if c["seg"] >= len(c["route"]) - 1:
+                    if c.get("drv"):
+                        self._driver_done(t, "finished")
                     continue  # arrived
             alive.append(c)
         self.cars = alive
@@ -178,3 +199,154 @@ class MockTraffic:
                          self._approach(a, b) if tls else None, dist, round(c["co2"], 1),
                          round(c["co2"] / 2.31, 1), c["advice"], c["adv_speed"], c["green_in"]])
         return {"type": "vehicles", "run_id": run_id, "t": t, "fields": VEHICLE_FIELDS, "rows": rows}
+
+    # ------------------------------------------------------------------ one-driver mode
+    def _edges(self) -> Dict[str, Tuple[str, str]]:
+        out: Dict[str, Tuple[str, str]] = {}
+        for r in self.routes:
+            for a, b in zip(r, r[1:]):
+                for u, v in ((a, b), (b, a)):
+                    out[edge_id(u, v, self.single)] = (u, v)
+        return out
+
+    def _node_path(self, start: str, goal: str, avoid: str) -> Optional[List[str]]:
+        """Breadth-first node path start -> goal over the mock's roads (never back to `avoid`)."""
+        nxt: Dict[str, List[str]] = {}
+        for u, v in self._edges().values():
+            nxt.setdefault(u, []).append(v)
+        prev: Dict[str, Optional[str]] = {start: None}
+        todo = [start]
+        while todo:
+            n = todo.pop(0)
+            if n == goal:
+                path = [n]
+                while prev[path[-1]] is not None:
+                    path.append(prev[path[-1]])  # type: ignore[arg-type]
+                return path[::-1]
+            for m in sorted(nxt.get(n, [])):
+                if m not in prev and m != avoid:
+                    prev[m] = n
+                    todo.append(m)
+        return None
+
+    def handle_driver(self, cmd: Dict[str, Any], t: int) -> None:
+        kind = cmd.get("cmd")
+        drv = self.driver
+        if kind == "drive_start":
+            if drv is not None:
+                self._notice(t, "error", "A car is already being driven")
+                return
+            edges = self._edges()
+            src, dst = edges.get(str(cmd.get("from"))), edges.get(str(cmd.get("to")))
+            if src is None or dst is None:
+                self._notice(t, "error", "Unknown road", vid="")
+                return
+            mid = [src[1]] if src[1] == dst[0] else self._node_path(src[1], dst[0], src[0])
+            if not mid or not src[1].startswith("J"):
+                self._notice(t, "error", f"No route from {cmd.get('from')} to {cmd.get('to')}", vid="")
+                return
+            route = [src[0]] + mid + [dst[1]]
+            self.n_drv += 1
+            vid = f"drv{self.n_drv}"
+            car = {"id": vid, "route": route, "seg": 0, "s": 0.0, "speed": V_FREE,
+                   "flags": FLAG_DRIVER | FLAG_EQUIPPED, "co2": 0.0, "advice": None, "adv_speed": None,
+                   "green_in": None, "drv": True, "mode": "go", "target": None}
+            self.cars.append(car)
+            self.driver = {"car": car, "from": cmd.get("from"), "to": cmd.get("to"), "t0": t, "stops": 0,
+                           "moving": True, "adv_s": 0, "adv_ok": 0}
+            self.events.append({"kind": "driver_start", "t": t,
+                                "detail": f"A viewer is driving {vid} from {cmd.get('from')} to {cmd.get('to')}"})
+            self._notice(t, "waiting", "Your car is entering the road")
+        elif kind == "drive" and drv is not None and cmd.get("mode") in ("go", "ease", "stop"):
+            drv["car"]["mode"] = cmd["mode"]
+            try:
+                drv["car"]["target"] = max(2.0, float(cmd.get("speed"))) if cmd["mode"] == "ease" else None
+            except (TypeError, ValueError):
+                drv["car"]["target"] = 8.3
+        elif kind == "drive_end" and drv is not None:
+            self.cars = [c for c in self.cars if c is not drv["car"]]
+            self._driver_done(t, "released")
+
+    def _driver_tick(self, c: Dict[str, Any], move: float) -> None:
+        d = self.driver
+        if d is None:
+            return
+        if move >= 1.0:
+            d["moving"] = True
+        elif move < 0.1 and d["moving"]:
+            d["moving"] = False
+            d["stops"] += 1
+        if c["advice"] == "slow" and c["adv_speed"] is not None:
+            d["adv_s"] += 1
+            d["adv_ok"] += int(move <= c["adv_speed"] + 1.4)
+
+    def _notice(self, t: int, status: str, message: str, report: Optional[Dict[str, Any]] = None,
+                vid: Optional[str] = None) -> None:
+        drv_vid = self.driver["car"]["id"] if self.driver else ""
+        msg = {"type": "driver", "t": t, "vid": drv_vid if vid is None else vid, "status": status, "message": message}
+        if report is not None:
+            msg["report"] = report
+        self.notices.append(msg)
+
+    def _driver_done(self, t: int, status: str) -> None:
+        d = self.driver
+        if d is None:
+            return
+        c = d["car"]
+        travel = max(1, t - d["t0"])
+        odo = c.get("odo", 0.0)
+        km = odo / 1000.0
+        report = {"finished": status == "finished", "from": d["from"], "to": d["to"], "travel_s": float(travel),
+                  "distance_m": round(odo), "avg_speed_kmh": round(odo / travel * 3.6, 1),
+                  "stops": d["stops"], "fuel_ml": round(c["co2"] / 2.31, 1), "co2_g": round(c["co2"], 1),
+                  "co2_g_per_km": round(c["co2"] / km, 1) if km > 0.05 else None,
+                  "fuel_l_per_100km": round(c["co2"] / 2.31 / 10.0 / km, 1) if km > 0.05 else None,
+                  "stops_per_km": round(d["stops"] / km, 2) if km > 0.05 else None,
+                  "advice_seconds": d["adv_s"],
+                  "advice_followed_pct": round(100 * d["adv_ok"] / d["adv_s"]) if d["adv_s"] else None,
+                  "amb_warnings": 0,
+                  # Fixed figures in the mock (no trips are tracked)
+                  "compare": {"group": "all", "n": 12, "travel_s": 60.0, "avg_speed_kmh": 30.0,
+                              "co2_g_per_km": 250.0, "fuel_l_per_100km": 10.8, "stops_per_km": 1.5}}
+        self.events.append({"kind": "driver_end", "t": t, "detail": f"{c['id']}: drive ended ({status})"})
+        self._notice(t, status, "You reached your destination" if status == "finished" else "You handed the car back",
+                     report=report)
+        self.driver = None
+
+    def driver_message(self, run_id: str, t: int) -> Optional[Dict[str, Any]]:
+        d = self.driver
+        if d is None:
+            return None
+        c = d["car"]
+        a, b = c["route"][c["seg"]], c["route"][c["seg"] + 1]
+        seg_len = lambda u, v: math.hypot(self.nodes[v][0] - self.nodes[u][0], self.nodes[v][1] - self.nodes[u][1])  # noqa: E731
+        left = seg_len(a, b) - c["s"] + sum(seg_len(u, v) for u, v in zip(c["route"][c["seg"] + 1:], c["route"][c["seg"] + 2:]))
+        tls = b if b.startswith("J") else None
+        amb = None
+        for o in self.cars:
+            if tls and o["flags"] & FLAG_EMERGENCY and o["route"][o["seg"] + 1] == b:
+                amb = {"id": o["id"], "dist_m": round(seg_len(o["route"][o["seg"]], b) - o["s"]), "where": "crossing",
+                       "junction": b}
+                amb["text"] = (f"Ambulance {amb['dist_m']} m from {b}, crossing your route. "
+                               "Its light turns green for it: wait for it to pass.")
+        return {"type": "driver", "run_id": run_id, "t": t, "vid": c["id"], "status": "driving",
+                "from": d["from"], "to": d["to"], "mode": c["mode"],
+                "target_kmh": round(c["target"] * 3.6, 1) if c["target"] is not None else None,
+                "speed_kmh": round(c["speed"] * 3.6, 1), "limit_kmh": round(V_FREE * 3.6, 1), "holding": False,
+                "road": edge_id(a, b, self.single), "dist_left_m": round(left), "elapsed_s": t - d["t0"],
+                "tls": tls, "dist": round(max(0.0, seg_len(a, b) - STOP_LINE - c["s"]), 1) if tls else None,
+                "advice": {"advice": c["advice"] or "none",
+                           "speed_kmh": round(c["adv_speed"] * 3.6, 1) if c["adv_speed"] else None,
+                           "green_in": c["green_in"], "green_ends_in": None, "signal": None, "queue_ahead": False},
+                "advice_followed_pct": round(100 * d["adv_ok"] / d["adv_s"]) if d["adv_s"] else None,
+                "stops": d["stops"], "fuel_ml": round(c["co2"] / 2.31, 1), "co2_g": round(c["co2"], 1), "amb": amb}
+
+    def pop_driver_output(self, run_id: str) -> List[Dict[str, Any]]:
+        """Driver events (as protocol events) and notices produced since the last call."""
+        out: List[Dict[str, Any]] = [
+            {"type": "event", "run_id": run_id, "t": e.get("t", self._t), "kind": e["kind"], "tls": "",
+             "detail": e["detail"]} for e in self.events]
+        out += [dict(n, run_id=run_id) for n in self.notices]
+        self.events.clear()
+        self.notices.clear()
+        return out

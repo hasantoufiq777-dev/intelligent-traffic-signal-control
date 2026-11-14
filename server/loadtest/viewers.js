@@ -1,9 +1,12 @@
 // Load test: ramp up N Socket.io viewers, hold, and record connections, drops, latency, server load.
 //
 //   node loadtest/viewers.js [--url http://127.0.0.1:4000] [--viewers 1000] [--ramp 60] [--hold 120]
-//                            [--token ADMIN_TOKEN] [--report loadtest/REPORT.md]
+//                            --email admin@example.org [--password ...] [--report loadtest/REPORT.md]
 //
-// The gateway should run with USE_MOCK=true and LIVE_LOOP=true (or pass --token to start a mock run).
+// Signs in once as an administrator (password from --password or LT_PASSWORD) and opens every
+// viewer with that session, so the test measures the live stream for authenticated connections.
+// The gateway should run with USE_MOCK=true and LIVE_LOOP=true (otherwise a mock run is started),
+// and with AUTH_RATE_LIMIT / MAX_CONNECTIONS high enough for the test.
 // Latency = client receive time - server "sent_at" stamp on each state message (same machine clock).
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,7 +23,11 @@ const URL = arg('url', 'http://127.0.0.1:4000');
 const N = parseInt(arg('viewers', '1000'), 10);
 const RAMP_S = parseFloat(arg('ramp', '60'));
 const HOLD_S = parseFloat(arg('hold', '120'));
-const TOKEN = arg('token', '');
+const EMAIL = arg('email', '');
+const PASSWORD = arg('password', '');
+let COOKIE = '';
+let CSRF = '';
+let refused = 0;
 const REPORT = path.resolve(arg('report', path.join(here, 'REPORT.md')));
 
 const sockets = [];
@@ -45,18 +52,20 @@ const pct = (arr, p) => {
 };
 
 async function getJson(p, opts) {
-  const res = await fetch(`${URL}${p}`, opts);
+  const res = await fetch(`${URL}${p}`, { ...opts, headers: { ...(opts?.headers ?? {}), cookie: COOKIE } });
   return res.json();
 }
 
 function openViewer(i) {
-  const s = ioc(URL, { transports: ['websocket'], forceNew: true, reconnection: false, timeout: 20_000 });
+  const s = ioc(URL, { transports: ['websocket'], forceNew: true, reconnection: false, timeout: 20_000,
+    extraHeaders: { Cookie: COOKIE } });
   s.on('connect', () => {
     connected += 1;
     peak = Math.max(peak, connected);
   });
-  s.on('connect_error', () => {
+  s.on('connect_error', (err) => {
     connectErrors += 1;
+    if (err?.data?.code === 'capacity') refused += 1; // over MAX_CONNECTIONS: refused on purpose
   });
   s.on('disconnect', (reason) => {
     connected -= 1;
@@ -77,10 +86,16 @@ function openViewer(i) {
 async function main() {
   const health = await getJson('/api/health').catch(() => null);
   if (!health?.ok) throw new Error(`Gateway not reachable at ${URL}`);
-  if (TOKEN && !health.live_running) {
+  if (!EMAIL || !PASSWORD) throw new Error('Pass --email and --password (or LT_PASSWORD) of an administrator account');
+  const login = await fetch(`${URL}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }) });
+  if (!login.ok) throw new Error(`Sign-in failed (${login.status})`);
+  COOKIE = login.headers.getSetCookie()[0].split(';')[0];
+  CSRF = (await login.json()).csrf;
+  if (!health.live_running) {
     await getJson('/api/live/start', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-admin-token': TOKEN },
+      headers: { 'content-type': 'application/json', 'x-csrf-token': CSRF },
       body: JSON.stringify({ scenario: 'emergency', controller: 'adaptive_ev_vanet', nav: 'none', seed: 1 }),
     });
   }
@@ -144,6 +159,7 @@ async function main() {
     peak_connected: peak,
     connected_at_end: connected,
     connect_errors: connectErrors,
+    capacity_refused: refused,
     drops_during_hold: drops,
     drops_during_ramp: rampDrops,
     disconnect_reasons: { ...disconnectReasons },

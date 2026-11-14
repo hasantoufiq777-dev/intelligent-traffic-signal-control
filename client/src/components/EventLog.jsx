@@ -9,6 +9,23 @@ const ICON = {
   incident_end: ['✔', 'Incident cleared'],
   reroute: ['↪', 'Reroute'],
   ev_reroute: ['🚑', 'Ambulance rerouted'],
+  ambulance_dispatched: ['🚑', 'Ambulance sent'],
+  ambulance_arrived: ['🏥', 'Ambulance arrived'],
+  ambulance_rejected: ['✖', 'Ambulance not sent'],
+  driver_start: ['🕹', 'Viewer drives'],
+  driver_end: ['🏁', 'Drive ended'],
+  zone_activated: ['🚧', 'Accident zone'],
+  zone_switch: ['⇆', 'Zone turn'],
+  zone_guided: ['↰', 'Cars guided past the crash'],
+  zone_ev_priority: ['🚑', 'Ambulance priority at the zone'],
+  zone_deactivated: ['✔', 'Zone cleared'],
+  // Platform events (from the gateway)
+  sim_started: ['▶', 'Simulation started'],
+  sim_finished: ['🏁', 'Simulation finished'],
+  sim_stopped: ['⏹', 'Simulation stopped'],
+  sim_failed: ['⛔', 'Simulation failed'],
+  sim_halted: ['⛔', 'Playlist halted after repeated failures'],
+  capacity_reached: ['⚠', 'Connection limit reached'],
 };
 
 export default function EventLog({ events, limit = 80, filter }) {
@@ -19,7 +36,7 @@ export default function EventLog({ events, limit = 80, filter }) {
       {list.length === 0 ? (
         <p className="muted small" style={{ margin: 0 }}>No events yet.</p>
       ) : (
-        <ul className="events">
+        <ul className="events" tabIndex={0} aria-label="Event list (scrolls)">
           {list.map((e, i) => {
             const [icon, label] = ICON[e.kind] || ['•', e.kind];
             return (
