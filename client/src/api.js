@@ -83,6 +83,8 @@ export const api = {
   resume: () => post('/api/live/resume'),
   speed: (speed) => post('/api/live/speed', { speed }),
   restart: () => post('/api/live/restart'),
+  // Send an ambulance now; without roads the simulation picks the longest crossing
+  ambulance: (roads) => post('/api/live/ambulance', roads ?? {}),
   sumoGui: () => request('/api/sumo/gui'),
   setSumoGui: (enabled) => post('/api/sumo/gui', { enabled }),
   driver: () => request('/api/driver'),

@@ -27,8 +27,13 @@ class PreemptionController(BaseController):
         params: Optional[Dict[str, Any]] = None,
         provider: Optional[StateProvider] = None,
         sumo_api: Any = None,
+        inner: Optional[BaseController] = None,
     ) -> None:
-        """Initialize preemption controller and wrapped adaptive controller."""
+        """Initialize preemption controller and wrapped adaptive controller.
+
+        inner: an already running controller to wrap (an ambulance sent on demand, sim/dispatch.py).
+        It keeps its state and signals; without it a new AdaptiveController is created.
+        """
         super().__init__(tls_id, params=params, provider=provider, sumo_api=sumo_api)
 
         # Policy hyperparameters from config
@@ -38,13 +43,17 @@ class PreemptionController(BaseController):
         self.lookahead_junctions: int = int(self.params.get("lookahead_junctions", 2))
         self.max_preempt_s: float = float(self.params.get("max_preempt_s", 90.0))
 
-        # Instantiate underlying adaptive controller
-        self.adaptive_controller = AdaptiveController(
-            tls_id=tls_id,
-            params=params,
-            provider=provider,
-            sumo_api=sumo_api,
-        )
+        # Underlying normal controller: the given one, or a new adaptive controller
+        if inner is not None:
+            self.adaptive_controller = inner
+            self.current_phase = inner.current_phase
+        else:
+            self.adaptive_controller = AdaptiveController(
+                tls_id=tls_id,
+                params=params,
+                provider=provider,
+                sumo_api=sumo_api,
+            )
 
         # Preemption state machine: NORMAL | TRANSITION | EV_GREEN | RECOVERY
         self.preempt_state: str = "NORMAL"

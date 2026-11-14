@@ -91,7 +91,8 @@ describe('live playback control', () => {
     expect(r.body.run_id).not.toBe(before);
     expect(r.body.entry.scenario).toBe('normal');
     expect(gw.live.playback).toEqual({ paused: false, speed: 1 });
-    await waitFor(() => gw.live.lifecycle === 'RUNNING');
+    // RUNNING is set by the simulation's "started" status, which can come before its first state
+    await waitFor(() => gw.live.lifecycle === 'RUNNING' && gw.live.latestState);
     expect(gw.live.latestState.t).toBeLessThan(20);
   });
 

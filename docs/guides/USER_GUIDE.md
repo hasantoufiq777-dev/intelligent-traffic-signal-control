@@ -113,7 +113,10 @@ While your run plays you can also:
 
 - **Pause** and **Resume** it; the map then says it is paused, at which simulated second;
 - change its **speed** (0.5×, 1×, 2×, 4×);
-- **Restart from the beginning** with the same settings.
+- **Restart from the beginning** with the same settings;
+- **Send an ambulance**, automatically through the most junctions or from a road you choose to an
+  exit you choose. Every junction on its way turns green for it (*AMBULANCE* on the map), whatever
+  the controller; when it arrives you see its travel time and at how many junctions it got green.
 
 Pause and speed change only how fast the run is shown, not its results. You cannot stop, pause or
 replace a run another user started; an administrator can.

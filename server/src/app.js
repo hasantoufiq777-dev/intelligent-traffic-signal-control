@@ -15,7 +15,7 @@ import { createAuth } from './auth.js';
 import { loadConfig, makeLogger } from './config.js';
 import { openDatabase } from './db.js';
 import { LiveChannel } from './liveChannel.js';
-import { OPTIONS, PLAYBACK_SPEEDS, PlaybackSpeedSchema, PlaylistSchema, RunEntrySchema } from './protocol.js';
+import { AmbulanceSchema, OPTIONS, PLAYBACK_SPEEDS, PlaybackSpeedSchema, PlaylistSchema, RunEntrySchema } from './protocol.js';
 
 export function loadPlaylist(file, logger) {
   try {
@@ -264,6 +264,24 @@ export function createGateway(overrides = {}) {
   app.post('/api/live/pause', control, sendPlayback('pause', () => ({ cmd: 'pause' })));
   app.post('/api/live/resume', control, sendPlayback('resume', () => ({ cmd: 'resume' })));
   app.post('/api/live/speed', control, sendPlayback('speed'));
+  // Send an ambulance at any moment; every junction gives it priority (green on its approach)
+  app.post('/api/live/ambulance', control, (req, res) => {
+    const parsed = AmbulanceSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid roads', code: 'invalid' });
+    }
+    if (!ownsRun(req, 'ambulance')) return notOwner(res);
+    const cmd = { cmd: 'ambulance', ...parsed.data };
+    try {
+      live.playbackCommand(cmd);
+    } catch (err) {
+      if (err.code === 'not_running') return res.status(409).json({ error: err.message, code: 'not_running' });
+      throw err;
+    }
+    auth.audit(req, 'sim_ambulance', { target: live.current?.run_id ?? null,
+      detail: parsed.data.from ? `${parsed.data.from} -> ${parsed.data.to}` : 'longest crossing' });
+    return res.status(202).json({ requested: 'ambulance', ...parsed.data });
+  });
   app.post('/api/live/restart', control, guarded(async (req, res) => {
     if (!ownsRun(req, 'restart')) return notOwner(res);
     let runId;

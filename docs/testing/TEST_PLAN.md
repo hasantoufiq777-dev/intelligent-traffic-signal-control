@@ -18,9 +18,9 @@ priorities: [test strategy](TEST_STRATEGY.md).
 | # | Suite | Location | Tests | Run with | Needs |
 |---|---|---|---|---|---|
 | 1 | Python simulation | `sim/tests/` (22 files) | 138 | `npm run test:py` | Python venv, SUMO |
-| 2 | Gateway integration | `server/test/` (auth, gateway, driver, resilience, playback, snapshot) | 82 | `npm run test:server` | — |
-| 3 | Gateway with real SUMO | `server/test/e2e.real.test.js` | 3 | `npm run test:e2e` | SUMO |
-| 4 | Dashboard unit | `client/src/lib/*.test.js` | 13 | `npm run test:client` | — |
+| 2 | Gateway integration | `server/test/` (auth, gateway, driver, resilience, playback, snapshot, ambulance) | 87 | `npm run test:server` | — |
+| 3 | Gateway with real SUMO | `server/test/e2e.real.test.js` | 4 | `npm run test:e2e` | SUMO |
+| 4 | Dashboard unit | `client/src/lib/*.test.js` | 15 | `npm run test:client` | — |
 | 5 | Browser journey | `tests/e2e/smoke.mjs` | 10 steps | `node tests/e2e/smoke.mjs <url> <email> <password>` | running gateway, Edge |
 | 6 | Every page and control | `tests/e2e/pages.mjs` | 24 steps | same arguments | two finished runs in the database |
 | 7 | Roles | `tests/e2e/roles.mjs` | 14 steps | same arguments, administrator account | a gateway the test may stop and start |
@@ -34,13 +34,14 @@ priorities: [test strategy](TEST_STRATEGY.md).
 | 15 | Production configuration | `tests/deploy/prodcheck.mjs` | 8 checks | `<https url> <email> <password> [--insecure]` | gateway in production mode behind HTTPS |
 | 16 | Screenshots | `tests/e2e/shots.mjs` | — | for the reports | — |
 | 17 | Live details | `tests/e2e/live-details.mjs` | 4 steps | `<url> <email> <password>`; starts a navigation run | real SUMO |
+| 18 | Ambulance on demand | `tests/e2e/ambulance.mjs` | 6 steps | `<url> <email> <password>`; starts a fixed-time grid run and sends an ambulance | real SUMO |
 
 `npm test` at the project root runs suites 1, 2 and 4.
 
 ## 3. Order of a full run
 
 1. Suites 1–4: no browser needed.
-2. Start a gateway with real SUMO and `LIVE_LOOP=true`; run 5, 8, 9, 10, 11, 12, 17.
+2. Start a gateway with real SUMO and `LIVE_LOOP=true`; run 5, 8, 9, 10, 11, 12, 17, 18.
 3. Start a gateway with `USE_MOCK=true MOCK_MAX_STEPS=150 LIVE_LOOP=true` (runs finish within
    seconds); once two runs have finished, run 6 and 7.
 4. On the same mock gateway, with `AUTH_RATE_LIMIT`, `RATE_LIMIT_PER_MIN` and `SESSIONS_PER_USER`

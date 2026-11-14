@@ -49,6 +49,14 @@ export const DriverCommandSchema = z.object({
   speed_kmh: z.coerce.number().min(5).max(60).optional(),
 }).strict();
 
+/**
+ * Send an ambulance into the running simulation. Without roads the simulation picks the longest
+ * crossing of the network (through the most signalised junctions).
+ */
+export const AmbulanceSchema = z.object({ from: EdgeIdSchema.optional(), to: EdgeIdSchema.optional() }).strict()
+  .refine((b) => Boolean(b.from) === Boolean(b.to), { message: 'Give both start and destination, or neither', path: ['to'] })
+  .refine((b) => !b.from || b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
+
 /** Vehicle ids a viewer may follow (also used as a Socket.io room name suffix). */
 // Live playback speed, relative to the run's normal pacing (the simulation accepts the same values)
 export const PLAYBACK_SPEEDS = [0.5, 1, 2, 4];

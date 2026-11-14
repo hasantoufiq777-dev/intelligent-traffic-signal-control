@@ -2,6 +2,7 @@
 // warnings, and get a trip report at the end. One viewer drives at a time; the others can follow.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmt, isNum, seconds } from '../lib/format.js';
+import { roadChoices } from '../lib/roads.js';
 
 const ENDED_TEXT = {
   released: 'You handed the car back. It finishes its trip as normal traffic.',
@@ -14,16 +15,6 @@ const ENDED_TEXT = {
   error: 'The drive could not start.',
 };
 
-/** Entry roads (start at a non-signal node) and exit roads (end at one), from the road map. */
-function roadChoices(network) {
-  if (!network) return { starts: [], ends: [] };
-  const tls = new Set(network.junctions.filter((j) => j.tls).map((j) => j.id));
-  const starts = network.edges.filter((e) => !tls.has(e.from) && tls.has(e.to))
-    .map((e) => ({ id: e.id, label: `${e.from} → ${e.to}` }));
-  const ends = network.edges.filter((e) => tls.has(e.from) && !tls.has(e.to))
-    .map((e) => ({ id: e.id, label: `${e.from} → ${e.to}` }));
-  return { starts, ends, byId: Object.fromEntries(network.edges.map((e) => [e.id, e])) };
-}
 
 function adviceText(a, hasLight) {
   if (!a) return { cls: 'none', head: 'Waiting for data…' };

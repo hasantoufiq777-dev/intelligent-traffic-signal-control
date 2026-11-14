@@ -145,7 +145,41 @@ const COMPARE = [
   ['missed_preemptions', 'Missed preemptions', '', 0], ['pdr', 'Packet delivery ratio', '', 3], ['queue_estimate_mae', 'Queue estimate error', 'veh', 2],
   ['nav_avg_travel_time', 'Trip time, navigating cars', 's', 1], ['co2_g_per_km', 'CO₂', 'g/km', 1], ['fuel_l_per_100km', 'Fuel', 'L/100 km', 2],
   ['stops_per_vehicle', 'Stops per vehicle', '', 2], ['collisions', 'Collisions', '', 0], ['zone_conflicts', 'Zone conflicts', 's', 0],
+  ['dispatched_ambulances', 'Ambulances sent during the run', '', 0], ['dispatched_avg_travel_time', 'Their average travel time', 's', 1],
 ];
+
+/** Ambulances sent from Run control during a run: route, timing and where they got green. */
+function DispatchedTrips({ runs }) {
+  const withTrips = runs.filter((d) => d?.result?.metrics?.dispatched_trips?.length);
+  if (!withTrips.length) return null;
+  return withTrips.map((d) => {
+    const m = d.result.metrics;
+    return (
+      <div key={d.run.id} className="stack">
+        <h3 style={{ margin: 0 }}>Ambulances sent{runs.length > 1 ? ` (${runs.indexOf(d) === 0 ? 'A' : 'B'})` : ''}</h3>
+        {m.dispatched_priority_added?.length > 0 && (
+          <p className="small muted" style={{ margin: 0 }}>
+            Ambulance priority was added to {m.dispatched_priority_added.join(', ')} when the first ambulance was sent
+            (the run&apos;s controller has none of its own).
+          </p>
+        )}
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
+          <table className="data">
+            <thead><tr><th>Ambulance</th><th>From → to</th><th>Sent at</th><th>Travel time</th><th>Junctions</th><th>Green given at</th></tr></thead>
+            <tbody>
+              {m.dispatched_trips.map((t) => (
+                <tr key={t.id}><td>{t.id}</td><td>{t.from} → {t.to}</td><td className="num">{t.dispatched_t} s</td>
+                  <td className="num">{isNum(t.travel_time) ? `${t.travel_time} s` : 'not arrived'}</td>
+                  <td>{t.junctions.join(', ') || '–'}</td>
+                  <td>{t.priority_at.length}/{t.junctions.length}{t.priority_at.length ? ` (${t.priority_at.join(', ')})` : ''}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  });
+}
 const HIGHER_BETTER = new Set(['throughput_veh_per_hr', 'pdr']);
 const describeRun = (r) => `${r.scenario} · ${r.controller}${r.nav && r.nav !== 'none' ? ` · nav ${r.nav}` : ''} · seed ${r.seed}`;
 
@@ -235,9 +269,10 @@ export function Runs() {
               </table>
             </div>
           )}
+          {a && <DispatchedTrips runs={[a, b].filter(Boolean)} />}
           <p className="small muted" style={{ margin: 0 }}>
             Single runs differ by chance from seed to seed. The averaged, statistically tested comparisons are on the Results page.
-            A run in which someone drove a car is affected by that car.
+            A run in which someone drove a car, or into which an ambulance was sent, is affected by it.
           </p>
         </section>
       )}
@@ -249,13 +284,14 @@ export function Runs() {
 export const EVENT_GROUPS = {
   Incidents: ['incident_start', 'incident_detected', 'incident_end'],
   'Accident zone': ['zone_activated', 'zone_switch', 'zone_guided', 'zone_ev_priority', 'zone_deactivated'],
-  Ambulance: ['preempt_start', 'preempt_end', 'ev_reroute', 'alert_sent', 'alert_delivered', 'alert_lost'],
+  Ambulance: ['ambulance_dispatched', 'preempt_start', 'preempt_end', 'ambulance_arrived', 'ambulance_rejected', 'ev_reroute',
+    'alert_sent', 'alert_delivered', 'alert_lost'],
   Navigation: ['reroute'],
   Driving: ['driver_start', 'driver_end'],
   'Simulation and system': SYSTEM_EVENTS,
 };
 const SEVERITY = { incident_start: 'bad', alert_lost: 'bad', zone_activated: 'warn', incident_detected: 'warn', preempt_start: 'warn',
-  zone_ev_priority: 'warn', incident_end: 'good', zone_deactivated: 'good', preempt_end: 'good',
+  zone_ev_priority: 'warn', ambulance_dispatched: 'warn', ambulance_rejected: 'bad', ambulance_arrived: 'good', incident_end: 'good', zone_deactivated: 'good', preempt_end: 'good',
   sim_failed: 'bad', sim_halted: 'bad', capacity_reached: 'warn', sim_stopped: 'warn', sim_finished: 'good' };
 
 export function EventsPage() {

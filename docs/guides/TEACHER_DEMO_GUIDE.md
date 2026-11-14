@@ -26,7 +26,9 @@ version is in §4.
 Each step in `/demo` explains what is happening, lists what to point at, and, for steps with a
 scenario, has a *Start this scenario* button. While a step's scenario plays, **Pause to explain**
 freezes it, for every viewer, at the current simulated second; *Resume* continues from there. In
-*Run control* you can also play a run at 0.5× to 4× speed or restart it from the beginning. The live map on the demo page shows the run that is
+*Run control* you can also play a run at 0.5× to 4× speed or restart it from the beginning, and
+**send an ambulance at any moment** of any scenario (even step 3's fixed-time run, which then gets
+ambulance priority added): a good way to answer "what happens when an ambulance comes now?". The live map on the demo page shows the run that is
 really playing. The simulated times below assume the default pacing (4 simulated seconds per
 wall-clock second).
 

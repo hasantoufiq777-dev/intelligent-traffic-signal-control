@@ -71,6 +71,18 @@ cd server && npm run create-admin -- admin@example.org "Full Name"
   All three change only wall-clock pacing, so results are unaffected. A paused run still counts as
   running, so the playlist does not move on. Someone driving a car is handed back after 2 minutes
   without input, which includes time spent paused.
+- **Ambulance.** *Send an ambulance* puts an ambulance on the road at once, at any moment of the run,
+  for every controller and scenario.
+  - Route: automatic (the crossing through the most junctions, three on the grid), or a chosen entry
+    and exit road.
+  - Every junction on its way gives it a safe green: yellow, all-red, then green on its approach only
+    (when it is 18 s away), held until it has passed. With `fixed`, `adaptive` or `adaptive_vanet`,
+    which have no ambulance priority of their own, priority is added to all junctions for the rest
+    of that run; with `adaptive_vanet` the junctions learn about it from its V2I alerts.
+  - At most 3 sent ambulances drive at the same time. The panel lists the last messages: where it
+    was sent, and on arrival its travel time and at how many junctions it got green. The run's
+    result (*Run history*) lists every ambulance sent.
+  - A run into which an ambulance was sent is no longer comparable with the research results.
 - **Playlist.** With `LIVE_LOOP=true` the runs in `server/playlist.json` play one after another.
   After a crash the next entry is tried 5 s later; after 3 failed runs in a row (`MAX_SIM_FAILURES`)
   the platform stays *Failed* until someone starts a run, so a broken installation does not restart

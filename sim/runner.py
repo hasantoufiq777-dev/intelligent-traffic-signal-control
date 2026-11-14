@@ -349,6 +349,7 @@ def run_simulation(
     queue_errors: List[float] = []
     collision_pairs: set = set()  # (collider, victim) pairs SUMO reported
     zone_ctrl: Optional[Any] = None
+    dispatcher: Optional[Any] = None  # ambulances sent from the dashboard (live only)
 
     if live:
         emit_json_line({
@@ -540,6 +541,20 @@ def run_simulation(
                 gui=gui,
             )
 
+        # Ambulance on demand: sent from the dashboard at any moment (live only, sim/dispatch.py)
+        if driver and live:
+            from sim.dispatch import AmbulanceDispatcher, add_priority
+
+            priority_params = dict(ctrl_params)
+            priority_params.update(base_config.get("controllers", {}).get("preemption", {}) or {})
+            dispatcher = AmbulanceDispatcher(
+                sumo_api=sumo_api,
+                tls_ids=tls_ids,
+                controllers_map=controllers_map,
+                enable_priority=lambda: add_priority(controllers_map, priority_params, provider, sumo_api),
+                seed=seed,
+            )
+
         while t < sim_duration:
             if _STOP_REQUESTED:
                 was_interrupted = True
@@ -723,8 +738,15 @@ def run_simulation(
             # Driver commands and the driven car (advice, ambulance warning, trip report)
             if driver_mgr is not None:
                 for cmd in playback.split(driver_commands.poll(), t):
-                    driver_mgr.handle(cmd, t)
+                    if cmd.get("cmd") == "ambulance" and dispatcher is not None:
+                        dispatcher.handle(cmd, t)
+                    else:
+                        driver_mgr.handle(cmd, t)
                 driver_mgr.step(t, active_vehs)
+                if dispatcher is not None:
+                    dispatcher.step(t, active_vehs)
+                    for a_ev in dispatcher.pop_events():
+                        emit_json_line(protocol_event(a_ev, run_id, t))
                 for d_ev in driver_mgr.pop_events():
                     emit_json_line(protocol_event(d_ev, run_id, t))
                 for notice in driver_mgr.pop_notices(run_id):
@@ -989,6 +1011,10 @@ def run_simulation(
         result_payload["avg_hops"] = final_comm.get("avg_hops", 1.0)
         result_payload["ev_alert_delivery_time"] = final_comm.get("ev_alert_delivery_time", 0.0)
         result_payload["missed_preemptions"] = final_comm.get("missed_preemptions", 0)
+
+    # Ambulances sent from the dashboard (only when at least one was sent)
+    if dispatcher is not None and dispatcher.trips:
+        result_payload.update(dispatcher.get_metrics())
 
     # Missed preemptions: signalised junctions an EV drove through without that junction's
     # preemption having triggered for it (only meaningful for preemption controllers)

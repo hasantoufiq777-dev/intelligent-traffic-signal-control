@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
+import { roadChoices } from '../lib/roads.js';
 import NowPlaying from '../components/NowPlaying.jsx';
 import { useAuth } from '../hooks/useAuth.js';
 import { useLive } from '../hooks/useLiveSocket.js';
@@ -58,6 +59,68 @@ function DriverAdmin({ seat }) {
         </table>
       </div>
     </section>
+  );
+}
+
+const AMB_KINDS = new Set(['ambulance_dispatched', 'ambulance_arrived', 'ambulance_rejected']);
+
+/** Send an ambulance into the running simulation at any moment; it gets priority at every junction. */
+function AmbulanceDispatch({ live, canSend, controller }) {
+  const choices = useMemo(() => roadChoices(live.network), [live.network]);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const runId = live.nowPlaying?.current?.run_id;
+  const recent = (live.events || []).filter((e) => AMB_KINDS.has(e.kind) && e.run_id === runId).slice(-3).reverse();
+  const ownPriority = String(controller || '').startsWith('adaptive_ev');
+
+  async function send() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.ambulance(from && to ? { from, to } : undefined);
+      setMsg({ text: 'Ambulance requested. Follow it on the live map; the result lists its trip.' });
+    } catch (err) {
+      setMsg({ error: true, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stack" role="group" aria-labelledby="amb-h">
+      <h3 id="amb-h" style={{ margin: 0 }}>Ambulance</h3>
+      <p className="small muted" style={{ margin: 0 }}>
+        Send an ambulance now, at any moment of the run. Every junction on its way gives it a safe green
+        (yellow, all-red, then green on its approach only).{' '}
+        {controller && (ownPriority ? `${controller} has ambulance priority of its own.`
+          : `${controller} has no ambulance priority of its own: it is added for the rest of this run.`)}
+      </p>
+      <div className="row" style={{ alignItems: 'flex-end' }}>
+        <label className="field">from
+          <select value={from} onChange={(e) => setFrom(e.target.value)} disabled={!canSend}>
+            <option value="">longest crossing</option>
+            {choices.starts.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
+        <label className="field">to
+          <select value={to} onChange={(e) => setTo(e.target.value)} disabled={!canSend || !from}>
+            <option value="">{from ? 'choose an exit' : 'automatic'}</option>
+            {choices.ends.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+        </label>
+        <button type="button" className="btn primary" disabled={busy || !canSend || (Boolean(from) && !to)} onClick={send}>
+          Send an ambulance
+        </button>
+      </div>
+      {msg && <div className={`notice${msg.error ? ' error' : ''}`} role="status">{msg.text}</div>}
+      {recent.length > 0 && (
+        <ul className="small" aria-label="Ambulances sent in this run" style={{ margin: 0, paddingLeft: '1.2em' }}>
+          {recent.map((e, i) => <li key={`${e.t}-${i}`}>t={e.t}s · {e.detail}</li>)}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -205,6 +268,7 @@ export default function Admin() {
                 onClick={() => playback(api.restart, 'Restarted from the beginning with the same settings.')}>Restart from the beginning</button>
               <span className="small muted">Pause and speed change only how fast the run is shown; its simulated results stay the same.</span>
             </div>
+            <AmbulanceDispatch live={live} canSend={!busy && canPlayback} controller={np?.current?.entry?.controller} />
           </form>
         ) : (
           <p className="muted">Loading options…</p>

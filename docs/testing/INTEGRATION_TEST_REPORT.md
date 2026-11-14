@@ -21,6 +21,7 @@ crashes, fails to start or prints invalid output.
 | `resilience.test.js` | 18 | simulation crash, failed start, invalid output, exit without result, gateway restart, database unavailable and failing writes, hostile input, path traversal, stored XSS, socket abuse, concurrency, retention, backup and restore |
 | `playback.test.js` | 7 | platform events (run started, finished, connection limit) reach viewers and the run's history; pause, resume, speed and restart: refused to viewers and when nothing runs; the paused state is the one the simulation confirmed and simulated time stands still; only the speeds 0.5/1/2/4; restart from the first second; a researcher controls only their own run; audit entries; a paused run stops promptly |
 | `snapshot.test.js` | 5 | history rows, HTTP compression, security headers, the traffic demand setting (validation, simulation argument, stored with the run) |
+| `ambulance.test.js` | 5 | ambulance on demand (added after the final run, 14 November 2026): refused when nothing runs, to viewers and with invalid roads; dispatched into a fixed-time run with priority added, events in order (sent, preemption start and end, arrived), stored events and audit; dispatched trips in the stored result; the junctions' own priority with `adaptive_ev`, sent while paused, at most 3 on the road; a researcher only into their own run |
 
 ## 2. Gateway with real SUMO (`server/test/e2e.real.test.js`)
 
@@ -35,6 +36,7 @@ crashes, fails to start or prints invalid output.
 | Ambulance run | an ambulance scenario on the grid: states, V2I alerts, preemption, the result stored |
 | Driven car | a viewer drives a car through the grid; the trip report is stored |
 | Playback | a real SUMO run is paused (simulated time stands still for 1.5 s), set to 4× and resumed: it then runs above 15 simulated seconds per second, and the history has no missing second |
+| Ambulance on demand (14 November 2026) | an ambulance sent into a real fixed-time grid run: priority added at J0–J3, green at all 3 junctions it crosses, arrival, no collision; events and trip in the stored result. With it: **4 passed** |
 
 ## 3. Integration of the parts in the browser suites
 
@@ -55,6 +57,7 @@ The browser suites ([E2E report](E2E_TEST_REPORT.md)) also exercise the full cha
 | 8 | bcrypt hashing on the main thread blocked the server (2 sign-ins per second) |
 | 9 | The retention query read the whole sample table (now indexed; test checks the plan) |
 | 10 | The live socket did not check the browser's origin |
+| after 10 | Test race, not a platform defect: the restart test read the first state as soon as the run was *RUNNING*, which the simulation's *started* message sets before its first state. It failed about 1 run in 3 once a sixth test file added load; it now waits for the first state (5 full runs passed) |
 
 ## 5. Limitations
 

@@ -113,6 +113,14 @@ load test, load time, rendering and production check ran on `608564b`, the commi
 | production check | 8/8 |
 | dependency audit (production) | 0 vulnerabilities in server, dashboard and root |
 
+### 3.1 After adding ambulance on demand (14 November 2026)
+
+`sim/dispatch.py` acts only when an ambulance is sent from the dashboard; it draws no random numbers
+before that. Python 148 passed (zero-regression included), gateway 87 passed + 3 skipped, real SUMO
+4 passed, dashboard 15, browser: smoke, ambulance 6/6, responsive 108/108, accessibility 0 violations
+in 45 audits. `test_dispatch.py` also checks that a run without a dispatch gives the same states,
+second by second.
+
 ## 4. Limitations
 
 - The full Python suite was not re-run after Phases 6–7 and 9, because no file under `sim/` changed

@@ -125,4 +125,39 @@ describe.skipIf(!enabled)('end-to-end with the real SUMO simulation', () => {
       await gw.close();
     }
   }, 120_000);
+
+  it('sends an ambulance into a running fixed-time run: green at every junction, trip in the stored result', async () => {
+    const gw = createGateway({
+      USE_MOCK: 'false', PYTHON_BIN: PYTHON, ...TEST_ENV, LIVE_LOOP: 'false', DB_PATH: ':memory:',
+      SIM_STEP_DELAY: '0', SIM_MAX_STEPS: '120', STATE_INTERVAL_MS: '100', LOG_LEVEL: 'warn',
+      PLAYLIST_PATH: path.join(SERVER_ROOT, 'no-playlist.json'),
+    });
+    await gw.listen(0, '127.0.0.1');
+    const S = await adminSession(gw);
+    try {
+      const res = await S.post('/api/live/start')
+        .send({ scenario: 'normal', network: 'grid2x2', controller: 'fixed', seed: 1 }).expect(202);
+      const runId = res.body.run_id;
+      // paused right after the start, so the ambulance is sent at a known, early second
+      await waitFor(() => gw.live.lifecycle === 'RUNNING' && gw.live.latestState?.t >= 1, 60_000, 10);
+      await S.post('/api/live/pause').expect(202);
+      await waitFor(() => gw.live.playback.paused, 10_000, 10);
+      await S.post('/api/live/ambulance').expect(202);
+      await S.post('/api/live/resume').expect(202);
+      await waitFor(async () => (await S.get(`/api/runs/${runId}`)).body.result, 120_000);
+      const stored = (await S.get(`/api/runs/${runId}`)).body;
+      const m = stored.result.metrics;
+      expect(m.dispatched_ambulances).toBe(1);
+      expect(m.dispatched_priority_added).toEqual(['J0', 'J1', 'J2', 'J3']);
+      const trip = m.dispatched_trips[0];
+      expect(trip.junctions).toHaveLength(3);
+      expect(trip.travel_time).toBeGreaterThan(0);
+      expect(trip.priority_at).toEqual(trip.junctions);
+      expect(m.collisions).toBe(0);
+      const kinds = stored.events.map((e) => e.kind);
+      expect(kinds).toEqual(expect.arrayContaining(['ambulance_dispatched', 'preempt_start', 'preempt_end', 'ambulance_arrived']));
+    } finally {
+      await gw.close();
+    }
+  }, 180_000);
 });
