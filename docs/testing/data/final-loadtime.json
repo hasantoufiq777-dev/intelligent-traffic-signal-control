@@ -1,0 +1,35 @@
+{
+ "date": "2026-11-12",
+ "build": "final (commit 608564b, Vite 8.3.8)",
+ "what": "time until cars show on the map (Edge headless, 3 runs); throttled = Chrome emulation 10 Mbit/s, 40 ms latency; real SUMO gateway",
+ "results": {
+  "local": [
+   {
+    "sign_in_to_cars_ms": 635,
+    "cold_load_to_cars_ms": 619
+   },
+   {
+    "sign_in_to_cars_ms": 660,
+    "cold_load_to_cars_ms": 639
+   },
+   {
+    "sign_in_to_cars_ms": 652,
+    "cold_load_to_cars_ms": 615
+   }
+  ],
+  "10 Mbit/s + 40 ms": [
+   {
+    "sign_in_to_cars_ms": 1183,
+    "cold_load_to_cars_ms": 1385
+   },
+   {
+    "sign_in_to_cars_ms": 1170,
+    "cold_load_to_cars_ms": 1408
+   },
+   {
+    "sign_in_to_cars_ms": 1135,
+    "cold_load_to_cars_ms": 1390
+   }
+  ]
+ }
+}

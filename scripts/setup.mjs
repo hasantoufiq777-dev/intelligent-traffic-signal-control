@@ -1,7 +1,6 @@
 // One-time setup, Windows and Linux: Python venv + requirements, npm installs, server/.env.
 //   node scripts/setup.mjs            (or: npm run setup)
 import { spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,9 +37,9 @@ if (!fs.existsSync(envPath)) {
   let env = fs.readFileSync(path.join(root, 'server', '.env.example'), 'utf8');
   const rel = win ? '../.venv/Scripts/python.exe' : '../.venv/bin/python';
   env = env.replace(/^PYTHON_BIN=.*$/m, `PYTHON_BIN=${rel}`);
-  env = env.replace(/^ADMIN_TOKEN=.*$/m, `ADMIN_TOKEN=${crypto.randomBytes(12).toString('hex')}`);
   fs.writeFileSync(envPath, env);
-  console.log(`\nWrote server/.env (PYTHON_BIN=${rel}, random ADMIN_TOKEN). Edit it to change settings.`);
+  console.log(`\nWrote server/.env (PYTHON_BIN=${rel}). Edit it to change settings.`);
+  console.log('Create the first administrator account: npm --prefix server run create-admin -- you@example.org "Your Name"');
 } else {
   console.log('\nserver/.env exists, left unchanged.');
 }

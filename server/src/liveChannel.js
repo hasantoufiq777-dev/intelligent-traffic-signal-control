@@ -1,10 +1,26 @@
 // The one shared live simulation: process lifecycle, broadcast to all viewers, history, playlist loop.
 import crypto from 'node:crypto';
+import { DriverSeat } from './driver.js';
 import { SimProcess } from './simProcess.js';
 import { buildSimArgs, VehicleIdSchema } from './protocol.js';
 
 const ROOM = 'live';
 const VEHICLES_OFFSET_MS = 150; // keep the map frame out of the state broadcast's tick
+
+/**
+ * The part of a state that the dashboard's history charts read: time, metrics, each junction's
+ * phase and queues, the VANET delivery ratio and the navigation averages. A new viewer gets 120 of
+ * these in its first message; the full latest state is sent beside them. Signal timing (SPaT), road
+ * speeds and eco data are only shown for the current second, so the history leaves them out
+ * (about 2.9 KB -> 0.5 KB per state).
+ */
+export function historyRow(msg, runId = msg.run_id) {
+  const tls = {};
+  for (const [id, j] of Object.entries(msg.tls ?? {})) tls[id] = { phase: j?.phase, queues: j?.queues };
+  const nav = msg.nav ? { avg_tt_nav: msg.nav.avg_tt_nav, avg_tt_non: msg.nav.avg_tt_non, edge_load_cv: msg.nav.edge_load_cv } : undefined;
+  return { type: msg.type, run_id: msg.run_id ?? runId, t: msg.t, metrics: msg.metrics, tls,
+    comm: msg.comm ? { pdr: msg.comm.pdr } : undefined, nav };
+}
 
 export class LiveChannel {
   constructor({ cfg, io, db, logger, playlist }) {
@@ -20,11 +36,19 @@ export class LiveChannel {
     this.closing = false;
 
     this.proc = null;
-    this.current = null; // { run_id, entry, source, started_at, status }
+    this.current = null; // { run_id, entry, source, started_at, status, started_by }
+    // Simulation lifecycle shown to every client: STOPPED -> STARTING -> RUNNING -> STOPPING -> STOPPED,
+    // FAILED after an error, RECOVERING while the playlist waits to retry.
+    this.lifecycle = 'STOPPED';
+    // Pause and speed of the running simulation, as confirmed by it ('playback' messages)
+    this.playback = { paused: false, speed: 1 };
+    this.failures = 0; // consecutive failed runs
+    this._op = false; // a start/stop/restart request is in progress
+    this.accept = null; // (socket) => boolean, set by the gateway (session rooms, connection cap)
     this.lastStatus = null;
     this.lastResult = null;
     this.latestState = null;
-    this.states = []; // last HISTORY_SECONDS of simulated time
+    this.states = []; // last HISTORY_SECONDS of simulated time, as chart rows (historyRow)
     this.events = []; // last EVENT_HISTORY events
     this.lastSampleT = -Infinity;
     this.sawFinalStatus = false;
@@ -43,16 +67,22 @@ export class LiveChannel {
     this._lastViewerCount = -1;
 
     this.stats = { started_at: Date.now(), lines_in: 0, bad_lines: 0, states_in: 0, states_broadcast: 0,
-      events_broadcast: 0, bytes_broadcast: 0, runs_started: 0 };
+      events_broadcast: 0, bytes_broadcast: 0, runs_started: 0, persist_errors: 0 };
+    this._lastPersistLog = 0;
+    // One-driver mode: the only thing a viewer can control (one at a time)
+    this.driver = new DriverSeat({ cfg, io, db, logger, live: this, room: ROOM });
   }
 
   // ------------------------------------------------------------------ viewers
-  attach() {
+  attach({ accept = null } = {}) {
+    this.accept = accept;
     this.io.on('connection', (socket) => {
+      if (this.accept && !this.accept(socket)) return; // refused (over the connection limit)
       socket.join(ROOM);
       socket.emit('init', this.snapshot());
-      // Viewers are read-only: nothing they send is acted on.
+      // Viewers are read-only, except for the one driver seat (driver.js).
       socket.on('disconnect', () => this._scheduleViewerBroadcast());
+      this.driver.attach(socket);
       // Following a car is a subscription (detail stream for one vehicle), not control.
       socket.on('follow', (id) => this._follow(socket, id));
       socket.on('unfollow', () => this._follow(socket, null));
@@ -80,12 +110,16 @@ export class LiveChannel {
     const loop = this.cfg.LIVE_LOOP && !this.paused;
     return {
       running: Boolean(this.proc),
+      lifecycle: this.lifecycle,
+      failures: this.failures,
       current: this.current,
       next: loop && this.playlist.length ? this.playlist[this.nextIndex % this.playlist.length] : null,
       loop,
       viewers: this.viewers(),
       mock: this.cfg.USE_MOCK,
       gui: this.gui,
+      driver: this.driver.public(),
+      playback: this.playback,
     };
   }
 
@@ -122,21 +156,53 @@ export class LiveChannel {
       events: this.events,
       result: this.lastResult,
       history_seconds: this.cfg.HISTORY_SECONDS,
+      driver: { seat: this.driver.public(), state: this.driver.state },
     };
   }
 
   // ------------------------------------------------------------------ lifecycle
-  /** Start a run (stopping any current one). source: 'admin' | 'playlist'. */
-  async start(entry, source = 'admin') {
+  /**
+   * Run one start/stop/restart request at a time. A second request while one is in progress is
+   * refused (error code "busy") instead of interleaving with it.
+   */
+  async exclusive(fn) {
+    if (this._op) {
+      const err = new Error('Another start or stop request is in progress. Try again in a moment.');
+      err.code = 'busy';
+      throw err;
+    }
+    this._op = true;
+    try {
+      return await fn();
+    } finally {
+      this._op = false;
+    }
+  }
+
+  _setLifecycle(state) {
+    if (this.lifecycle === state) return;
+    this.lifecycle = state;
+    this.log.debug(`Simulation lifecycle: ${state}`);
+  }
+
+  /** Start a run (stopping any current one). source: 'admin' | 'playlist'; user: who asked (admin starts). */
+  async start(entry, source = 'admin', user = null) {
     clearTimeout(this._loopTimer);
     this._loopTimer = null;
     if (this.proc) await this._stopProcess();
     if (this.closing) return null;
-    if (source === 'admin') this.paused = false; // admin start resumes the loop afterwards (if enabled)
+    if (source === 'admin') {
+      this.paused = false; // admin start resumes the loop afterwards (if enabled)
+      this.failures = 0;
+    }
+    this.driver.onRunEnded(); // a drive belongs to one run
+    this.playback = { paused: false, speed: 1 }; // every run starts playing at normal speed
+    this._setLifecycle('STARTING');
 
     this._dropPendingState(); // never deliver a state of the previous run after this one starts
     const runId = `live-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
-    this.current = { run_id: runId, entry, source, started_at: new Date().toISOString(), status: 'running' };
+    this.current = { run_id: runId, entry, source, started_at: new Date().toISOString(), status: 'running',
+      started_by: user ? { id: user.id, name: user.name } : null };
     this.states = [];
     this.events = [];
     this.latestState = null;
@@ -152,7 +218,8 @@ export class LiveChannel {
     this._pendingVehicles = null;
     this.db.insertRun({ id: runId, scenario: entry.scenario, controller: entry.controller, nav: entry.nav,
       seed: entry.seed, penetration: entry.penetration, loss: entry.loss, relay: entry.relay,
-      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', source });
+      eco_fraction: entry.eco_fraction ?? 0, ev_routing: entry.ev_routing ?? 'off', demand: entry.demand ?? 1, source,
+      started_by: user?.id ?? null });
     this.stats.runs_started += 1;
 
     const args = buildSimArgs(entry, runId, this.cfg, { gui: this.gui });
@@ -180,11 +247,55 @@ export class LiveChannel {
     this.gui = Boolean(enabled);
     let restarted = false;
     if (this.proc && this.current && Boolean(this.proc.gui) !== this.gui) {
-      await this.start(this.current.entry, this.current.source);
+      await this.start(this.current.entry, this.current.source, this.current.started_by);
       restarted = true;
     }
     this.io.to(ROOM).emit('now_playing', this.nowPlaying());
     return { enabled: this.gui, restarted };
+  }
+
+  /**
+   * Pause, resume or change the speed of the running simulation. This changes only wall-clock
+   * pacing (the simulated seconds are the same); the simulation confirms with a 'playback' message,
+   * which is what viewers are shown.
+   */
+  playbackCommand(cmd) {
+    if (!this.proc || this.lifecycle !== 'RUNNING') {
+      const err = new Error('No simulation is running');
+      err.code = 'not_running';
+      throw err;
+    }
+    if (!this.proc.send(cmd)) {
+      const err = new Error('The simulation is not accepting commands');
+      err.code = 'not_running';
+      throw err;
+    }
+    return true;
+  }
+
+  /** Start the current (or last) run again from its first second, with the same settings. */
+  async restart(user) {
+    if (!this.current) {
+      const err = new Error('There is no run to restart');
+      err.code = 'not_running';
+      throw err;
+    }
+    return this.start(this.current.entry, 'admin', user);
+  }
+
+  /**
+   * A platform event (run started, ended, failed; connection limit reached) in the same list as the
+   * simulation's own events, so the event centre and the bell show it. Kinds start with sim_ or
+   * are system warnings; `system: true` marks them.
+   */
+  systemEvent(kind, detail) {
+    const runId = this.current?.run_id ?? null;
+    const ev = { type: 'event', run_id: runId, t: Number(this.latestState?.t) || 0, kind, tls: null, detail, system: true };
+    this.events.push(ev);
+    if (this.events.length > this.cfg.EVENT_HISTORY) this.events.splice(0, this.events.length - this.cfg.EVENT_HISTORY);
+    if (runId) this._persist('an event', () => this.db.saveEvent(runId, ev));
+    this._emitReliable('event', ev);
+    this.stats.events_broadcast += 1;
   }
 
   /** Admin stop: stop the run and pause the playlist until the next admin start. */
@@ -202,6 +313,7 @@ export class LiveChannel {
     const proc = this.proc;
     if (!proc) return;
     proc.manualStop = true;
+    this._setLifecycle('STOPPING');
     await proc.stop();
   }
 
@@ -219,6 +331,23 @@ export class LiveChannel {
     this.start(entry, 'playlist').catch((err) => this.log.error('Playlist start failed:', err.message));
   }
 
+  /**
+   * Store something about the run. A database failure must not stop the live stream or crash the
+   * gateway: it is counted, logged (at most once every 10 s) and the broadcast goes on.
+   */
+  _persist(what, fn) {
+    try {
+      return fn();
+    } catch (err) {
+      this.stats.persist_errors += 1;
+      if (Date.now() - this._lastPersistLog > 10_000) {
+        this._lastPersistLog = Date.now();
+        this.log.error(`Could not store ${what} (${this.stats.persist_errors} storage errors so far):`, err.message);
+      }
+      return null;
+    }
+  }
+
   // ------------------------------------------------------------------ messages
   _onMessage(proc, msg) {
     if (proc !== this.proc || !this.current) return; // late line from a replaced process
@@ -226,6 +355,10 @@ export class LiveChannel {
     const runId = this.current.run_id;
     switch (msg.type) {
       case 'state':
+        if (this.lifecycle === 'STARTING') {
+          this._setLifecycle('RUNNING');
+          this.io.to(ROOM).emit('now_playing', this.nowPlaying());
+        }
         this.stats.states_in += 1;
         this._recordState(runId, msg);
         this._broadcastState(msg);
@@ -234,14 +367,25 @@ export class LiveChannel {
         const ev = { type: 'event', run_id: runId, t: msg.t, kind: msg.kind, tls: msg.tls, detail: msg.detail };
         this.events.push(ev);
         if (this.events.length > this.cfg.EVENT_HISTORY) this.events.splice(0, this.events.length - this.cfg.EVENT_HISTORY);
-        this.db.saveEvent(runId, ev);
+        this._persist('an event', () => this.db.saveEvent(runId, ev));
         this._emitReliable('event', ev);
         this.stats.events_broadcast += 1;
         break;
       }
       case 'status':
         this.lastStatus = msg;
-        if (['finished', 'stopped', 'error'].includes(msg.status)) this.sawFinalStatus = true;
+        if (msg.status === 'started' && this.lifecycle === 'STARTING') {
+          this._setLifecycle('RUNNING');
+          this.io.to(ROOM).emit('now_playing', this.nowPlaying());
+        }
+        if (msg.status === 'started') {
+          const e = this.current?.entry;
+          this.systemEvent('sim_started', e ? `${e.label ? `${e.label}: ` : ''}${e.scenario} with ${e.controller}` : msg.message);
+        }
+        if (['finished', 'stopped', 'error'].includes(msg.status)) {
+          this.sawFinalStatus = true;
+          this.driver._broadcast(); // no new drives in a run that is ending
+        }
         this._emitReliable('status', msg);
         break;
       case 'network':
@@ -251,9 +395,16 @@ export class LiveChannel {
       case 'vehicles':
         this._onVehicles(msg);
         break;
+      case 'driver':
+        this.driver.onSimMessage({ ...msg, run_id: runId });
+        break;
+      case 'playback':
+        this.playback = { paused: Boolean(msg.paused), speed: Number(msg.speed) || 1 };
+        this.io.to(ROOM).emit('now_playing', this.nowPlaying());
+        break;
       case 'result':
         this.lastResult = msg;
-        this.db.saveResult(runId, msg.metrics);
+        this._persist('the result', () => this.db.saveResult(runId, msg.metrics));
         this._emitReliable('result', msg);
         break;
       default:
@@ -263,7 +414,7 @@ export class LiveChannel {
 
   _recordState(runId, msg) {
     this.latestState = msg;
-    this.states.push(msg);
+    this.states.push(historyRow(msg, runId));
     const t = Number(msg.t) || 0;
     const minT = t - this.cfg.HISTORY_SECONDS;
     let drop = 0;
@@ -271,7 +422,7 @@ export class LiveChannel {
     if (drop) this.states.splice(0, drop);
     if (t - this.lastSampleT >= this.cfg.SAMPLE_EVERY_SIM_S) {
       this.lastSampleT = t;
-      this.db.saveSample(runId, msg);
+      this._persist('a state sample', () => this.db.saveSample(runId, msg));
     }
   }
 
@@ -355,6 +506,7 @@ export class LiveChannel {
     if (proc !== this.proc) return;
     // A pending final state is still sent by its timer, keeping the at-most-once-per-interval rule.
     this.proc = null;
+    this.driver.onRunEnded();
     const run = this.current;
     let status;
     if (stopped) status = 'stopped';
@@ -365,7 +517,7 @@ export class LiveChannel {
       : 'Simulation completed';
     if (run) {
       run.status = status;
-      this.db.endRun(run.run_id, status, message);
+      this._persist('the end of the run', () => this.db.endRun(run.run_id, status, message));
       // Windows kills cannot be caught by Python, so report the final status ourselves if needed
       if (!this.sawFinalStatus) {
         this.lastStatus = { type: 'status', run_id: run.run_id, status, message };
@@ -378,9 +530,22 @@ export class LiveChannel {
       this.log.info('SUMO-GUI window was closed; continuing without the window');
     }
     this.log.info(`Live run ${run?.run_id} ended: ${status} (code ${code})`);
+    if (run) this.systemEvent(status === 'finished' ? 'sim_finished' : status === 'stopped' ? 'sim_stopped' : 'sim_failed', message);
+
+    // Bounded recovery: after MAX_SIM_FAILURES failed runs in a row the playlist stops retrying
+    this.failures = status === 'error' ? this.failures + 1 : 0;
+    let loops = !this.closing && !this.paused && this.cfg.LIVE_LOOP && !proc.manualStop;
+    if (loops && this.failures >= this.cfg.MAX_SIM_FAILURES) {
+      loops = false;
+      this.paused = true;
+      this.log.error(`${this.failures} runs failed in a row: the playlist is paused until an administrator starts a run`);
+      this.systemEvent('sim_halted', `${this.failures} runs failed in a row: the playlist is paused until a run is started from Run control`);
+    }
+    if (status === 'error') this._setLifecycle(loops ? 'RECOVERING' : 'FAILED');
+    else this._setLifecycle('STOPPED');
     this.io.to(ROOM).emit('now_playing', this.nowPlaying());
 
-    if (!this.closing && !this.paused && this.cfg.LIVE_LOOP && !proc.manualStop) {
+    if (loops) {
       const delay = status === 'error' ? this.cfg.CRASH_RETRY_MS : 1500;
       this._loopTimer = setTimeout(() => this._startNextFromPlaylist(), delay);
     }
@@ -392,6 +557,7 @@ export class LiveChannel {
     clearTimeout(this._stateTimer);
     clearTimeout(this._viewerTimer);
     clearTimeout(this._vehiclesTimer);
+    this.driver.close();
     if (this.proc) await this._stopProcess();
   }
 }

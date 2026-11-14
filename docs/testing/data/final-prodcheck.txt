@@ -1,0 +1,14 @@
+# node tests/deploy/prodcheck.mjs https://localhost:8446 <admin> <password> --insecure
+# 2026-11-12, final code (commit 608564b, Vite 8.3.8); gateway with deploy/gateway.env.production.example values
+# (NODE_ENV=production, TRUST_PROXY=1, COOKIE_SECURE=true), real SUMO, behind tests/deploy/tls-proxy.mjs
+# with a self-signed certificate
+ok   index page: security headers (CSP, HSTS, nosniff, no X-Powered-By, index not cached)
+ok   build files: gzip and long-term caching (94 KB sent for 295 KB)
+ok   sign-in cookie is Secure, HttpOnly, SameSite=Lax (Path=/; HttpOnly; Secure; SameSite=Lax)
+ok   requests from another site are refused
+ok   errors are JSON without internal details
+ok   the gateway runs in production mode (node v24.14.1)
+ok   secure WebSocket: session required, other sites refused (init with 24 roads)
+ok   browser: sign in over HTTPS, live cars on the map, no CSP violations (cars shown after sign-in and after reload)
+
+8/8 production checks passed

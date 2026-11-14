@@ -1,6 +1,6 @@
 # Evaluation summary
 
-Generated 2026-11-04T02:06:30+00:00. Seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+Generated 2026-11-06T17:30:33+00:00. Seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
 Cells: mean ± std (improvement vs baseline, paired p-value). Positive improvement = better.
 p-values: Wilcoxon signed-rank with >= 6 paired seeds, otherwise paired t-test.
 
@@ -155,3 +155,15 @@ p-values: Wilcoxon signed-rank with >= 6 paired seeds, otherwise paired t-test.
 | adaptive_ev_vanet@route_on | 64.50 ± 5.08 (+13.0%, p=0.008) | 17.10 ± 1.38 (-1.9%, p=0.359) | 106.46 ± 2.24 (-0.3%, p=0.570) | 0.00 ± 0.00 (p=1.000) | 0.90 ± 0.32 |
 | adaptive_vanet@route_off | 104.50 ± 21.28 | 15.12 ± 1.10 | 103.85 ± 2.34 | 0.00 ± 0.00 |  |
 | adaptive_vanet@route_on | 85.30 ± 12.37 (+18.4%, p=0.008) | 15.01 ± 1.27 (+0.8%, p=0.734) | 103.70 ± 2.71 (+0.1%, p=0.734) | 0.00 ± 0.00 (p=1.000) | 0.90 ± 0.32 |
+
+## Accident work zone (baseline: westbound road closed at J3)
+
+### Scenario: accident_zone
+
+| Config | avg_travel_time | avg_waiting_time | ev_travel_time | max_queue | zone_max_queue_westbound | zone_max_queue_eastbound | zone_ev_wait_s | zone_switches | zone_max_clearance_s | zone_conflicts | collisions | incident_rerouted_vehicles |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| closure | 102.06 ± 2.69 | 19.44 ± 2.46 | 66.20 ± 7.15 | 8.10 ± 2.08 | 2.10 ± 1.37 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 47.40 ± 5.97 |
+| alternating | 95.35 ± 1.69 (+6.6%, p=0.002) | 15.24 ± 1.11 (+21.6%, p=0.002) | 74.20 ± 9.95 (-12.1%, p=0.002) | 8.20 ± 1.69 (-1.2%, p=0.730) | 6.90 ± 2.08 | 5.90 ± 2.23 | 0.10 ± 0.32 (p=1.000) | 15.50 ± 2.12 | 9.80 ± 1.48 | 0.00 ± 0.00 | 0.00 ± 0.00 | 52.00 ± 5.83 |
+| alternating+nav_astar | 94.44 ± 1.26 (+7.5%, p=0.002) | 15.14 ± 0.62 (+22.1%, p=0.002) | 71.50 ± 7.31 (-8.0%, p=0.008) | 7.70 ± 1.77 (+4.9%, p=0.994) | 4.10 ± 1.52 | 5.10 ± 3.28 | 0.00 ± 0.00 (p=1.000) | 16.90 ± 2.08 | 8.50 ± 2.07 | 0.00 ± 0.00 | 0.00 ± 0.00 | 51.00 ± 6.13 |
+| closure+ev_routing | 102.06 ± 2.69 (-0.0%, p=1.000) | 19.44 ± 2.46 (-0.0%, p=1.000) | 66.20 ± 7.15 (-0.0%, p=1.000) | 8.10 ± 2.08 (-0.0%, p=1.000) | 2.10 ± 1.37 | 0.00 ± 0.00 | 0.00 ± 0.00 (p=1.000) | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 0.00 ± 0.00 | 47.40 ± 5.97 |
+| alternating+ev_routing | 95.28 ± 1.26 (+6.6%, p=0.002) | 15.11 ± 0.80 (+22.3%, p=0.002) | 60.50 ± 2.32 (+8.6%, p=0.008) | 7.80 ± 1.40 (+3.7%, p=0.609) | 6.30 ± 1.06 | 4.80 ± 2.10 | 0.00 ± 0.00 (p=1.000) | 16.10 ± 1.66 | 11.10 ± 1.91 | 0.00 ± 0.00 | 0.00 ± 0.00 | 52.10 ± 5.49 |

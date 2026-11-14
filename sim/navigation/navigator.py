@@ -96,6 +96,8 @@ class VehicleNavigator:
 
         # Event queue and rate limiting (max 5 per second)
         self.events_queue: List[Dict[str, Any]] = []
+        # The most recent route decision, for the live dashboard only (never read by the navigation)
+        self.last_decision: Optional[Dict[str, Any]] = None
         self._last_event_sec: int = -1
         self._event_sec_count: int = 0
 
@@ -106,8 +108,9 @@ class VehicleNavigator:
         return self._smoother.update(sim_time, speed_map, keep_raw=keep_raw)
 
     def _is_emergency(self, vid: str) -> bool:
+        """Ambulances (own router) and the dashboard driver's car (the viewer drives) are not navigated."""
         try:
-            return str(self.sumo_api.vehicle.getTypeID(vid)) == "emergency"
+            return str(self.sumo_api.vehicle.getTypeID(vid)) in ("emergency", "driven")
         except Exception:
             return False
 
@@ -266,6 +269,8 @@ class VehicleNavigator:
             t_start = time.perf_counter()
             evals_start = self.graph.cost_evals
             new_path: List[str] = []
+            decision_routes: List[Tuple[List[str], float, float]] = []
+            chosen_idx = 0
             new_cost: float = float("inf")
             expansions: int = 0
 
@@ -278,6 +283,8 @@ class VehicleNavigator:
                     closed_edges=closed_edges,
                     heuristic=self.heuristic,
                 )
+                decision_routes = [(new_path, new_cost, 1.0)] if new_path else []
+                chosen_idx = 0
             elif self.mode in ("aco", "aco_tuned"):
                 candidates = self.aco_router.find_routes(
                     start_edge=curr_road,
@@ -286,15 +293,18 @@ class VehicleNavigator:
                     closed_edges=closed_edges,
                     k=self.aco_router.elite_k,
                 )
+                decision_routes = candidates
+                chosen_idx = 0
                 if candidates:
                     # Probabilistic selection among top K alternatives
                     r = self.rng.random()
                     cum = 0.0
                     selected_cand = candidates[0]
-                    for cand_path, cand_cost, cand_prob in candidates:
+                    for i_cand, (cand_path, cand_cost, cand_prob) in enumerate(candidates):
                         cum += cand_prob
                         if cum >= r:
                             selected_cand = (cand_path, cand_cost, cand_prob)
+                            chosen_idx = i_cand
                             break
                     new_path = selected_cand[0]
                     new_cost = selected_cand[1]
@@ -305,6 +315,7 @@ class VehicleNavigator:
             self.total_search_expansions += expansions
             self.total_search_evals += self.graph.cost_evals - evals_start
 
+            applied = False
             # Apply route if strictly advantageous under hysteresis threshold
             if new_path and new_path != remaining_route:
                 if new_cost < (curr_route_cost * (1.0 - self.hysteresis)):
@@ -314,8 +325,19 @@ class VehicleNavigator:
                         self.reroute_log.append((sim_time, vid))
                         self.last_reroute_time[vid] = sim_time
                         self._emit_reroute_event(vid, remaining_route, new_path, sim_time)
+                        applied = True
                     except Exception as e:
                         logger.debug("Failed to setRoute for vehicle %s: %s", vid, e)
+
+            if decision_routes:
+                self.last_decision = {
+                    "t": int(sim_time), "vid": vid, "mode": self.mode, "from": curr_road, "to": goal_edge,
+                    "routes": [{"path": list(p), "cost_s": round(float(c), 1), "prob": round(float(pr), 3)}
+                               for p, c, pr in decision_routes],
+                    "chosen": chosen_idx,
+                    "current_cost_s": round(float(curr_route_cost), 1) if curr_route_cost != float("inf") else None,
+                    "applied": applied,
+                }
 
     def get_nav_metrics(self) -> Dict[str, Any]:
         """Aggregate navigation performance metrics."""
@@ -358,4 +380,6 @@ class VehicleNavigator:
             "avg_tt_non": metrics["nonnav_avg_travel_time"],
             "max_edge_load": metrics["max_edge_load"],
             "edge_load_cv": metrics["edge_load_cv"],
+            "reroutes": self.reroute_count,
+            "last_decision": self.last_decision,
         }

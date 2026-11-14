@@ -63,6 +63,9 @@ class IncidentSpec:
     position_frac: float
     start_time: float
     duration: float
+    # False: not expected to be flagged by the VANET (e.g. accident-zone debris on a lane whose
+    # queue the zone controller manages); left out of the detection metrics
+    expect_detection: bool = True
 
     @property
     def end_time(self) -> float:
@@ -113,6 +116,7 @@ def parse_incident_config(cfg: Optional[Dict[str, Any]]) -> List[IncidentSpec]:
             position_frac=float(e.get("position_frac", cfg.get("position_frac", 0.5))),
             start_time=float(e.get("start_time", cfg.get("start_time", 150.0))),
             duration=float(e.get("duration", cfg.get("duration", 180.0))),
+            expect_detection=bool(e.get("detect", True)),
         ))
     return specs
 
@@ -378,12 +382,13 @@ class IncidentManager:
         """Detection and impact metrics for the results dict."""
         if not self.states:
             return {}
-        delays = [st.detected_at - st.spec.start_time for st in self.states if st.detected_at is not None]
-        first = self.states[0]
+        scored = [st for st in self.states if st.spec.expect_detection] or self.states
+        delays = [st.detected_at - st.spec.start_time for st in scored if st.detected_at is not None]
+        first = scored[0]
         return {
             "incident_type": first.spec.type,
             "incident_edge": first.spec.edge,
-            "incident_detected": all(st.detected_at is not None for st in self.states),
+            "incident_detected": all(st.detected_at is not None for st in scored),
             "incident_detection_delay": round(float(sum(delays) / len(delays)), 1) if delays else None,
             "incident_detected_kind": first.detected_kind,
             "incident_false_flags": len(self.false_flag_edges),

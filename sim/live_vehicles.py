@@ -12,6 +12,7 @@ Live mode only: this costs several TraCI calls per vehicle per step.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -19,9 +20,12 @@ from sim.vanet.network import resolve_lane_direction
 from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
 
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
-                  "advice", "adv_speed", "green_in"]
-FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED = 1, 2, 4, 8, 16
+                  "advice", "adv_speed", "green_in", "road", "to"]
+FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
 PETROL_MG_PER_ML = 745.0
+DRIVER_VTYPE = "driven"  # the car a dashboard viewer drives (sim/driver.py)
+MAX_FINISHED = 2000  # finished trips kept for the driver's trip comparison
+STOP_SPEED, MOVING_SPEED = 0.1, 1.0  # m/s: a stop = from moving to below STOP_SPEED
 
 
 def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id: str) -> Dict[str, Any]:
@@ -43,6 +47,8 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
             "from": e.getFromNode().getID(),
             "to": e.getToNode().getID(),
             "lanes": e.getLaneNumber(),
+            "speed": round(e.getSpeed(), 2),  # speed limit (m/s), for the congestion colouring
+            "length": round(e.getLength(), 1),
             "shape": [[round(p[0], 1), round(p[1], 1)] for p in e.getShape()],
         })
     (xmin, ymin), (xmax, ymax) = net.getBBoxXY()
@@ -51,7 +57,10 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
 
 
 class LiveVehicleTracker:
-    """Accumulates per-vehicle fuel/CO2 each step and builds the vehicles message."""
+    """Accumulates per-vehicle fuel/CO2, distance and stops each step and builds the vehicles message.
+
+    Trips of vehicles that left the network are kept in `finished` (for the driver's trip report).
+    """
 
     def __init__(self, sumo_api: Any, tls_ids: List[str], penetration: float, seed: int,
                  eco_mgr: Optional[Any] = None, navigator: Optional[Any] = None) -> None:
@@ -66,6 +75,12 @@ class LiveVehicleTracker:
         self.vtype: Dict[str, str] = {}
         self.co2_mg: Dict[str, float] = {}
         self.fuel_mg: Dict[str, float] = {}
+        self.odo_m: Dict[str, float] = {}
+        self.stops: Dict[str, int] = {}
+        self.moving: Dict[str, bool] = {}
+        self.depart_t: Dict[str, float] = {}
+        self.od: Dict[str, Tuple[str, str]] = {}  # origin and destination edge
+        self.finished: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         self._dir_cache: Dict[Tuple[str, str], str] = {}
 
     def _type(self, vid: str) -> str:
@@ -82,21 +97,55 @@ class LiveVehicleTracker:
             self._dir_cache[key] = resolve_lane_direction(f"{edge}_0", tls_id, self.api)
         return self._dir_cache[key]
 
-    def step(self, vehicle_ids: List[str]) -> None:
-        """Integrate emissions over the last 1 s step; forget departed vehicles."""
+    def trip(self, vid: str) -> Optional[Dict[str, Any]]:
+        """Distance (m), CO2 (g), fuel (ml) and stops so far, or of the finished trip."""
+        if vid in self.co2_mg:
+            return {"dist_m": self.odo_m.get(vid, 0.0), "co2_g": self.co2_mg[vid] / 1000.0,
+                    "fuel_ml": self.fuel_mg.get(vid, 0.0) / PETROL_MG_PER_ML, "stops": self.stops.get(vid, 0)}
+        return self.finished.get(vid)
+
+    def step(self, vehicle_ids: List[str], t: Optional[float] = None) -> None:
+        """Integrate emissions, distance and stops over the last 1 s step; close departed trips."""
         alive = set(vehicle_ids)
         for vid in list(self.co2_mg):
             if vid not in alive:
-                self.co2_mg.pop(vid, None)
-                self.fuel_mg.pop(vid, None)
+                if t is not None and vid in self.depart_t:
+                    origin, dest = self.od.get(vid, ("", ""))
+                    self.finished[vid] = {
+                        "vtype": self.vtype.get(vid, "car"), "origin": origin, "destination": dest,
+                        "travel_s": float(t) - self.depart_t[vid], "dist_m": self.odo_m.get(vid, 0.0),
+                        "co2_g": self.co2_mg[vid] / 1000.0, "fuel_ml": self.fuel_mg.get(vid, 0.0) / PETROL_MG_PER_ML,
+                        "stops": self.stops.get(vid, 0),
+                    }
+                    while len(self.finished) > MAX_FINISHED:
+                        self.finished.popitem(last=False)
+                for d in (self.co2_mg, self.fuel_mg, self.odo_m, self.stops, self.moving, self.depart_t, self.od):
+                    d.pop(vid, None)
         for vid in vehicle_ids:
             if vid.startswith("incblk_"):
                 continue
             try:
                 self.co2_mg[vid] = self.co2_mg.get(vid, 0.0) + float(self.api.vehicle.getCO2Emission(vid))
                 self.fuel_mg[vid] = self.fuel_mg.get(vid, 0.0) + float(self.api.vehicle.getFuelConsumption(vid))
+                if t is None:
+                    continue
+                self.odo_m[vid] = float(self.api.vehicle.getDistance(vid))
+                speed = float(self.api.vehicle.getSpeed(vid))
             except Exception:
                 continue
+            if vid not in self.depart_t:
+                self.depart_t[vid] = float(t)
+                try:
+                    route = self.api.vehicle.getRoute(vid)
+                    self.od[vid] = (str(route[0]), str(route[-1])) if route else ("", "")
+                except Exception:
+                    self.od[vid] = ("", "")
+                self._type(vid)
+            if speed >= MOVING_SPEED:
+                self.moving[vid] = True
+            elif speed < STOP_SPEED and self.moving.get(vid):
+                self.moving[vid] = False
+                self.stops[vid] = self.stops.get(vid, 0) + 1
 
     def build(self, vehicle_ids: List[str], run_id: str, t: float) -> Dict[str, Any]:
         rows: List[List[Any]] = []
@@ -118,6 +167,8 @@ class LiveVehicleTracker:
             flags = 0
             if vtype == "emergency":
                 flags |= FLAG_EMERGENCY
+            if vtype == DRIVER_VTYPE:
+                flags |= FLAG_DRIVER
             if is_vehicle_equipped(vid, vtype=vtype, penetration=self.penetration, seed=self.seed):
                 flags |= FLAG_EQUIPPED
             if self.navigator is not None and self.navigator.is_nav_vehicle.get(vid):
@@ -142,5 +193,6 @@ class LiveVehicleTracker:
                 round(self.co2_mg.get(vid, 0.0) / 1000.0, 1),
                 round(self.fuel_mg.get(vid, 0.0) / PETROL_MG_PER_ML, 1),
                 advice.get("advice"), advice.get("speed"), advice.get("green_in"),
+                road, route[-1] if route else None,
             ])
         return {"type": "vehicles", "run_id": run_id, "t": int(t), "fields": VEHICLE_FIELDS, "rows": rows}

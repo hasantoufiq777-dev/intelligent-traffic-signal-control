@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-04T02:06:30+00:00",
+  "generated_at": "2026-11-06T17:30:33+00:00",
   "suites": {
     "signals": {
       "normal": {
@@ -9322,6 +9322,740 @@
           }
         }
       }
+    },
+    "zone": {
+      "accident_zone": {
+        "closure": {
+          "avg_travel_time": {
+            "mean": 102.061,
+            "std": 2.6869,
+            "ci95": [
+              100.1389,
+              103.9831
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "avg_waiting_time": {
+            "mean": 19.441,
+            "std": 2.4623,
+            "ci95": [
+              17.6796,
+              21.2024
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "ev_travel_time": {
+            "mean": 66.2,
+            "std": 7.1461,
+            "ci95": [
+              61.088,
+              71.312
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "max_queue": {
+            "mean": 8.1,
+            "std": 2.079,
+            "ci95": [
+              6.6128,
+              9.5872
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_queue_westbound": {
+            "mean": 2.1,
+            "std": 1.3703,
+            "ci95": [
+              1.1197,
+              3.0803
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_queue_eastbound": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_ev_wait_s": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_switches": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_clearance_s": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_conflicts": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "collisions": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "incident_rerouted_vehicles": {
+            "mean": 47.4,
+            "std": 5.9666,
+            "ci95": [
+              43.1318,
+              51.6682
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          }
+        },
+        "alternating": {
+          "avg_travel_time": {
+            "mean": 95.347,
+            "std": 1.6931,
+            "ci95": [
+              94.1358,
+              96.5582
+            ],
+            "n": 10,
+            "improvement_pct": 6.58,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "avg_waiting_time": {
+            "mean": 15.238,
+            "std": 1.1143,
+            "ci95": [
+              14.4409,
+              16.0351
+            ],
+            "n": 10,
+            "improvement_pct": 21.62,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "ev_travel_time": {
+            "mean": 74.2,
+            "std": 9.9532,
+            "ci95": [
+              67.0799,
+              81.3201
+            ],
+            "n": 10,
+            "improvement_pct": -12.08,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "max_queue": {
+            "mean": 8.2,
+            "std": 1.6865,
+            "ci95": [
+              6.9935,
+              9.4065
+            ],
+            "n": 10,
+            "improvement_pct": -1.23,
+            "p_value": 0.73047,
+            "test": "wilcoxon"
+          },
+          "zone_max_queue_westbound": {
+            "mean": 6.9,
+            "std": 2.079,
+            "ci95": [
+              5.4128,
+              8.3872
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_queue_eastbound": {
+            "mean": 5.9,
+            "std": 2.2336,
+            "ci95": [
+              4.3022,
+              7.4978
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_ev_wait_s": {
+            "mean": 0.1,
+            "std": 0.3162,
+            "ci95": [
+              -0.1262,
+              0.3262
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": 1.0,
+            "test": "wilcoxon"
+          },
+          "zone_switches": {
+            "mean": 15.5,
+            "std": 2.1213,
+            "ci95": [
+              13.9825,
+              17.0175
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_clearance_s": {
+            "mean": 9.8,
+            "std": 1.4757,
+            "ci95": [
+              8.7443,
+              10.8557
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_conflicts": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "collisions": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "incident_rerouted_vehicles": {
+            "mean": 52.0,
+            "std": 5.831,
+            "ci95": [
+              47.8288,
+              56.1712
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          }
+        },
+        "alternating+nav_astar": {
+          "avg_travel_time": {
+            "mean": 94.443,
+            "std": 1.2632,
+            "ci95": [
+              93.5394,
+              95.3466
+            ],
+            "n": 10,
+            "improvement_pct": 7.46,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "avg_waiting_time": {
+            "mean": 15.144,
+            "std": 0.6181,
+            "ci95": [
+              14.7018,
+              15.5862
+            ],
+            "n": 10,
+            "improvement_pct": 22.1,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "ev_travel_time": {
+            "mean": 71.5,
+            "std": 7.3068,
+            "ci95": [
+              66.2731,
+              76.7269
+            ],
+            "n": 10,
+            "improvement_pct": -8.01,
+            "p_value": 0.00781,
+            "test": "wilcoxon"
+          },
+          "max_queue": {
+            "mean": 7.7,
+            "std": 1.767,
+            "ci95": [
+              6.436,
+              8.964
+            ],
+            "n": 10,
+            "improvement_pct": 4.94,
+            "p_value": 0.99414,
+            "test": "wilcoxon"
+          },
+          "zone_max_queue_westbound": {
+            "mean": 4.1,
+            "std": 1.5239,
+            "ci95": [
+              3.0099,
+              5.1901
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_queue_eastbound": {
+            "mean": 5.1,
+            "std": 3.2813,
+            "ci95": [
+              2.7527,
+              7.4473
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_ev_wait_s": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "zone_switches": {
+            "mean": 16.9,
+            "std": 2.079,
+            "ci95": [
+              15.4128,
+              18.3872
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_clearance_s": {
+            "mean": 8.5,
+            "std": 2.0683,
+            "ci95": [
+              7.0204,
+              9.9796
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_conflicts": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "collisions": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "incident_rerouted_vehicles": {
+            "mean": 51.0,
+            "std": 6.1283,
+            "ci95": [
+              46.6161,
+              55.3839
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          }
+        },
+        "closure+ev_routing": {
+          "avg_travel_time": {
+            "mean": 102.061,
+            "std": 2.6869,
+            "ci95": [
+              100.1389,
+              103.9831
+            ],
+            "n": 10,
+            "improvement_pct": -0.0,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "avg_waiting_time": {
+            "mean": 19.441,
+            "std": 2.4623,
+            "ci95": [
+              17.6796,
+              21.2024
+            ],
+            "n": 10,
+            "improvement_pct": -0.0,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "ev_travel_time": {
+            "mean": 66.2,
+            "std": 7.1461,
+            "ci95": [
+              61.088,
+              71.312
+            ],
+            "n": 10,
+            "improvement_pct": -0.0,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "max_queue": {
+            "mean": 8.1,
+            "std": 2.079,
+            "ci95": [
+              6.6128,
+              9.5872
+            ],
+            "n": 10,
+            "improvement_pct": -0.0,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "zone_max_queue_westbound": {
+            "mean": 2.1,
+            "std": 1.3703,
+            "ci95": [
+              1.1197,
+              3.0803
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_queue_eastbound": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_ev_wait_s": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "zone_switches": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_clearance_s": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_conflicts": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "collisions": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "incident_rerouted_vehicles": {
+            "mean": 47.4,
+            "std": 5.9666,
+            "ci95": [
+              43.1318,
+              51.6682
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          }
+        },
+        "alternating+ev_routing": {
+          "avg_travel_time": {
+            "mean": 95.284,
+            "std": 1.2619,
+            "ci95": [
+              94.3813,
+              96.1867
+            ],
+            "n": 10,
+            "improvement_pct": 6.64,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "avg_waiting_time": {
+            "mean": 15.106,
+            "std": 0.8019,
+            "ci95": [
+              14.5324,
+              15.6796
+            ],
+            "n": 10,
+            "improvement_pct": 22.3,
+            "p_value": 0.00195,
+            "test": "wilcoxon"
+          },
+          "ev_travel_time": {
+            "mean": 60.5,
+            "std": 2.3214,
+            "ci95": [
+              58.8394,
+              62.1606
+            ],
+            "n": 10,
+            "improvement_pct": 8.61,
+            "p_value": 0.00781,
+            "test": "wilcoxon"
+          },
+          "max_queue": {
+            "mean": 7.8,
+            "std": 1.3984,
+            "ci95": [
+              6.7996,
+              8.8004
+            ],
+            "n": 10,
+            "improvement_pct": 3.7,
+            "p_value": 0.60938,
+            "test": "wilcoxon"
+          },
+          "zone_max_queue_westbound": {
+            "mean": 6.3,
+            "std": 1.0593,
+            "ci95": [
+              5.5422,
+              7.0578
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_queue_eastbound": {
+            "mean": 4.8,
+            "std": 2.0976,
+            "ci95": [
+              3.2995,
+              6.3005
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_ev_wait_s": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": 1.0,
+            "test": "identical"
+          },
+          "zone_switches": {
+            "mean": 16.1,
+            "std": 1.6633,
+            "ci95": [
+              14.9101,
+              17.2899
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_max_clearance_s": {
+            "mean": 11.1,
+            "std": 1.912,
+            "ci95": [
+              9.7323,
+              12.4677
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "zone_conflicts": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "collisions": {
+            "mean": 0.0,
+            "std": 0.0,
+            "ci95": [
+              0.0,
+              0.0
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          },
+          "incident_rerouted_vehicles": {
+            "mean": 52.1,
+            "std": 5.4863,
+            "ci95": [
+              48.1753,
+              56.0247
+            ],
+            "n": 10,
+            "improvement_pct": null,
+            "p_value": null,
+            "test": null
+          }
+        }
+      }
     }
   },
   "meta": {
@@ -9584,6 +10318,33 @@
           "baseline": "adaptive_vanet@route_off",
           "description": "adaptive_vanet, ambulance plans its route on the TMC map",
           "controller": "adaptive_vanet"
+        }
+      },
+      "zone": {
+        "closure": {
+          "baseline": "closure",
+          "description": "westbound road closed at J3, traffic detours (baseline)",
+          "controller": "adaptive_ev_vanet"
+        },
+        "alternating": {
+          "baseline": "closure",
+          "description": "alternating one-way traffic on the shared lane",
+          "controller": "adaptive_ev_vanet"
+        },
+        "alternating+nav_astar": {
+          "baseline": "closure",
+          "description": "alternating, and navigating cars see the wait at the zone",
+          "controller": "adaptive_ev_vanet"
+        },
+        "closure+ev_routing": {
+          "baseline": "closure",
+          "description": "road closed; the ambulance plans its route on the TMC map",
+          "controller": "adaptive_ev_vanet"
+        },
+        "alternating+ev_routing": {
+          "baseline": "closure",
+          "description": "alternating; the ambulance picks the zone or a detour on the TMC map",
+          "controller": "adaptive_ev_vanet"
         }
       }
     },

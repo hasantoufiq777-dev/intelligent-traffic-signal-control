@@ -59,12 +59,20 @@ def main() -> None:
         help="Fraction of equipped vehicles that follow GLOSA eco-driving advice (0 = off)",
     )
     parser.add_argument(
+        "--demand", type=float, default=1.0,
+        help="Traffic demand factor: every flow of the scenario multiplied by this (0.25 to 2; 1 = as defined)",
+    )
+    parser.add_argument(
         "--ev-routing", type=str, default="off", choices=["on", "off"],
         help="Ambulances choose and update their route with A* on the TMC map (off: scenario route)",
     )
     parser.add_argument(
-        "--network", type=str, default=None, choices=["single", "grid2x2"],
+        "--network", type=str, default=None, choices=["single", "grid2x2", "grid2x2_zone"],
         help="Override the scenario's network (default: the scenario YAML's network)",
+    )
+    parser.add_argument(
+        "--driver", action="store_true",
+        help="One-driver mode (live only): read drive commands as JSON lines on stdin (sim/driver.py)",
     )
     parser.add_argument(
         "--step-delay", type=float, default=0.0,
@@ -128,6 +136,8 @@ def main() -> None:
             step_delay=max(0.0, args.step_delay),
             eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
             ev_routing=(args.ev_routing == "on"),
+            driver=args.driver,
+            demand=min(2.0, max(0.25, args.demand)),
         )
 
         # In non-live mode, output result at the end as JSON on stdout

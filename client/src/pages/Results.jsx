@@ -13,6 +13,7 @@ const TABS = [
   { id: 'nav', title: 'Navigation' },
   { id: 'eco', title: 'Eco-driving' },
   { id: 'evroute', title: 'Ambulance routing' },
+  { id: 'zone', title: 'Accident zone' },
 ];
 
 const METRIC_LABEL = {
@@ -27,6 +28,9 @@ const METRIC_LABEL = {
   co2_g_per_km_eco: 'CO₂ eco cars', co2_g_per_km_non: 'CO₂ other cars', stops_per_vehicle_eco: 'Stops eco cars',
   stops_per_vehicle_non: 'Stops other cars', eco_advice_share_slow: 'Slow-advice share', spat_pdr: 'SPaT delivery',
   ev_reroutes: 'Ambulance reroutes',
+  zone_max_queue_westbound: 'Max queue westbound', zone_max_queue_eastbound: 'Max queue eastbound',
+  zone_ev_wait_s: 'Ambulance wait at zone (s)', zone_switches: 'Direction turns', zone_conflicts: 'Both directions in lane (s)',
+  zone_max_clearance_s: 'Longest clearance (s)', collisions: 'Collisions',
 };
 
 const KEY_METRICS = {
@@ -35,6 +39,7 @@ const KEY_METRICS = {
   nav: ['avg_travel_time', 'nav_avg_travel_time', 'nonnav_avg_travel_time', 'edge_load_cv', 'route_search_ms'],
   eco: ['co2_g_per_km', 'fuel_l_per_100km', 'stops_per_vehicle', 'avg_travel_time'],
   evroute: ['ev_travel_time', 'avg_waiting_time', 'missed_preemptions', 'ev_reroutes'],
+  zone: ['avg_travel_time', 'avg_waiting_time', 'ev_travel_time', 'zone_max_queue_westbound', 'zone_conflicts', 'collisions'],
 };
 
 const param = (label, name) => {
@@ -92,7 +97,7 @@ function ResultsTable({ suite, scen, cfgs, meta }) {
         <h2>Scenario: {scen}</h2>
         <span className="small muted">mean ± std (improvement vs baseline, paired p-value)</span>
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="Table (scrolls sideways on small screens)">
         <table className="data">
           <thead>
             <tr><th>Configuration</th>{metrics.map((m) => <th key={m}>{METRIC_LABEL[m] || m}</th>)}</tr>
@@ -164,7 +169,7 @@ function SuiteCharts({ suite, scen, cfgs }) {
       </div>
     );
   }
-  if (suite === 'evroute') return null; // table only: route_off vs route_on per controller
+  if (suite === 'evroute' || suite === 'zone') return null; // table only
   const ctrls = [...new Set(Object.keys(cfgs).map((l) => l.split('@')[0]))];
   return (
     <div className="overview-grid">
@@ -174,6 +179,32 @@ function SuiteCharts({ suite, scen, cfgs }) {
         series={ctrls.map((c) => ({ name: c, points: pts(cfgs, `${c}@`, 'stops_per_vehicle', 'eco') }))} />
     </div>
   );
+}
+
+/** Save text as a file from the browser. */
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** One suite as CSV: a row per scenario, configuration and metric. */
+export function suiteCsv(name, suite) {
+  const q = (v) => (v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replaceAll('"', '""')}"` : String(v));
+  const lines = [['suite', 'scenario', 'configuration', 'metric', 'mean', 'std', 'ci95_low', 'ci95_high', 'n', 'improvement_pct', 'p_value', 'test'].join(',')];
+  for (const [scen, cfgs] of Object.entries(suite)) {
+    for (const [label, metrics] of Object.entries(cfgs)) {
+      for (const [metric, e] of Object.entries(metrics)) {
+        lines.push([name, scen, label, metric, e.mean, e.std, e.ci95?.[0], e.ci95?.[1], e.n, e.improvement_pct, e.p_value, e.test].map(q).join(','));
+      }
+    }
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 export default function Results() {
@@ -200,13 +231,20 @@ export default function Results() {
   if (!summary) return <div className="notice">Loading results…</div>;
 
   const suite = summary.suites?.[tab] || {};
+  const stamp = String(summary.generated_at || '').slice(0, 10);
   return (
     <div className="stack">
       <div className="row">
-        <h1 style={{ fontSize: 20 }}>Experiment results</h1>
         <span className="small muted">
-          Generated {new Date(summary.generated_at).toLocaleString()} · seeds {summary.meta?.seeds?.join(', ')}
+          Simulation results, mean ± standard deviation over seeds {summary.meta?.seeds?.join(', ')} · generated {new Date(summary.generated_at).toLocaleString()}
           {summary.meta?.quick ? ' · quick run' : ''}
+        </span>
+        <span className="row" style={{ marginLeft: 'auto' }}>
+          <button type="button" className="btn" disabled={!Object.keys(suite).length}
+            onClick={() => download(`results-${tab}-${stamp}.csv`, suiteCsv(tab, suite), 'text/csv')}>Download this table (CSV)</button>
+          <button type="button" className="btn" onClick={() => download(`results-${stamp}.json`, JSON.stringify(summary, null, 2), 'application/json')}>
+            Download all results (JSON)
+          </button>
         </span>
       </div>
       <div className="tabs" role="tablist">

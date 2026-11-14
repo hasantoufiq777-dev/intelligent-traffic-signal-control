@@ -22,8 +22,13 @@ traffic:
     - {from: "left1J2", to: "right1J3", rate: 100}
 
 emergency:
-  enabled: false
-  vehicles: []
+  enabled: true
+  vehicles:
+    - id: amb1
+      depart: 80.0
+      from_edge: bottom0J0
+      to_edge: top1J3
+      approach_direction: S
 
 incident:
   enabled: false

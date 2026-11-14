@@ -29,6 +29,8 @@ def is_vehicle_equipped(
     """
     if vtype == "emergency" or "amb" in vehicle_id.lower() or "ev" in vehicle_id.lower():
         return True
+    if vtype == "driven":  # the dashboard driver's car (sim/driver.py) always has an OBU
+        return True
     if penetration >= 1.0:
         return True
     if penetration <= 0.0:
@@ -295,6 +297,8 @@ class RSUNode:
         self.incident_clear_time = float(clear_time)
         self.incident_stopline_exclusion = float(stopline_exclusion)
         self.incident_min_vehicles = max(1, int(min_vehicles))
+        # Edges whose queues another controller manages (the accident zone's approaches): no flags
+        self.incident_ignore_edges: Set[str] = set()
 
     def detect_incidents(self, current_time: float) -> List[IncidentFlagMessage]:
         """Raise or clear INCIDENT_FLAGs from the beacons this RSU has received.
@@ -317,6 +321,8 @@ class RSUNode:
             beacon = self.received_beacons.get(vid)
             info = self.edge_map_info.get(edge)
             if beacon is None or info is None:
+                continue
+            if edge in self.incident_ignore_edges:
                 continue
             end_xy = info[0]
             if math.hypot(beacon.pos[0] - end_xy[0], beacon.pos[1] - end_xy[1]) <= self.incident_stopline_exclusion:
