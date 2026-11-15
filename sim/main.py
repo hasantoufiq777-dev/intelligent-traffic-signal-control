@@ -48,7 +48,8 @@ def main() -> None:
         choices=["none", "astar", "aco", "aco_tuned"],
         help="Navigation mode",
     )
-    parser.add_argument("--penetration", type=float, default=1.0, help="OBU penetration rate (0.0 to 1.0)")
+    parser.add_argument("--penetration", type=float, default=0.5,
+                        help="Share of ordinary vehicles with a VANET radio, 0.0 to 1.0 (default 0.5)")
     parser.add_argument("--nav-fraction", type=float, default=0.3, help="Fraction of navigating vehicles (0.0 to 1.0)")
     parser.add_argument("--loss", type=float, default=0.0, help="Base channel loss probability (0.0 to 1.0)")
     parser.add_argument("--range", type=float, default=300.0, dest="range_m", help="Wireless communication range in meters")
@@ -67,7 +68,7 @@ def main() -> None:
         help="Ambulances choose and update their route with A* on the TMC map (off: scenario route)",
     )
     parser.add_argument(
-        "--network", type=str, default=None, choices=["single", "grid2x2", "grid2x2_zone"],
+        "--network", type=str, default=None, choices=["single", "grid2x2", "grid2x2_zone", "grid2x2_city"],
         help="Override the scenario's network (default: the scenario YAML's network)",
     )
     parser.add_argument(

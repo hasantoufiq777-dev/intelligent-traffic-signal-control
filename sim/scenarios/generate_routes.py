@@ -56,6 +56,14 @@ GRID_DEFAULT_OD_ROUTES: Dict[Tuple[str, str], List[str]] = {
 }
 
 GRID_NETWORKS = ("grid2x2", "grid2x2_zone")  # grid2x2_zone: the grid with the accident work zone
+CITY_NETWORK = "grid2x2_city"  # the grid inside a ring, short-cuts and gates (sim/sumo/generate_city_net.py)
+
+# City trips between the four corners (sim/sumo/generate_city_net.py CITY_ENTRY / CITY_EXIT): they
+# enter on the ring road leaving a corner and leave on the ring road arriving at one. SUMO routes each
+# trip for its vehicle class at departure, so lane permissions are respected.
+HEAVY_KINDS = ("bus", "truck")
+CITY_GATES_IN = {"SW": "SWbottom0", "SE": "SEright0", "NE": "NEtop1", "NW": "NWleft1"}
+CITY_GATES_OUT = {"SW": "left0SW", "SE": "bottom1SE", "NE": "right1NE", "NW": "top0NW"}
 
 
 def load_scenario_config(scenario_path: Path) -> Dict[str, Any]:
@@ -148,6 +156,52 @@ def generate_grid_routes(
     return vehicles
 
 
+def generate_city_trips(
+    config: Dict[str, Any],
+    rng: np.random.Generator,
+    duration: float,
+) -> List[Dict[str, Any]]:
+    """City trips: Poisson arrivals per gate pair; each vehicle's category drawn from the scenario's
+    vehicle mix. A flow may name ``via`` roads (for example through the signalised grid)."""
+    from sim.vehicles import DEFAULT_MIX
+
+    traffic_cfg = config.get("traffic", {})
+    mix = dict(traffic_cfg.get("vehicle_mix") or DEFAULT_MIX)
+    kinds = sorted(mix)
+    probs = np.array([float(mix[k]) for k in kinds], dtype=float)
+    probs = probs / probs.sum()
+    flows = traffic_cfg.get("od_flows") or [
+        {"from": a, "to": b, "rate": float(traffic_cfg.get("rate_per_od", 60.0))}
+        for a in CITY_GATES_IN for b in CITY_GATES_OUT if a != b
+    ]
+    vehicles: List[Dict[str, Any]] = []
+    for idx, flow in enumerate(flows):
+        o = CITY_GATES_IN.get(flow["from"], flow["from"])
+        d = CITY_GATES_OUT.get(flow["to"], flow["to"])
+        rate_per_hour = float(flow.get("rate", 60.0))
+        if rate_per_hour <= 0:
+            continue
+        rate_per_sec = rate_per_hour / 3600.0
+        curr_time = float(rng.exponential(1.0 / rate_per_sec))
+        veh_idx = 0
+        while curr_time < duration:
+            kind = str(rng.choice(kinds, p=probs))
+            # Buses and trucks may not turn left at the grid signals (inner lanes are closed to them),
+            # so a forced route through the grid is dropped for them; SUMO routes them legally.
+            via = None if kind in HEAVY_KINDS else flow.get("via")
+            vehicles.append({
+                "id": f"c{idx}_{kind}_{veh_idx}",
+                "type": kind,
+                "depart": round(curr_time, 2),
+                "from": o,
+                "to": d,
+                "via": " ".join(via) if isinstance(via, list) else via,
+            })
+            veh_idx += 1
+            curr_time += float(rng.exponential(1.0 / rate_per_sec))
+    return vehicles
+
+
 def scale_demand(config: Dict[str, Any], factor: float) -> Dict[str, Any]:
     """Return a copy of a scenario config with every traffic flow multiplied by ``factor``
     (the dashboard's demand setting). Factor 1 returns the config unchanged."""
@@ -181,6 +235,10 @@ def generate_routes(
     network = network_override or config.get("network", "single")
 
     rng = np.random.default_rng(seed)
+
+    if network == CITY_NETWORK:
+        _write_city_routes(config, rng, duration, output_path)
+        return
 
     if network in GRID_NETWORKS:
         vehicles = generate_grid_routes(config, rng, duration)
@@ -277,6 +335,39 @@ def generate_routes(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(pretty_xml)
+
+
+def _write_city_routes(config: Dict[str, Any], rng: np.random.Generator, duration: float,
+                       output_path: Path) -> None:
+    """Route file for the city network: every vehicle category's vType (from the catalogue) and one
+    <trip> per vehicle. Ambulances from the scenario get a trip too."""
+    from sim.vehicles import CATALOG, VehicleTypeFactory
+
+    vehicles = generate_city_trips(config, rng, duration)
+    emergency_cfg = config.get("emergency", {})
+    if emergency_cfg.get("enabled", False):
+        for ev in emergency_cfg.get("vehicles", []):
+            vehicles.append({"id": ev.get("id", "amb1"), "type": "emergency",
+                             "depart": round(float(ev.get("depart", 120.0)), 2),
+                             "from": CITY_GATES_IN.get(ev.get("from", "SW"), ev.get("from", "SWbottom0")),
+                             "to": CITY_GATES_OUT.get(ev.get("to", "NE"), ev.get("to", "right1NE")),
+                             "via": ev.get("via")})
+    vehicles.sort(key=lambda v: (v["depart"], v["id"]))
+
+    root = ET.Element("routes")
+    root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    root.set("xsi:noNamespaceSchemaLocation", "http://sumo.dlr.de/xsd/routes_file.xsd")
+    VehicleTypeFactory().vtype_elements(root, CATALOG.keys())
+    for veh in vehicles:
+        attrs = {"id": veh["id"], "type": veh["type"], "depart": f"{veh['depart']:.2f}", "from": veh["from"],
+                 "to": veh["to"], "departLane": "best", "departSpeed": "max"}
+        if veh.get("via"):
+            attrs["via"] = veh["via"]
+        ET.SubElement(root, "trip", attrs)
+    parsed = xml.dom.minidom.parseString(ET.tostring(root, encoding="utf-8"))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(parsed.toprettyxml(indent="    "))
 
 
 def main() -> None:

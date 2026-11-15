@@ -5,6 +5,7 @@ Provides per-step CSV logging and tripinfo XML extraction for performance evalua
 
 from __future__ import annotations
 
+from sim.vehicles import is_driven_type
 import csv
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -145,7 +146,7 @@ def parse_tripinfo(
         vid = trip.attrib.get("id", "")
 
         # Synthetic incident blockers (Module 10) and the dashboard driver's car are not scenario traffic
-        if vid.startswith("incblk_") or vtype in ("incident_blocker", "driven"):
+        if vid.startswith("incblk_") or vtype == "incident_blocker" or is_driven_type(vtype):
             continue
 
         waiting_times.append(w)
@@ -202,7 +203,7 @@ def parse_tripinfo_emissions(
     for trip in root.findall("tripinfo"):
         vid = trip.attrib.get("id", "")
         vtype = trip.attrib.get("vType", "")
-        if vid.startswith("incblk_") or vtype in ("incident_blocker", "driven"):
+        if vid.startswith("incblk_") or vtype == "incident_blocker" or is_driven_type(vtype):
             continue
         em = trip.find("emissions")
         if em is None:

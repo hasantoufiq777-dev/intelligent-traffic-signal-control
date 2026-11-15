@@ -3,7 +3,7 @@
 | Area | Documents |
 |---|---|
 | **Using the platform** | [User guide](guides/USER_GUIDE.md) · [Administrator guide](guides/ADMIN_GUIDE.md) · [Teacher demonstration guide](guides/TEACHER_DEMO_GUIDE.md) · [Troubleshooting](guides/TROUBLESHOOTING.md) |
-| **Architecture** | [Platform architecture](architecture/ARCHITECTURE.md) · [API and socket events](architecture/API.md) · [Database schema](architecture/DATABASE.md) · [Implementation plan](architecture/IMPLEMENTATION_PLAN.md) |
+| **Architecture** | [Platform architecture](architecture/ARCHITECTURE.md) · [API and socket events](architecture/API.md) · [Database schema](architecture/DATABASE.md) · [Implementation plan](architecture/IMPLEMENTATION_PLAN.md) · [Design patterns](architecture/DESIGN_PATTERNS.md) · [Supervisor enhancements plan](architecture/ENHANCEMENT_PLAN.md) |
 | **Deployment** | [Deployment guide](deployment/DEPLOYMENT.md) (install, configuration, HTTPS, backup, restore, rollback); files in [`deploy/`](../deploy/) |
 | **Research** | [How it works, module by module](HOW_IT_WORKS.md) · [Research index](research/README.md) · [Project overview](PROJECT_OVERVIEW.md) · [Method](method.md) · [Results and discussion](results_discussion.md) |
 | **Testing** | [Test strategy](testing/TEST_STRATEGY.md) · [Test plan](testing/TEST_PLAN.md) · [Final acceptance report](testing/FINAL_ACCEPTANCE_REPORT.md) |

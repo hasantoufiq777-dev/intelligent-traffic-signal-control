@@ -29,7 +29,9 @@ def is_vehicle_equipped(
     """
     if vtype == "emergency" or "amb" in vehicle_id.lower() or "ev" in vehicle_id.lower():
         return True
-    if vtype == "driven":  # the dashboard driver's car (sim/driver.py) always has an OBU
+    if vtype == "driven" or str(vtype).startswith("driven_"):  # the dashboard driver's vehicle has an OBU
+        return True
+    if vtype == "eco_car":  # city eco cars are connected cars: they need SPaT for speed advice
         return True
     if penetration >= 1.0:
         return True

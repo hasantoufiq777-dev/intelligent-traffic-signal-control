@@ -2,7 +2,10 @@
 import crypto from 'node:crypto';
 import { DriverSeat } from './driver.js';
 import { SimProcess } from './simProcess.js';
-import { buildSimArgs, VehicleIdSchema } from './protocol.js';
+import { buildSimArgs, RouteQuerySchema, VehicleIdSchema } from './protocol.js';
+
+/** Columns of the compact map frame sent to every viewer. */
+const MAP_FIELDS = ['id', 'x', 'y', 'angle', 'flags', 'kind'];
 
 const ROOM = 'live';
 const VEHICLES_OFFSET_MS = 150; // keep the map frame out of the state broadcast's tick
@@ -71,6 +74,37 @@ export class LiveChannel {
     this._lastPersistLog = 0;
     // One-driver mode: the only thing a viewer can control (one at a time)
     this.driver = new DriverSeat({ cfg, io, db, logger, live: this, room: ROOM });
+    this._routeQueries = new Map(); // qid -> { cb, timer, socketId }
+    this._routeSeq = 0;
+  }
+
+  /**
+   * Route explorer: forward an A* query to the simulation and answer only the asking viewer.
+   * At most one open query per viewer and one every 500 ms; 5 s timeout.
+   */
+  _routeQuery(socket, body, cb) {
+    const parsed = RouteQuerySchema.safeParse(body ?? {});
+    if (!parsed.success) return cb({ ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid roads', code: 'invalid' });
+    if (!this.proc || this.lifecycle !== 'RUNNING') return cb({ ok: false, error: 'No simulation is running', code: 'not_running' });
+    const now = Date.now();
+    if ((socket.data.lastRouteQuery ?? 0) > now - 500 || [...this._routeQueries.values()].some((q) => q.socketId === socket.id)) {
+      return cb({ ok: false, error: 'One route search at a time, please', code: 'rate_limited' });
+    }
+    socket.data.lastRouteQuery = now;
+    this._routeSeq += 1;
+    const qid = `q${this._routeSeq}`;
+    const timer = setTimeout(() => {
+      this._routeQueries.delete(qid);
+      cb({ ok: false, error: 'The simulation did not answer in time', code: 'timeout' });
+    }, 5000);
+    timer.unref?.();
+    this._routeQueries.set(qid, { cb, timer, socketId: socket.id });
+    if (!this.proc.send({ cmd: 'routes', qid, ...parsed.data })) {
+      clearTimeout(timer);
+      this._routeQueries.delete(qid);
+      return cb({ ok: false, error: 'The simulation is not accepting commands', code: 'not_running' });
+    }
+    return undefined;
   }
 
   // ------------------------------------------------------------------ viewers
@@ -86,6 +120,8 @@ export class LiveChannel {
       // Following a car is a subscription (detail stream for one vehicle), not control.
       socket.on('follow', (id) => this._follow(socket, id));
       socket.on('unfollow', () => this._follow(socket, null));
+      // Route explorer (read-only): the simulation's A* answers for this viewer only
+      socket.on('routes', (body, cb) => this._routeQuery(socket, body, typeof cb === 'function' ? cb : () => {}));
       this._scheduleViewerBroadcast();
     });
   }
@@ -138,17 +174,26 @@ export class LiveChannel {
   }
 
   /** Map rows for every viewer: [id, x, y, angle, flags]. */
+  /**
+   * Compact map rows [id, x, y, angle, flags, kind] (MAP_FIELDS). kind is the vehicle category, null for
+   * an ordinary car (most rows) to keep the frame small; older simulations without it give null too.
+   */
   _mapRows(msg) {
     const f = msg.fields ?? [];
     const ix = ['id', 'x', 'y', 'angle', 'flags'].map((k) => f.indexOf(k));
     if (ix.some((i) => i < 0)) return [];
-    return (msg.rows ?? []).map((r) => ix.map((i) => r[i]));
+    const k = f.indexOf('kind');
+    return (msg.rows ?? []).map((r) => {
+      const row = ix.map((i) => r[i]);
+      row.push(k >= 0 && r[k] !== 'car' ? r[k] ?? null : null);
+      return row;
+    });
   }
 
   snapshot() {
     return {
       network: this.network,
-      vehicles: this.latestVehicles ? { t: this.latestVehicles.t, rows: this._mapRows(this.latestVehicles) } : null,
+      vehicles: this.latestVehicles ? { t: this.latestVehicles.t, fields: MAP_FIELDS, rows: this._mapRows(this.latestVehicles) } : null,
       now_playing: this.nowPlaying(),
       status: this.lastStatus,
       latest: this.latestState,
@@ -402,6 +447,16 @@ export class LiveChannel {
         this.playback = { paused: Boolean(msg.paused), speed: Number(msg.speed) || 1 };
         this.io.to(ROOM).emit('now_playing', this.nowPlaying());
         break;
+      case 'routes': {
+        const q = this._routeQueries.get(String(msg.qid));
+        if (q) {
+          this._routeQueries.delete(String(msg.qid));
+          clearTimeout(q.timer);
+          const { type: _t, qid: _q, ...answer } = msg;
+          q.cb(answer);
+        }
+        break;
+      }
       case 'result':
         this.lastResult = msg;
         this._persist('the result', () => this.db.saveResult(runId, msg.metrics));
@@ -479,7 +534,7 @@ export class LiveChannel {
 
   _emitVehicles(msg) {
     this._lastVehiclesEmit = Date.now();
-    const payload = { run_id: this.current?.run_id, t: msg.t, rows: this._mapRows(msg), sent_at: this._lastVehiclesEmit };
+    const payload = { run_id: this.current?.run_id, t: msg.t, fields: MAP_FIELDS, rows: this._mapRows(msg), sent_at: this._lastVehiclesEmit };
     this.io.to(ROOM).volatile.emit('vehicles', payload);
     this.stats.bytes_broadcast += Buffer.byteLength(JSON.stringify(payload)) * this.viewers();
     // Detail rows only to the viewers following each car. Reliable (not volatile): they are small,

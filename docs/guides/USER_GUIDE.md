@@ -38,12 +38,23 @@ every viewer sees it.
 
 ## 4. The live traffic map
 
-The map shows the 2×2 grid with junctions J0–J3 and every car of the running simulation, moved
-from the simulation's own positions once per second.
+The map shows the 2×2 grid with junctions J0–J3 (in the `city` scenario also the ring road, bus
+lanes and residential streets around it) and every vehicle of the running simulation, moved from the
+simulation's own positions once per second.
+
+Above the map, **Traffic control view** shows this overhead map; **Driver perspective** shows the
+road in 3D from the seat of the vehicle you drive or follow (or from just behind it), with its speed,
+the speed limit, the light ahead and the efficient speed. Both show the same simulation.
 
 | Element | Meaning |
 |---|---|
-| Car colours | ordinary car, VANET-equipped car, eco (speed-advice) car, ambulance, the car you drive; a yellow dot = slowing for a green |
+| Vehicle shapes | car, motorcycle, bus, truck, ambulance (white with a red cross); the vehicle you drive is purple |
+| Green vehicle | an eco vehicle: always this one green, on the map, in the 3D view and in the legend |
+| Blue roof dot | the vehicle has a VANET radio; vehicles without a dot are not connected. The counter at the bottom of the map shows how many are connected and the penetration (50 % by default) |
+| Yellow dot | slowing for a green |
+| Red-tinted lane | bus lane (buses and ambulances only) |
+| Light grey street | residential street: 30 km/h, no trucks or buses |
+| Hatched lane | closed to trucks and buses (they may not turn left at the signals) |
 | Signal lights and numbers | each approach's light and the seconds until it changes |
 | Number on an approach | cars queued there |
 | Road colour | congestion from the measured road speed (green / amber / red) |
@@ -69,6 +80,7 @@ from the simulation's own positions once per second.
 | Signals | each junction's phase history and queues; how the current controller decides |
 | VANET | message delivery ratio, loss, delay and measured jitter; each roadside unit's estimated queue against the true one |
 | Emergency | the ambulance, its route, alerts and preemptions |
+| Live traffic → Routes | the route explorer: pick a start, a destination and a vehicle type; the simulation's A* returns the fastest route now, the shortest and other alternatives, with distance, time at free flow, time now, signals and congestion, drawn on the map. It says when the shorter route is not the faster one |
 | Navigation | trip times of navigating cars against the others; how evenly traffic spreads; the latest route decision (the A\* route, or ACO's alternatives with their probabilities and which was picked) |
 | Incidents | accidents, when they were detected and how traffic reacts |
 | Work zone | the shared lane: whose turn it is, queues at both ends, the ambulance's turn |
@@ -83,11 +95,30 @@ from the simulation's own positions once per second.
 The live pages show what the current run produces. With some controllers or scenarios a panel
 stays empty and says why (for example, there are no VANET figures under fixed-time signals).
 
-## 6. Driving a car
+## 6. Driving a vehicle
 
-In *Drive a car*, choose a start road and a destination, then *Take the car*. Control it with
-**Go**, **Ease off** and **Stop**; the panel shows the next light, the speed advice and ambulance
-warnings. Only one person drives at a time.
+In *Drive a vehicle* (tab *Vehicle*), choose the vehicle (car, eco car, motorcycle, bus or truck in
+the `city` scenario), a start road and a destination, then *Take the car*. Only one person drives at
+a time.
+
+| Control | Key | Effect |
+|---|---|---|
+| Accelerate | W or ↑ | 5 km/h faster |
+| Brake | X or ↓ | 5 km/h slower (to a stop below 5 km/h) |
+| Slow down | E | to 60 % of the current speed |
+| Stop | S or Space | brake to a stop (after the junction if you are in it) |
+| Normal | G | drive normally, up to the limit |
+| Desired speed | slider | hold at most this speed |
+
+Your controls only set a target speed. It is never above the speed limit, and the simulation still
+keeps safe gaps, stops at red lights and uses only the lanes your vehicle may use.
+
+The panel shows your speed and the limit, the roadside unit's advice for the next light, and the
+**estimated fuel-efficient speed** with its reasons: the limit, the light ahead (arrive on green
+instead of stopping), the vehicle ahead, congestion, and the steady speed with the least fuel for
+your vehicle. It also shows fuel, CO₂ and time for your speed against the recommended one, and a
+chart of fuel against speed. *Drive at … km/h* applies it. Switch the map to *Driver perspective* to
+see the road from your seat.
 
 - Without input for 2 minutes, the car is handed back.
 - A drive lasts at most 10 minutes.

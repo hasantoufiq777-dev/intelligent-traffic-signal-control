@@ -35,7 +35,9 @@ import random
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from sim.commands import CommandReader  # noqa: F401  (re-exported for the runner)
+from sim.eco_speed import recommend as eco_recommend
 from sim.vanet.glosa import glosa_advice
+from sim.vehicles import CATALOG, driven_type_id, is_driven_type
 from sim.vanet.nodes import build_edge_info, distance_along_route
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,7 @@ DRIVER_PREFIX = "drv"
 GUI_COLOR = (170, 60, 220, 255)  # purple, as on the dashboard map
 
 MODES = ("go", "ease", "stop")
+DRIVABLE = ("car", "eco_car", "motorcycle", "bus", "truck")  # categories a viewer may drive
 MIN_EASE_MS = 2.0  # lowest "ease off" speed (about 7 km/h)
 FOLLOW_MARGIN_MS = 1.4  # within 5 km/h of the advised speed counts as following it
 ALERT_HOLD_S = 3.0  # keep a received ambulance alert this long (alerts repeat every second)
@@ -111,6 +114,8 @@ class DriverManager:
         self.applied: Optional[float] = None  # last value given to setSpeed (-1 = normal)
         self.last: Dict[str, Any] = {}
         self.advice: Dict[str, Any] = {"advice": "none"}
+        self.eco: Optional[Dict[str, Any]] = None  # estimated fuel-efficient speed (sim/eco_speed.py)
+        self.kind = "car"  # category of the driven vehicle
         self.adv_seconds = 0
         self.adv_followed = 0
         self.amb: Optional[Dict[str, Any]] = None
@@ -175,18 +180,23 @@ class DriverManager:
                 self._reset()
                 self._notice(t, "error", f"Could not start the drive: {e}", vid="")
 
-    def _ensure_vtype(self) -> None:
-        if self._vtype_ready:
-            return
+    def _ensure_vtype(self, kind: str = "car") -> str:
+        """The SUMO type of the driven vehicle: a copy of the chosen category ("driven" for a car,
+        "driven_<category>" otherwise), so it keeps that category's size, class and fuel model.
+        Networks without that category (the research grids) give a car."""
         types = set(self.api.vehicletype.getIDList())
-        if DRIVER_VTYPE not in types:
-            base = "car" if "car" in types else "DEFAULT_VEHTYPE"
-            self.api.vehicletype.copy(base, DRIVER_VTYPE)
+        if kind not in types:
+            kind = "car"
+        vtype = driven_type_id(kind)
+        if vtype not in types:
+            base = kind if kind in types else ("car" if "car" in types else "DEFAULT_VEHTYPE")
+            self.api.vehicletype.copy(base, vtype)
             try:
-                self.api.vehicletype.setColor(DRIVER_VTYPE, GUI_COLOR)
+                self.api.vehicletype.setColor(vtype, GUI_COLOR)
             except Exception:
                 pass
         self._vtype_ready = True
+        return vtype
 
     def _start(self, cmd: Dict[str, Any], t: float) -> None:
         if self.active:
@@ -197,17 +207,19 @@ class DriverManager:
         if origin not in edges or dest not in edges:
             self._notice(t, "error", f"Unknown road: {origin if origin not in edges else dest}", vid="")
             return
-        self._ensure_vtype()
-        route = list(self.api.simulation.findRoute(origin, dest, vType=DRIVER_VTYPE).edges)
+        kind = str(cmd.get("kind") or "car")
+        vtype = self._ensure_vtype(kind if kind in DRIVABLE else "car")
+        route = list(self.api.simulation.findRoute(origin, dest, vType=vtype).edges)
         if not route:
-            self._notice(t, "error", f"No route from {origin} to {dest}", vid="")
+            self._notice(t, "error", f"No route from {origin} to {dest} for this vehicle", vid="")
             return
         self._n += 1
         vid = f"{DRIVER_PREFIX}{self._n}"
         rid = f"{vid}_route"
         self.api.route.add(rid, route)
-        self.api.vehicle.add(vid, rid, typeID=DRIVER_VTYPE, depart="now", departLane="best", departSpeed="max")
+        self.api.vehicle.add(vid, rid, typeID=vtype, depart="now", departLane="best", departSpeed="max")
         self._reset()
+        self.kind = vtype[len(DRIVER_VTYPE) + 1:] if vtype != DRIVER_VTYPE else "car"
         self.vid, self.status = vid, "waiting"
         self.origin, self.destination, self.route = origin, dest, route
         self.t_added = t
@@ -309,11 +321,12 @@ class DriverManager:
             pos = tuple(api.vehicle.getPosition(vid))
             speed = float(api.vehicle.getSpeed(vid))
             allowed = float(api.vehicle.getAllowedSpeed(vid))
+            road_limit = float(api.lane.getMaxSpeed(api.vehicle.getLaneID(vid)))  # the posted limit
         except Exception:
             return
         self.route = route
         self.last = {"route": route, "idx": idx, "road": road, "lane_pos": lane_pos, "pos": pos,
-                     "speed": speed, "allowed": allowed}
+                     "speed": speed, "allowed": allowed, "road_limit": road_limit}
         self._apply_speed()
 
         # Next signal on the route and the advice for it
@@ -325,6 +338,7 @@ class DriverManager:
                 break
         self.last["next"] = nxt
         self.advice = self._advise(t, vid, nxt, allowed)
+        self.eco = self._eco_speed(vid, speed, allowed, road_limit, nxt, route, idx, road, lane_pos)
         if self.advice.get("advice") == "slow" and self.advice.get("speed") is not None:
             self.adv_seconds += 1
             if speed <= float(self.advice["speed"]) + FOLLOW_MARGIN_MS:
@@ -364,6 +378,46 @@ class DriverManager:
         res = glosa_advice(dist, msg_spat, age, allowed, self.v_min, self.margin_s, self.max_uncertainty_s)
         res["signal"] = out["signal"]
         return res
+
+    def _eco_speed(self, vid: str, speed: float, allowed: float, road_limit: float,
+                   nxt: Optional[Tuple[str, float, str]],
+                   route: List[str], idx: int, road: str, lane_pos: float) -> Optional[Dict[str, Any]]:
+        """Estimated fuel-efficient speed with its reasons (sim/eco_speed.py), from what this car
+        knows: its speed limit, the next light's timing (the SPaT it received), the vehicle ahead and
+        the speed of traffic on its next road."""
+        api = self.api
+        light = None
+        a = self.advice or {}
+        if nxt is not None and a.get("signal"):
+            light = {"dist": nxt[1], "signal": a.get("signal"), "green_in": a.get("green_in"),
+                     "green_ends_in": a.get("green_ends_in")}
+        leader = None
+        try:
+            lead = api.vehicle.getLeader(vid, 100.0)
+            if lead and lead[0]:
+                leader = {"gap": float(lead[1]), "speed": float(api.vehicle.getSpeed(lead[0]))}
+        except Exception:
+            pass
+        traffic = None
+        try:
+            ahead = route[idx + 1] if idx + 1 < len(route) else None
+            if ahead and api.edge.getLastStepVehicleNumber(ahead) > 0:
+                traffic = float(api.edge.getLastStepMeanSpeed(ahead))
+        except Exception:
+            pass
+        left = None
+        if not road.startswith(":"):
+            left = max(0.0, self.edge_info.get(road, (None, 0.0))[1] - lane_pos)
+        try:
+            top = min(float(api.vehicle.getMaxSpeed(vid)), allowed)  # this vehicle never exceeds this here
+        except Exception:
+            top = allowed
+        try:
+            return eco_recommend(self.kind, speed, road_limit, max_speed=top, light=light, leader=leader,
+                                 traffic_speed=traffic, road_left_m=left)
+        except Exception as e:  # missing curve file, odd input: no advice rather than a failed run
+            logger.debug("eco speed advice failed: %s", e)
+            return None
 
     def _queue_ahead(self, vid: str) -> bool:
         try:
@@ -474,7 +528,7 @@ class DriverManager:
     def _compare(self) -> Optional[Dict[str, Any]]:
         """Other cars that finished during this run: same origin and destination if any, else all."""
         done = [r for r in (self.tracker.finished.values() if self.tracker is not None else [])
-                if r.get("vtype") not in ("emergency", DRIVER_VTYPE) and r.get("dist_m", 0) > 50]
+                if r.get("vtype") != "emergency" and not is_driven_type(r.get("vtype")) and r.get("dist_m", 0) > 50]
         same = [r for r in done if r.get("origin") == self.origin and r.get("destination") == self.destination]
         group, rows = ("same_route", same) if same else ("all", done)
         if not rows:
@@ -512,7 +566,8 @@ class DriverManager:
         a = self.advice
         msg.update({
             "speed_kmh": _kmh(last.get("speed")),
-            "limit_kmh": _kmh(last.get("allowed")),
+            "limit_kmh": _kmh(last.get("road_limit") or last.get("allowed")),  # posted limit
+            "allowed_kmh": _kmh(last.get("allowed")),  # highest speed this vehicle drives here
             "holding": self.holding,
             "road": last.get("road"),
             "dist_left_m": round(left),
@@ -527,5 +582,7 @@ class DriverManager:
             "fuel_ml": round(trip["fuel_ml"], 1),
             "co2_g": round(trip["co2_g"], 1),
             "amb": self.amb,
+            "kind": self.kind,
+            "eco_speed": self.eco,
         })
         return msg

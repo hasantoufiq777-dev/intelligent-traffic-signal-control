@@ -98,6 +98,11 @@ results/                    summary.json/.md, plots, GA output, raw runs (raw.cs
 - `grid2x2.net.xml`: the main network. Four signalised junctions **J0, J1, J2, J3** 250 m apart,
   2 lanes per direction, 50 km/h, entry roads on all sides.
 - `grid2x2_zone.net.xml`: the same grid with an 80 m accident work zone on the J2–J3 road (section 12).
+- `grid2x2_city.net.xml` (scenario `city`, November 2026): the same four junctions inside a small city: an
+  arterial ring (60 km/h, wide lanes, bus lanes on two sides), residential short-cuts (30 km/h, no trucks or
+  buses) and mixed vehicles (cars, eco cars, motorcycles, buses, trucks), each with its own size, speeds and
+  HBEFA4 emission class. Built by `sim/sumo/generate_city_net.py`, which checks every vehicle class can reach
+  every corner and that J0–J3 keep their signal links. The research results use `grid2x2` and are unchanged.
 
 **Traffic demand** comes from scenario YAML files (`sim/scenarios/*.yaml`): origin–destination flows
 in vehicles per hour, generated with a seeded random arrival process, so each seed gives a different
@@ -112,6 +117,7 @@ but repeatable traffic pattern.
 | `incident` | A road closure in the middle of the run |
 | `ev_incident`, `ev_congested` | Ambulance with a closure ahead / a jammed corridor |
 | `accident_zone` | Crash on J2–J3 handled by alternating one-way traffic |
+| `city` | The city network: route alternatives, mixed vehicles, lane permissions (live demonstration) |
 
 **How cars drive (SUMO's job).** The project never moves cars by hand; SUMO's driving models do:
 - Car following (Krauss model): each car keeps a safe gap (2.5 m when stopped), accelerates at up
@@ -342,7 +348,16 @@ the connections of `grid2x2`.
 - **Demo:** guided 13-step teacher demonstration with pause to explain.
 - **Run control:** start/stop with all options (including demand 0.25–2×), playback, send an
   ambulance, driver mode, SUMO-GUI. **Administration** and **Account** pages.
+- **Traffic control view / driver perspective:** the map, or a three.js 3D view from the seat of the driven
+  or followed vehicle, from the same simulation frames.
+- **Route explorer:** the simulation's A\* alternatives between two roads for a vehicle class (fastest now,
+  shortest, others), with distance, free-flow and current time, signals and congestion, on the map.
+- **Driving:** choose the vehicle; accelerate, brake, slow down, stop or set a speed (never above the limit);
+  estimated fuel-efficient speed with reasons, from fuel curves measured with SUMO's HBEFA4 model.
+- VANET penetration defaults to 50 %; connected vehicles carry a roof dot and the map counts them; every eco
+  vehicle has one fixed colour.
 - Works from 360 px to 1920 px wide; accessibility audits with 0 violations.
+- Design patterns (Strategy, Factory, Adapter, State, Observer): [architecture/DESIGN_PATTERNS.md](architecture/DESIGN_PATTERNS.md).
 
 **Map details**
 - Roads drawn wider than real so they are visible; signal heads coloured by state.
@@ -437,6 +452,7 @@ Zero times with both directions in the shared lane, zero collisions.
 | Later | Ambulance route choice and a preemption deadlock fix; one-driver mode; map fixes (front-bumper drawing, collision check, no spin on turns, varied car colours and body styles); accident work zone with alternating one-way traffic |
 | Platform phases 1–10 | Accounts, roles and security; shared live run with lifecycle; live map and module pages; research dashboards and event centre; guided teacher demo; security, accessibility and 1,000-user load tests; performance work (first message 350 → 64 KB); playback controls; measured jitter, ACO route decisions, demand setting, platform events; deployment guide and files; user, admin, teacher and troubleshooting guides; test strategy, plan and twelve test reports |
 | November 2026 | Ambulance sent at any moment from Run control, with priority added for every controller (`sim/dispatch.py`) |
+| November 2026 (supervisor) | City network with route alternatives, vehicle types and lane rules; 50 % penetration default; A\* route explorer with lane permissions; 3D driver perspective; speed controls and fuel-efficient speed advice; route planners (Strategy) and controller factory |
 
 **Fixes found along the way (documented in method.md):** navigation cost model (signal wait per
 junction), preemption deadlock when an ambulance changes approach, two lanes merging into the
@@ -473,7 +489,7 @@ python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev
 npm run sim:experiments          # full evaluation, 10 seeds -> results/summary.json, summary.md, plots
 python sim/analytics/evaluate.py --suite zone --workers 8     # one suite
 npm run sim:tune                 # GA tuning (signals, then ACO)
-npm test                         # Python (148), gateway (87) and client (15) tests
+npm test                         # Python (160), gateway (89) and client (15) tests
 npm run test:e2e                 # end-to-end with real SUMO
 ```
 
@@ -493,9 +509,9 @@ parameters) and `server/.env` (port, Python path, accounts and security, playlis
 
 ## 17. Quality and safety checks
 
-- **148 Python tests** (controllers, VANET, preemption, navigation, incidents, GA, evaluation,
+- **160 Python tests** (controllers, VANET, preemption, navigation, incidents, GA, evaluation,
   driver mode, collisions, accident zone, playback, live extras, ambulance on demand), **87 gateway
-  tests** (+ 4 with real SUMO), **15 dashboard tests**.
+  tests** (+ 4 with real SUMO; 89 in the gateway suite), **15 dashboard tests**.
 - Browser tests in Edge: journey, every page, every role, live details, ambulance button,
   6 screen widths (108/108), accessibility (0 violations in 45 audits).
 - Security, load (1,000 users), performance, failure and recovery, backup/restore/rollback and a

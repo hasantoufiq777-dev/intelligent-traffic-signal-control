@@ -18,10 +18,14 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from sim.vanet.network import resolve_lane_direction
 from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
+from sim.vehicles import CATALOG, VehicleTypeFactory, is_driven_type, type_category
 
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
-                  "advice", "adv_speed", "green_in", "road", "to"]
+                  "advice", "adv_speed", "green_in", "road", "to",
+                  # vehicle category (sim/vehicles.py), lane index, speed limit for this vehicle here (m/s)
+                  "kind", "lane", "limit"]
 FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
+LANE_CLASSES = ("passenger", "motorcycle", "bus", "truck", "emergency")  # lane permissions shown on the map
 PETROL_MG_PER_ML = 745.0
 DRIVER_VTYPE = "driven"  # the car a dashboard viewer drives (sim/driver.py)
 MAX_FINISHED = 2000  # finished trips kept for the driver's trip comparison
@@ -42,6 +46,15 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
     for e in net.getEdges():
         if e.getID().startswith(":"):
             continue
+        lane_info = []
+        for ln in e.getLanes():
+            allowed = [vc for vc in LANE_CLASSES if ln.allows(vc)]
+            lane_info.append({
+                "w": round(ln.getWidth(), 2),
+                # vehicle classes allowed on this lane; null = every class (no restriction)
+                "allow": None if len(allowed) == len(LANE_CLASSES) else allowed,
+                "shape": [[round(p[0], 1), round(p[1], 1)] for p in ln.getShape()],
+            })
         edges.append({
             "id": e.getID(),
             "from": e.getFromNode().getID(),
@@ -50,10 +63,14 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
             "speed": round(e.getSpeed(), 2),  # speed limit (m/s), for the congestion colouring
             "length": round(e.getLength(), 1),
             "shape": [[round(p[0], 1), round(p[1], 1)] for p in e.getShape()],
+            "type": e.getType() or "grid",  # road type: grid, arterial, bus_arterial, residential
+            "lane_info": lane_info,
         })
     (xmin, ymin), (xmax, ymax) = net.getBBoxXY()
     return {"type": "network", "run_id": run_id, "junctions": junctions, "edges": edges,
-            "bounds": [round(xmin, 1), round(ymin, 1), round(xmax, 1), round(ymax, 1)]}
+            "bounds": [round(xmin, 1), round(ymin, 1), round(xmax, 1), round(ymax, 1)],
+            # what each vehicle category is (size, speeds, class), so map and driver view match SUMO
+            "vehicle_types": VehicleTypeFactory().summary(CATALOG.keys())}
 
 
 class LiveVehicleTracker:
@@ -82,6 +99,7 @@ class LiveVehicleTracker:
         self.od: Dict[str, Tuple[str, str]] = {}  # origin and destination edge
         self.finished: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         self._dir_cache: Dict[Tuple[str, str], str] = {}
+        self._lane_limit: Dict[str, float] = {}
 
     def _type(self, vid: str) -> str:
         if vid not in self.vtype:
@@ -161,13 +179,18 @@ class LiveVehicleTracker:
                 idx = int(api.vehicle.getRouteIndex(vid))
                 road = str(api.vehicle.getRoadID(vid))
                 lane_pos = float(api.vehicle.getLanePosition(vid))
+                lane_idx = int(api.vehicle.getLaneIndex(vid))
+                lane_id = str(api.vehicle.getLaneID(vid))
+                if lane_id not in self._lane_limit:
+                    self._lane_limit[lane_id] = float(api.lane.getMaxSpeed(lane_id))
+                limit = self._lane_limit[lane_id]  # posted speed limit of the lane
             except Exception:
                 continue
             vtype = self._type(vid)
             flags = 0
             if vtype == "emergency":
                 flags |= FLAG_EMERGENCY
-            if vtype == DRIVER_VTYPE:
+            if is_driven_type(vtype):
                 flags |= FLAG_DRIVER
             if is_vehicle_equipped(vid, vtype=vtype, penetration=self.penetration, seed=self.seed):
                 flags |= FLAG_EQUIPPED
@@ -194,5 +217,6 @@ class LiveVehicleTracker:
                 round(self.fuel_mg.get(vid, 0.0) / PETROL_MG_PER_ML, 1),
                 advice.get("advice"), advice.get("speed"), advice.get("green_in"),
                 road, route[-1] if route else None,
+                type_category(vtype), lane_idx, round(limit, 2),
             ])
         return {"type": "vehicles", "run_id": run_id, "t": int(t), "fields": VEHICLE_FIELDS, "rows": rows}

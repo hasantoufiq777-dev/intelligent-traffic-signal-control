@@ -77,6 +77,7 @@ class AcoRouter:
         closed_edges: Optional[Set[str]] = None,
         k: int = 3,
         v_min: float = 1.0,
+        vclass: Optional[str] = None,
     ) -> List[Tuple[List[str], float, float]]:
         """Find the top K distinct paths from start_edge to goal_edge using ACO.
 
@@ -108,7 +109,7 @@ class AcoRouter:
                     if curr == goal_edge:
                         break
 
-                    successors = self.graph.get_successors(curr)
+                    successors = self.graph.get_successors(curr, vclass)
                     # Candidate edges must avoid loops and road closures
                     candidates = [
                         v
@@ -182,6 +183,7 @@ class AcoRouter:
                 closed_edges=closed_edges,
                 heuristic="euclid",
                 v_min=v_min,
+                vclass=vclass,
             )
             if fallback_path:
                 return [(fallback_path, fallback_cost, 1.0)]

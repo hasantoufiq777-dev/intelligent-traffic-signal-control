@@ -663,11 +663,176 @@ The same ambulance **without** priority was slower (checked by a test).
 
 ---
 
+## Supervisor enhancements (November 2026)
+
+The plan and its risks: [architecture/ENHANCEMENT_PLAN.md](architecture/ENHANCEMENT_PLAN.md). Design
+patterns: [architecture/DESIGN_PATTERNS.md](architecture/DESIGN_PATTERNS.md).
+
+### City network with route alternatives (`grid2x2_city`)
+
+**What it does.** It puts the 2×2 signalised grid inside a small city, so that between two points
+there are really different routes.
+
+**How it works** ([sim/sumo/generate_city_net.py](../sim/sumo/generate_city_net.py)):
+- **J0–J3 keep exactly the signal links of `grid2x2`.** The generator checks this; the junction
+  controllers rely on it.
+- **Arterial ring:** 60 km/h, two wide lanes (3.75 m and 3.5 m), joining the grid's eight outer
+  nodes and bending round four corners. Trips enter and leave on the ring at the corners.
+- **Bus lanes:** on the south and north ring sides, the right lane is for buses and ambulances only.
+- **Residential short-cuts:** cutting each corner; 30 km/h, one 3.0 m lane, cars, motorcycles and
+  ambulances only. They are shorter than the way round, but slower.
+- **Grid streets:** a 3.5 m outer lane for every vehicle and a 3.25 m inner lane for cars,
+  motorcycles and ambulances.
+- **Realistic geometry:** corner radii and turning speeds limited by curvature (3 m/s² sideways).
+
+**Why heavy vehicles may not turn left at the signals.**
+- **The problem it solves:** a 10–12 m bus or truck waiting inside the junction to turn left needs
+  about 7 s to clear it from standstill. Yellow plus all-red is 5 s, so the cross traffic would get
+  green while it is still there.
+- **What was measured:** before the lane rules and geometry fixes, SUMO reported 13–21 junction
+  collisions in 30 runs. After them, **0 collisions in 30 runs** (3 controllers × 2 demands × 5
+  seeds).
+
+**Checks** (`check()`):
+- every corner reaches every other corner for cars, motorcycles, buses, trucks and ambulances;
+- no road a class may use is a dead end for it;
+- J0–J3 keep their signal link order.
+
+**The research results are not affected.** `grid2x2` and the stored results are unchanged; the
+zero-regression test still passes.
+
+### Vehicle types ([sim/vehicles.py](../sim/vehicles.py))
+
+One catalogue, turned into SUMO types by `VehicleTypeFactory`:
+
+| Category | SUMO class | Size (m) | Accel / decel | Emission class (HBEFA4) | Notes |
+|---|---|---|---|---|---|
+| Car | passenger | 4.5 × 1.8 | 2.6 / 4.5 | PC petrol Euro-4 | |
+| Eco car | passenger | 4.3 × 1.8 | 2.0 / 4.0 | PC petrol Euro-6d | always connected; follows GLOSA; one fixed colour |
+| Motorcycle | motorcycle | 2.2 × 0.9 | 3.5 / 6.5 | MC 4-stroke ≤ 250 cc Euro-5 | |
+| Bus | bus | 12.0 × 2.55 | 1.2 / 4.0 | city bus 15–18 t Euro VI | bus lanes |
+| Truck | truck | 10.0 × 2.5 | 1.0 / 4.0 | rigid truck 14–20 t Euro VI | not on residential streets or inner grid lanes |
+| Ambulance | emergency | 6.5 × 2.1 | 3.5 / 6.0 | PC petrol Euro-4 | always connected; bus lanes |
+
+- **Speed limits:** vehicles drive at most the limit (speed factor ≤ 1); ambulances excepted.
+- **Gap acceptance:** heavy vehicles accept a 2.5 s gap when crossing priority traffic, others 1.5 s.
+- **Routing:** city trips are routed by SUMO for each vehicle's class, so lane permissions always hold.
+- **City mix:** cars 55 %, eco cars 15 %, motorcycles 10 %, buses 5 %, trucks 15 %.
+
+### VANET penetration 50 %
+
+- **Defaults:** 50 % on the command line, in the gateway and in Run control. Ambulances and eco cars
+  are always connected.
+- **Who is equipped:** each ordinary vehicle is chosen by a seeded hash; a city test measures between
+  35 % and 65 %.
+- **On the map:** a counter shows "VANET: x of y vehicles connected · penetration 50 %"; connected
+  vehicles carry a blue roof dot, the others none.
+- **Research runs are unaffected:** they set their penetration explicitly.
+
+### A\* with real route alternatives
+
+**Costs** ([sim/navigation/astar.py](../sim/navigation/astar.py), consistent units: seconds, or metres
+for the distance search):
+- g(n) = Σ length ÷ current speed (at least 1 m/s) + 8 s per signal the road ends at; a closed road
+  costs ∞.
+- h(n) = straight-line distance ÷ the highest speed limit (16.67 m/s in the city). It never
+  overestimates the real remaining time.
+- f(n) = g(n) + h(n).
+- The distance search uses metres, with h = the straight-line distance.
+
+**Lane permissions:** the road graph stores, for each vehicle class, which turns it may make, so
+trucks are never routed through a street closed to them. On the research grid every lane allows
+every class, and routes are identical with or without a class (tested).
+
+**Route explorer** (*Live traffic → Routes*): pick a start road, a destination and a vehicle type.
+The simulation answers with:
+- the fastest route now;
+- the shortest route;
+- further alternatives (each road of the fastest closed in turn);
+
+each with its distance, free-flow time, current estimated time, signal count and congestion. They
+are drawn on the map.
+
+**Example (cars, SW → NE):** the shortest route (1.17 km, through a residential short-cut) takes 88 s;
+the fastest (1.30 km, round the ring) takes 78 s. Congestion on the ring makes another route fastest
+(tested).
+
+### Driver perspective and traffic control view
+
+**The two views** (the map card's switch):
+- **Traffic control view:** the overhead map.
+- **Driver perspective:** a three.js 3D view from the driver's seat, or from behind, of the vehicle
+  you drive or follow ([client/src/components/DriverView3D.jsx](../client/src/components/DriverView3D.jsx)).
+
+**What the 3D view draws, all from the same simulation frames as the map:**
+- roads from SUMO's lane shapes, at their real widths;
+- bus lanes and restricted lanes tinted;
+- lane markings and buildings;
+- signal heads in their live colours;
+- blocked roads as barriers;
+- every vehicle at its category's real size, with the same eco colour.
+
+**Movement:** positions arrive once a second and are interpolated.
+
+**Speed display:** speed, posted limit, lane, the light ahead and the efficient speed.
+
+### Driving controls and the fuel-efficient speed
+
+**Taking a vehicle:** you can now choose a car, eco car, motorcycle, bus or truck.
+
+**Controls:**
+
+| Control | Key | What it does |
+|---|---|---|
+| Accelerate | W / ↑ | +5 km/h |
+| Brake | X / ↓ | −5 km/h |
+| Slow down | E | to 60 % of the current speed |
+| Stop | S / Space | brake to a stop |
+| Normal | G | normal driving, up to the limit |
+| Desired-speed slider | | hold at most this speed |
+
+Every input only sets a target speed, never above the posted limit. SUMO keeps its safety checks:
+safe gaps, braking limits, red lights, and only the lanes this vehicle may use. A test asks for
+180 km/h and checks the truck never exceeds the limit.
+
+**Estimated fuel-efficient speed** ([sim/eco_speed.py](../sim/eco_speed.py)):
+
+1. **Fuel and CO₂ curves are measured per category with SUMO's HBEFA4 model**
+   ([sim/analytics/fuel_curves.py](../sim/analytics/fuel_curves.py)): steady speeds, idling, and
+   speeding up from a stop.
+2. **Hard limits on the speed:** the speed limit, the vehicle ahead, and congestion ahead.
+3. **For each allowed speed,** the cost to the next light (or the next 300 m) is estimated:
+   - cruising fuel;
+   - a stop if the light would be red on arrival: idling plus re-accelerating;
+   - travel time, valued at 1.5× the idling fuel rate.
+4. **The cheapest speed is recommended,** with:
+   - an action: keep this speed, speed up, or slow down;
+   - the reasons (limit, light at X m, vehicle ahead, congestion, the steady speed with the least
+     fuel for this vehicle);
+   - fuel, CO₂ and time for now against recommended;
+   - a fuel-versus-speed chart.
+
+It is labelled an estimate.
+
+**Example:** a car at 50 km/h, 200 m from a red light that turns green in 20 s, is advised 35 km/h. It
+arrives on green instead of stopping: 15.9 mL instead of 36.6 mL, in the same time.
+
+### Tests for these features
+
+| Suite | Count | What |
+|---|---|---|
+| `sim/tests/test_city.py` | 12 | network check; vehicle factory; city trips; lane permissions; A\* admissible and equal to Dijkstra; distance search; route explorer; planner and controller factories; fuel curves; speed advice limits; a real city run (0 collisions, every vehicle on an allowed lane, 50 % equipped, the driver capped at the limit) |
+| `server/test/routes.test.js` | | route queries through the gateway |
+| `server/test/gateway.test.js` | | the map frame's vehicle category |
+| `tests/e2e/city.mjs` | 9 browser steps | city map and legend, 50 % chip, the one eco colour, route explorer, truck routes, driving a truck with the advice, the 3D view (road pixels checked) and switching back |
+
+---
+
 ## Where each module is in the app
 
 | Page | Module(s) |
 |---|---|
-| *My drive* (home: live map) | all live modules on the map; one-driver mode |
+| *Live traffic* (home) | all live modules; traffic control view (map) or driver perspective (3D); tabs: Overview, Junction, Vehicle (follow or drive, speed controls, fuel-efficient speed), Routes (A* explorer), Eco-driving |
 | *Live overview* | junction cards, VANET and navigation panels, live charts |
 | *Signals* | 2, 4 (and 7 during preemption) |
 | *VANET* | 6 |

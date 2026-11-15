@@ -2,13 +2,13 @@
 import { z } from 'zod';
 
 export const OPTIONS = {
-  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone'],
+  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone', 'city'],
   controllers: ['fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
   ev_routing: ['on', 'off'],
-  networks: ['single', 'grid2x2', 'grid2x2_zone'],
-  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 1.0, loss: 0.0, relay: 'off',
+  networks: ['single', 'grid2x2', 'grid2x2_zone', 'grid2x2_city'],
+  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
     eco_fraction: 0.0, ev_routing: 'off', demand: 1.0 },
   // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
   demand: { min: 0.25, max: 2.0, step: 0.25 },
@@ -21,7 +21,7 @@ export const RunEntrySchema = z
     controller: z.enum(OPTIONS.controllers),
     nav: z.enum(OPTIONS.nav).default('none'),
     seed: z.coerce.number().int().min(0).max(1_000_000).default(1),
-    penetration: z.coerce.number().min(0).max(1).default(1.0),
+    penetration: z.coerce.number().min(0).max(1).default(0.5), // share of ordinary vehicles with a radio
     loss: z.coerce.number().min(0).max(1).default(0.0),
     relay: z.enum(OPTIONS.relay).default('off'),
     eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
@@ -34,19 +34,20 @@ export const RunEntrySchema = z
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 
-const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback']) }).passthrough();
+const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback', 'routes']) }).passthrough();
 
 /** Road ids a driver may pick (normal edges: no ":" internal junction lanes). */
 const EdgeIdSchema = z.string().min(1).max(64).regex(/^[\w.#-]+$/);
 
 /** One-driver mode: take a car from one road to another. */
-export const DriverStartSchema = z.object({ from: EdgeIdSchema, to: EdgeIdSchema }).strict()
+export const DRIVABLE = ['car', 'eco_car', 'motorcycle', 'bus', 'truck']; // vehicle categories a viewer may drive
+export const DriverStartSchema = z.object({ from: EdgeIdSchema, to: EdgeIdSchema, kind: z.enum(DRIVABLE).optional() }).strict()
   .refine((b) => b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
 
 /** One-driver mode: a driving command. speed_kmh only for "ease" (hold at most this speed). */
 export const DriverCommandSchema = z.object({
   action: z.enum(['go', 'ease', 'stop']),
-  speed_kmh: z.coerce.number().min(5).max(60).optional(),
+  speed_kmh: z.coerce.number().min(5).max(90).optional(), // capped at the road's limit by the simulation
 }).strict();
 
 /**
@@ -56,6 +57,12 @@ export const DriverCommandSchema = z.object({
 export const AmbulanceSchema = z.object({ from: EdgeIdSchema.optional(), to: EdgeIdSchema.optional() }).strict()
   .refine((b) => Boolean(b.from) === Boolean(b.to), { message: 'Give both start and destination, or neither', path: ['to'] })
   .refine((b) => !b.from || b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
+
+/** Route explorer: A* alternatives between two roads for one vehicle class (answered by the simulation). */
+export const ROUTE_CLASSES = ['passenger', 'motorcycle', 'bus', 'truck', 'emergency'];
+export const RouteQuerySchema = z.object({
+  from: EdgeIdSchema, to: EdgeIdSchema, vclass: z.enum(ROUTE_CLASSES).default('passenger'),
+}).strict().refine((b) => b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
 
 /** Vehicle ids a viewer may follow (also used as a Socket.io room name suffix). */
 // Live playback speed, relative to the run's normal pacing (the simulation accepts the same values)

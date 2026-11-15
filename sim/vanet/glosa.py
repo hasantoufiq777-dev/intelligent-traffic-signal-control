@@ -34,8 +34,12 @@ PETROL_DENSITY_G_PER_L = 745.0
 
 
 def is_eco_vehicle(vid: str, vtype: str, eco_fraction: float, penetration: float, seed: int) -> bool:
-    """Deterministic eco-car selection among equipped, non-emergency vehicles."""
-    if eco_fraction <= 0.0 or vtype in ("emergency", "incident_blocker", "driven") or vid.startswith("incblk_"):
+    """Deterministic eco-car selection among equipped, non-emergency vehicles. A vehicle of the city's
+    eco-car category is always an eco car."""
+    if vtype == "eco_car":
+        return True
+    if (eco_fraction <= 0.0 or vtype in ("emergency", "incident_blocker") or str(vtype).startswith("driven")
+            or vid.startswith("incblk_")):
         return False
     if not is_vehicle_equipped(vid, vtype=vtype, penetration=penetration, seed=seed):
         return False

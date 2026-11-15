@@ -157,8 +157,11 @@ describe('gateway with mock simulation', () => {
       .send({ scenario: 'normal', controller: 'fixed', eco_fraction: 0.6 }).expect(202);
     await waitFor(() => network !== null && vehiclesA.some((m) => m.rows.length > 2));
     expect(network.edges.length).toBeGreaterThan(0);
-    const row = vehiclesA.at(-1).rows[0];
-    expect(row).toHaveLength(5); // [id, x, y, angle, flags] only
+    const frame = vehiclesA.at(-1);
+    const row = frame.rows[0];
+    // compact map row: [id, x, y, angle, flags, kind]; kind is null for an ordinary car (no speed, route...)
+    expect(frame.fields).toEqual(['id', 'x', 'y', 'angle', 'flags', 'kind']);
+    expect(row).toHaveLength(6);
     expect(typeof row[1]).toBe('number');
 
     const id = row[0];

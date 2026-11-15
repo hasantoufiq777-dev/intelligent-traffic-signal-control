@@ -1,8 +1,8 @@
 // Live traffic map. Everything drawn comes from the simulation's messages (road network, vehicle
 // rows, signal states, road speeds, incidents, ambulance routes, accident zone); nothing is made up
 // in the browser. Vehicles glide between the once-a-second positions with a CSS transition.
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { continuousAngle, FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { CATEGORY_LABEL, categoryOf, continuousAngle, FLAG, fieldIndex, has, KIND_LABEL, sizeOf, vehicleKind } from '../lib/vehicles.js';
 import { CarBody, CarIcon } from './CarShape.jsx';
 import Icon from './Icon.jsx';
 
@@ -20,8 +20,11 @@ const ARM_M = 120; // how much of the entry roads beyond the outer junctions is 
 // body is drawn from there backwards (drawing it centred made queued cars overlap the car ahead).
 const CAR_W = 4.2;
 const EXTRA_L = 1.5;
-const REAL_L = { emergency: 6.5 }; // m, as in the route file vTypes; everything else 5 m
-const carLength = (kind) => (REAL_L[kind] ?? 5.0) + EXTRA_L;
+const WIDTH_SCALE = CAR_W / 1.8; // a 1.8 m wide car is drawn CAR_W wide; other vehicles in proportion
+const CITY_PAD_M = 40; // city network: the whole ring is shown, plus this margin
+const CITY_VEHICLE_SCALE = 1.6;
+// Route explorer colours (route 1 = fastest is listed first by the simulation)
+export const ROUTE_COLORS = ['#2563eb', '#d97706', '#7c3aed', '#0e9488'];
 const MAX_ZOOM = 6;
 
 /**
@@ -36,6 +39,13 @@ export function congestion(speed, limit, queue) {
   if (ratio < 0.65 && queue >= 3) return 'slow';
   return null;
 }
+
+const ROAD_TYPE_TEXT = {
+  grid: 'Street between the signalised junctions, 50 km/h',
+  arterial: 'Arterial ring road, 60 km/h, wide lanes',
+  bus_arterial: 'Arterial ring road, 60 km/h, with a bus lane',
+  residential: 'Residential street, 30 km/h, narrow, no trucks or buses',
+};
 
 const SIG_FILL = { G: 'var(--sig-green)', y: 'var(--sig-yellow)', r: 'var(--sig-red)' };
 const SIG_WORD = { G: 'green', y: 'yellow', r: 'red' };
@@ -75,6 +85,12 @@ function buildGeometry(network) {
   const node = Object.fromEntries(network.junctions.map((j) => [j.id, j]));
   const contraflow = network.zone?.contraflow_edge;
 
+  // Real width of one direction: its lane widths (city network) or lanes x 3.2 m
+  const realWidth = (e) => (e.lane_info?.length ? e.lane_info.reduce((t, l) => t + (l.w || LANE_W), 0)
+    : Math.max(1, e.lanes) * LANE_W);
+  // City network: typed roads (ring, residential, bus lanes) around the signalised grid
+  const isCity = network.edges.some((e) => e.type && e.type !== 'grid');
+
   // One road per node pair (both directions together), drawn along the junction-to-junction line
   const segMap = new Map();
   for (const e of network.edges) {
@@ -82,8 +98,9 @@ function buildGeometry(network) {
     const b = node[e.to];
     if (!a || !b || e.id === contraflow) continue; // the contraflow lane lies on an existing lane
     const key = [e.from, e.to].sort().join('|');
-    const seg = segMap.get(key) || { key, ax: a.x, ay: a.y, bx: b.x, by: b.y, lanes: 0 };
+    const seg = segMap.get(key) || { key, ax: a.x, ay: a.y, bx: b.x, by: b.y, lanes: 0, realW: 0, type: e.type || 'grid' };
     seg.lanes += Math.max(1, e.lanes);
+    seg.realW += realWidth(e);
     segMap.set(key, seg);
   }
   const segs = [...segMap.values()];
@@ -115,11 +132,13 @@ function buildGeometry(network) {
   const mapX = axisMap(area.map((j) => j.x));
   const mapY = axisMap(area.map((j) => j.y));
 
-  // Crop to the signalised area plus part of the entry roads (in drawn coordinates)
-  const minX = mapX(Math.min(...area.map((j) => j.x)) - ARM_M);
-  const maxX = mapX(Math.max(...area.map((j) => j.x)) + ARM_M);
-  const minY = mapY(Math.min(...area.map((j) => j.y)) - ARM_M);
-  const maxY = mapY(Math.max(...area.map((j) => j.y)) + ARM_M);
+  // Crop to the signalised area plus part of the entry roads (city: the whole ring), drawn coordinates
+  const cropJ = isCity ? network.junctions : area;
+  const arm = isCity ? CITY_PAD_M : ARM_M;
+  const minX = mapX(Math.min(...cropJ.map((j) => j.x)) - arm);
+  const maxX = mapX(Math.max(...cropJ.map((j) => j.x)) + arm);
+  const minY = mapY(Math.min(...cropJ.map((j) => j.y)) - arm);
+  const maxY = mapY(Math.max(...cropJ.map((j) => j.y)) + arm);
   const tx = (x) => x - minX + PAD; // x already mapped
   const ty = (y) => maxY - y + PAD; // y already mapped; flip: north up
   /** SUMO coordinates -> map coordinates. */
@@ -154,7 +173,7 @@ function buildGeometry(network) {
     const horizontal = Math.abs(ux) >= Math.abs(uy);
     const end = node[e.to];
     edges[e.id] = {
-      id: e.id, d: path(e.shape), w: Math.max(1, e.lanes) * LANE_W * ROAD_SCALE - 1.5, limit: e.speed ?? null,
+      id: e.id, d: path(e.shape), w: realWidth(e) * ROAD_SCALE - 1.5, limit: e.speed ?? null, type: e.type || 'grid',
       mid: pt((fx + x2) / 2, (fy + y2) / 2), horizontal, from: e.from, to: e.to,
       tls: end?.tls ? e.to : null, approach: end?.tls ? approachOf(e.shape) : null,
     };
@@ -171,8 +190,38 @@ function buildGeometry(network) {
     });
   }
 
+  // Lanes with restrictions (bus lane; cars, motorcycles and ambulances only), drawn on the road band:
+  // lane i lies right of the centre line by the widths of the lanes inside it plus half its own width.
+  const laneMarks = [];
+  for (const e of network.edges) {
+    const a = node[e.from];
+    const b = node[e.to];
+    if (!a || !b || !e.lane_info?.some((l) => l.allow)) continue;
+    const [ax, ay] = pt(a.x, a.y);
+    const [bx, by] = pt(b.x, b.y);
+    const L = Math.hypot(bx - ax, by - ay) || 1;
+    const dx = (bx - ax) / L;
+    const dy = (by - ay) / L;
+    const rx = -dy;
+    const ry = dx; // right of travel on screen (y down)
+    const trim = Math.min(L / 3, Math.max(jHalf, 10) + 4);
+    e.lane_info.forEach((l, i) => {
+      if (!l.allow) return;
+      const inner = e.lane_info.slice(i + 1).reduce((t, x) => t + (x.w || LANE_W), 0);
+      const off = (inner + (l.w || LANE_W) / 2) * ROAD_SCALE;
+      const bus = l.allow.includes('bus') && !l.allow.includes('passenger');
+      laneMarks.push({
+        key: `${e.id}_${i}`, edge: e.id, bus, allow: l.allow,
+        x1: ax + dx * trim + rx * off, y1: ay + dy * trim + ry * off,
+        x2: bx - dx * trim + rx * off, y2: by - dy * trim + ry * off, w: (l.w || LANE_W) * ROAD_SCALE * 0.8,
+      });
+    });
+  }
+
   const range = network.vanet?.active ? network.vanet.range_m : null;
   return {
+    isCity,
+    laneMarks,
     width: maxX - minX + 2 * PAD,
     height: maxY - minY + 2 * PAD,
     pt,
@@ -183,7 +232,7 @@ function buildGeometry(network) {
     roads: segs.map((s) => {
       const [x1, y1] = pt(s.ax, s.ay);
       const [x2, y2] = pt(s.bx, s.by);
-      return { ...s, x1, y1, x2, y2, w: s.lanes * LANE_W * ROAD_SCALE };
+      return { ...s, x1, y1, x2, y2, w: s.realW * ROAD_SCALE };
     }),
     junctions: tlsJ.map((j) => {
       const [X, Y] = pt(j.x, j.y);
@@ -214,9 +263,10 @@ function useView(geo) {
 
 function TrafficMapInner({
   network, vehicles, tlsState, zoneState, edgeSpeeds, incidents, evRoutes, followId, onSelect,
-  selectedJunction, onSelectJunction, stale,
+  selectedJunction, onSelectJunction, stale, routeOverlay = null,
 }) {
   const geo = useMemo(() => (network ? buildGeometry(network) : null), [network]);
+  const hatchId = `no-heavy-${useId().replace(/[^a-zA-Z0-9]/g, '')}`; // unique per map on the page
   const svgRef = useRef(null);
   const drag = useRef(null);
   const [layers, setLayers] = useState(loadLayers);
@@ -304,7 +354,9 @@ function TrafficMapInner({
   };
 
   const rows = vehicles?.rows || [];
+  const kindIdx = fieldIndex(vehicles, 'kind');
   const followed = rows.find((r) => r[0] === followId);
+  const connected = rows.filter((r) => has(r[4], FLAG.EQUIPPED)).length;
   const prevHeadings = headings.current;
   const nextHeadings = new Map();
   for (const [id, , , angle] of rows) nextHeadings.set(id, continuousAngle(prevHeadings.get(id), angle));
@@ -333,6 +385,12 @@ function TrafficMapInner({
         onPointerCancel={onPointerUp}
         onClick={() => { drag.current = null; }}
       >
+        <defs>
+          <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="6" height="6" fill="var(--road)" />
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--text-secondary)" strokeWidth="1.4" strokeOpacity="0.5" />
+          </pattern>
+        </defs>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           <g>
             {geo.roads.map((r) => (
@@ -340,8 +398,15 @@ function TrafficMapInner({
                 strokeWidth={r.w + 2} strokeLinecap="butt" />
             ))}
             {geo.roads.map((r) => (
-              <line key={r.key} x1={r.x1} y1={r.y1} x2={r.x2} y2={r.y2} stroke="var(--road)" strokeWidth={r.w}
-                strokeLinecap="butt" />
+              <line key={r.key} x1={r.x1} y1={r.y1} x2={r.x2} y2={r.y2}
+                stroke={r.type === 'residential' ? 'var(--road-res)' : 'var(--road)'} strokeWidth={r.w} strokeLinecap="butt">
+                <title>{ROAD_TYPE_TEXT[r.type] ?? 'Road'}</title>
+              </line>
+            ))}
+            {/* Restricted lanes: bus lanes (red) and lanes closed to trucks and buses (hatched) */}
+            {geo.laneMarks.map((m) => (
+              <line key={m.key} x1={m.x1} y1={m.y1} x2={m.x2} y2={m.y2} strokeWidth={m.w} strokeLinecap="butt"
+                stroke={m.bus ? 'var(--bus-lane)' : `url(#${hatchId})`} strokeOpacity={m.bus ? 0.32 : 0.55} pointerEvents="none" />
             ))}
           </g>
 
@@ -405,6 +470,25 @@ function TrafficMapInner({
             </g>
           ))}
 
+          {/* Route explorer: the A* alternatives, the selected one on top */}
+          {routeOverlay?.routes?.length > 0 && (
+            <g role="group" aria-label="Route alternatives">
+              {routeOverlay.routes.map((r, i) => ({ r, i }))
+                .sort((a, b) => (a.i === routeOverlay.selected) - (b.i === routeOverlay.selected))
+                .map(({ r, i }) => {
+                  const sel = i === routeOverlay.selected;
+                  return (
+                    <g key={`alt-${i}`} opacity={sel ? 1 : 0.55}>
+                      {r.path.map((eid) => geo.edges[eid] && (
+                        <path key={eid} d={geo.edges[eid].d} fill="none" stroke={ROUTE_COLORS[i % ROUTE_COLORS.length]}
+                          strokeWidth={sel ? 5 : 3} strokeLinecap="round" strokeLinejoin="round" />
+                      ))}
+                    </g>
+                  );
+                })}
+            </g>
+          )}
+
           <g>
             {geo.junctions.map((j) => {
               const sel = selectedJunction === j.id;
@@ -442,9 +526,15 @@ function TrafficMapInner({
 
           {layers.vehicles && (
             <g>
-              {rows.map(([id, x, y, , flags]) => {
+              {rows.map((row) => {
+                const [id, x, y, , flags] = row;
                 const kind = vehicleKind(flags);
-                const len = carLength(kind);
+                const category = categoryOf(kindIdx >= 0 ? row[kindIdx] : null, flags);
+                const [realL, realW] = sizeOf(category, network.vehicle_types);
+                // The city map is zoomed out to show the whole ring: vehicles are drawn larger there to stay visible
+                const vs = geo.isCity ? CITY_VEHICLE_SCALE : 1;
+                const len = (realL + EXTRA_L) * vs;
+                const wid = Math.max(2, realW * WIDTH_SCALE) * vs;
                 const [px, py] = geo.pt(x, y);
                 return (
                   <g
@@ -453,10 +543,10 @@ function TrafficMapInner({
                     style={{ transform: `translate(${px}px, ${py}px) rotate(${nextHeadings.get(id)}deg)` }}
                     onClick={clickUnlessDragged(() => onSelect?.(id))}
                   >
-                    <title>{`${id} – ${KIND_LABEL[kind]}${has(flags, FLAG.ADVISED) ? ' (slowing for green)' : ''}`}</title>
+                    <title>{`${id} – ${CATEGORY_LABEL[category]}, ${KIND_LABEL[kind].toLowerCase()}${has(flags, FLAG.ADVISED) ? ' (slowing for green)' : ''}`}</title>
                     {/* invisible larger hit area */}
                     <circle cy={len / 2} r={8} fill="transparent" />
-                    <CarBody id={id} kind={kind} len={len} w={CAR_W} />
+                    <CarBody id={id} kind={kind} category={category} len={len} w={wid} />
                     {has(flags, FLAG.ADVISED) && <circle cx={0} cy={-2} r={1.3} fill="var(--sig-yellow)" />}
                   </g>
                 );
@@ -513,6 +603,11 @@ function TrafficMapInner({
       </svg>
 
       {stale && <div className="map-stale" role="status">{stale}</div>}
+      <div className="map-chip">
+        {network.vanet?.active
+          ? `VANET: ${connected} of ${rows.length} vehicles connected · penetration ${Math.round((network.vanet.penetration ?? 0) * 100)} %`
+          : `No VANET in this run · ${rows.length} vehicles`}
+      </div>
 
       <div className="map-controls" role="group" aria-label="Map controls">
         <button type="button" className="map-btn" onClick={() => zoomAt(1.4, geo.width / 2, geo.height / 2)} aria-label="Zoom in"
@@ -541,8 +636,15 @@ function TrafficMapInner({
             <CarIcon style="pickup" paint="#2f6fd0" /><CarIcon style="hatchback" paint="#f0c419" />
             Cars (colour and body style only tell them apart)
           </span>
-          <span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" fill="var(--series-1)" stroke="#fff" strokeWidth="1" /></svg>Roof dot: connected car</span>
-          <span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" fill="var(--series-3)" stroke="#fff" strokeWidth="1" /></svg>Roof dot: eco car</span>
+          <span><CarIcon kind="eco" category="eco_car" />Eco vehicle (always this green)</span>
+          {geo.isCity && (
+            <>
+              <span><CarIcon kind="plain" category="motorcycle" len={3.7} w={2.1} />Motorcycle</span>
+              <span><CarIcon kind="plain" category="bus" len={13.5} w={5.9} size={30} />Bus</span>
+              <span><CarIcon kind="plain" category="truck" len={11.5} w={5.8} size={28} />Truck</span>
+            </>
+          )}
+          <span><svg width="10" height="10"><circle cx="5" cy="5" r="3.5" fill="var(--series-1)" stroke="#fff" strokeWidth="1" /></svg>Roof dot: VANET radio (no dot: not connected)</span>
           <span><CarIcon kind="emergency" len={8} />Ambulance</span>
           <span><svg width="26" height="8"><path d="M1 4 H25" stroke="var(--ev-route)" strokeWidth="2.6" strokeDasharray="7 5" /></svg>Ambulance route</span>
           <span><CarIcon kind="driven" />Driven by a viewer</span>
@@ -553,6 +655,17 @@ function TrafficMapInner({
           <span><svg width="14" height="14"><path d="M7 1 L13 13 H1 Z" fill="var(--sig-red)" /><path d="M7 5 V9 M7 10.5 V11.5" stroke="#fff" strokeWidth="1.4" /></svg>Accident / road closed</span>
           <span><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="var(--surface-1)" stroke="var(--rsu)" strokeWidth="1.2" /><path d="M4.5 7.5 A5 5 0 0 1 11.5 7.5 M6 9.3 A2.8 2.8 0 0 1 10 9.3" stroke="var(--rsu)" strokeWidth="1.2" fill="none" /></svg>Roadside unit (RSU)</span>
           {geo.zone && <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--zone)" fillOpacity="0.45" /></svg>Shared lane, one direction at a time</span>}
+          {geo.isCity && (
+            <>
+              <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--bus-lane)" fillOpacity="0.4" /></svg>Bus lane (buses and ambulances)</span>
+              <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--road-res)" /></svg>Residential street, 30 km/h, no trucks or buses</span>
+              <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill={`url(#${hatchId})`} stroke="var(--border-strong)" strokeWidth="0.5" /></svg>Lane closed to trucks and buses (no left turns for them at the signals)</span>
+            </>
+          )}
+          {routeOverlay?.routes?.length > 0 && routeOverlay.routes.map((r, i) => (
+            <span key={`lr-${i}`}><svg width="26" height="8"><path d="M1 4 H25" stroke={ROUTE_COLORS[i % ROUTE_COLORS.length]} strokeWidth="3" /></svg>
+              Route {i + 1}{r.fastest ? ' (fastest now)' : ''}{r.shortest ? ' (shortest)' : ''}</span>
+          ))}
           <span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="var(--sig-yellow)" /></svg>Car slowing for green</span>
         </div>
       </details>

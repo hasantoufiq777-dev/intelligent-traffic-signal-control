@@ -196,17 +196,20 @@ export function LiveProvider({ children }) {
   }, []);
 
   /** Emit with an acknowledgement; resolves {ok:false,error} on timeout or when offline. */
-  const ask = useCallback((name, body) => new Promise((resolve) => {
+  const ask = useCallback((name, body, timeoutMs = ACK_TIMEOUT_MS) => new Promise((resolve) => {
     const s = socketRef.current;
     if (!s?.connected) {
       resolve({ ok: false, error: 'Not connected to the gateway' });
       return;
     }
-    s.timeout(ACK_TIMEOUT_MS).emit(name, body, (err, res) => resolve(err ? { ok: false, error: 'No answer from the gateway' } : res));
+    s.timeout(timeoutMs).emit(name, body, (err, res) => resolve(err ? { ok: false, error: 'No answer from the gateway' } : res));
   }), []);
 
-  const startDrive = useCallback(async (from, to) => {
-    const res = await ask('driver:claim', { from, to });
+  /** Route explorer: A* alternatives from the running simulation (the gateway waits up to 5 s). */
+  const queryRoutes = useCallback((from, to, vclass) => ask('routes', { from, to, vclass }, 8000), [ask]);
+
+  const startDrive = useCallback(async (from, to, kind) => {
+    const res = await ask('driver:claim', kind ? { from, to, kind } : { from, to });
     if (res?.ok) {
       driveKey.current = res.key;
       buf.current.myDrive = { active: true, vid: null, from, to, since: Date.now(), idleMs: res.idle_ms,
@@ -227,7 +230,7 @@ export function LiveProvider({ children }) {
     dirty.current = true;
   }, []);
 
-  const value = { ...snap, connection, connectionNote, follow, startDrive, driveCommand, endDrive, clearDrive };
+  const value = { ...snap, connection, connectionNote, follow, startDrive, driveCommand, endDrive, clearDrive, queryRoutes };
   return createElement(LiveContext.Provider, { value }, children);
 }
 
