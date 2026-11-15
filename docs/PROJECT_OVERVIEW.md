@@ -1,7 +1,9 @@
 # VANET-Based Intelligent Traffic Signal Control — Project Overview
 
-A complete description of the project: what it is, how every part works, what was built in each
-module, the results, and how to run and deploy it. For deeper technical detail see
+**This is the summary of the whole project** (updated 15 November 2026): what it is, how every part
+works, what was built in each module and in the web platform, the results, and how to run and
+deploy it. A step-by-step explanation per module is in [HOW_IT_WORKS.md](HOW_IT_WORKS.md); all
+documents are listed in [README.md](README.md). For deeper technical detail see
 [method.md](method.md) (design and maths), [../PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md)
 (interfaces and protocol), [results_discussion.md](results_discussion.md) and
 [../results/summary.md](../results/summary.md) (all evaluated numbers).
@@ -50,9 +52,11 @@ SUMO (moves the cars)  <-- TraCI -->  Python simulation (sim/)
 ```
 
 - The gateway starts the Python simulation as a child process and loops through a **playlist** of
-  scenarios (`server/playlist.json`).
-- Python prints protocol messages (`network`, `state`, `vehicles`, `event`, `driver`, `status`,
-  `result`); the gateway validates, stores and forwards them to every connected browser.
+  scenarios (`server/playlist.json`). There is one shared simulation; every viewer watches it.
+- Python prints protocol messages (`network`, `state`, `vehicles`, `event`, `driver`, `playback`,
+  `status`, `result`); the gateway validates, stores and forwards them to every connected browser.
+- The gateway sends commands to Python on stdin: pause, resume, speed, drive a car, send an ambulance.
+- Everyone signs in; roles decide who may do what (section 13).
 - A **mock simulator** (`sim/mock_sim.py`) produces the same messages without SUMO, for development.
 
 ### Repository layout
@@ -68,13 +72,20 @@ sim/
   sumo/                     networks: net.xml (single), grid2x2.net.xml, grid2x2_zone.net.xml
   optimizer/ga_tuner.py     genetic algorithm tuning
   analytics/                metrics, evaluate (multi-seed suites), plots, report
-  driver.py, commands.py    one-driver mode
+  driver.py                 one-driver mode
+  commands.py               dashboard commands on stdin; playback (pause, resume, speed)
+  dispatch.py               ambulance sent from the dashboard at any moment
   live_vehicles.py          per-vehicle map rows, fuel/CO2 tracking
   mock_sim.py, mock_traffic.py   SUMO-free stand-in
-  tests/                    pytest suite (129 tests)
-server/                     gateway: config, protocol, simProcess, liveChannel, driver, db, app
-client/                     dashboard: pages (My drive, Live overview, Results, Admin), components
-docs/                       method.md, results_discussion.md, demo_script.md, this file
+  tests/                    pytest suite (148 tests)
+server/src/                 gateway: app (routes), auth, password, liveChannel, driver, db, protocol,
+                            simProcess, backup, createAdmin, config
+server/test/, loadtest/     gateway tests (vitest), load and size measurements
+client/src/                 dashboard: pages, components, hooks, lib
+tests/e2e/, tests/deploy/   browser tests (Playwright + Edge), production-configuration check
+deploy/                     production settings, systemd unit, nginx site, backup script
+docs/                       this file, HOW_IT_WORKS.md, method.md, results_discussion.md,
+                            architecture/, deployment/, guides/, testing/, research/
 results/                    summary.json/.md, plots, GA output, raw runs (raw.csv, git-ignored)
 ```
 
@@ -167,6 +178,13 @@ green (north–south) -> yellow 3 s -> all red 2 s -> green (east–west) -> ...
    the ambulance's approach only**, so the queue in front of it clears.
 4. It holds that green until the ambulance has passed, then recovers to normal adaptive control.
    Safety limit: 90 s. If the ambulance changes approach (new route), the green follows it.
+
+**Ambulance at any moment** (`sim/dispatch.py`). *Send an ambulance* in Run control adds an ambulance
+to the running simulation at once, with any scenario and controller. The route is automatic (the
+crossing through the most junctions) or chosen. Controllers without priority of their own (`fixed`,
+`adaptive`, `adaptive_vanet`) are wrapped in the preemption controller for the rest of the run.
+Measured in a real fixed-time grid run: 3 junctions, 59 s, green at 3 of 3, no collision; slower
+without priority (tested).
 
 ### 5.4 Relation to published work
 The controllers are rule-based (queue-actuated control with min/max green and a starvation limit,
@@ -294,22 +312,37 @@ the connections of `grid2x2`.
 ## 13. The dashboard and gateway
 
 **Gateway (`server/`)**
-- Starts runs, loops the playlist (crash retry), validates every message (zod), stores runs, results,
-  events, state samples and driver trips in SQLite.
-- One shared Socket.io stream (load-tested for 1000+ viewers; nginx config in `server/README.md`).
-- REST API: `/api/health`, `/api/live/status`, `/api/live/playlist`, `/api/options`, `/api/runs`,
-  `/api/runs/:id`, `/api/metrics`, `/api/experiments/summary`, `/api/driver`, plus accounts, sessions, audit log and
-  system health. Everyone signs in; roles (administrator, researcher, viewer) decide who may start/stop runs,
-  manage driving and users (see `server/README.md`).
+- Starts runs, loops the playlist (crash retry; stops after 3 failures in a row), validates every
+  message (zod), stores runs, results, events, state samples and driver trips in SQLite.
+- One shared Socket.io stream: state and map frame at most once per second (latest-wins), events
+  and results reliably; first message ~64 KB. Load-tested at 1,000 signed-in viewers (API p95
+  20.3 ms); at most 1,000 connections.
+- Run lifecycle STOPPED → STARTING → RUNNING → STOPPING (or FAILED); **playback**: pause, resume,
+  speed 0.5×–4×, restart (wall-clock pacing only, results unchanged); **send an ambulance**.
+- REST API (full list in [architecture/API.md](architecture/API.md)): health, live status and
+  control, options, runs, results, experiments summary, GA, driver, accounts, sessions, audit,
+  settings, system health.
+
+**Accounts and security**
+- E-mail + password (Argon2id); session token in an `HttpOnly` cookie, only its hash stored.
+- Roles: **viewer** (watch, follow and drive a car), **researcher** (also start, stop and control
+  own runs), **administrator** (everything, users, sessions, audit, settings).
+- CSRF token and origin check on writes and live sockets, input validation, rate limits, account
+  lockout, security headers (CSP limited to this host, HSTS in production), audit log.
 
 **Dashboard (`client/`)**
-- **My drive:** live map, follow a car (its next light, countdown, advice, fuel), drive a car,
+- **My drive** (home): live map, follow a car (next light, countdown, advice, fuel), drive a car,
   eco-driving summary, accident-zone card, events.
 - **Live overview:** junction cards (signal, queues true vs estimated), VANET and navigation panels,
   live charts.
-- **Results:** tables and charts from `results/summary.json` per suite (signals, emergency,
-  navigation, eco-driving, ambulance routing, accident zone).
-- **Admin:** start/stop runs and manage driver mode.
+- **Module pages:** Signals, VANET (with measured jitter), Emergency, Navigation (latest A\*/ACO
+  decision with probabilities), Incidents, Work zone, GLOSA.
+- **Research:** Results (from `results/summary.json`), GA tuning, Run history (compare two runs;
+  ambulances sent), Events (event centre).
+- **Demo:** guided 13-step teacher demonstration with pause to explain.
+- **Run control:** start/stop with all options (including demand 0.25–2×), playback, send an
+  ambulance, driver mode, SUMO-GUI. **Administration** and **Account** pages.
+- Works from 360 px to 1920 px wide; accessibility audits with 0 violations.
 
 **Map details**
 - Roads drawn wider than real so they are visible; signal heads coloured by state.
@@ -402,6 +435,8 @@ Zero times with both directions in the shared lane, zero collisions.
 | 13 | Node.js gateway (live channel, playlist, SQLite, REST, Socket.io) |
 | 14–15 | React dashboard (user panel, live overview, results, admin), eco-driving (GLOSA), ambulance-only preemption green, navigation cost fix, final evaluation |
 | Later | Ambulance route choice and a preemption deadlock fix; one-driver mode; map fixes (front-bumper drawing, collision check, no spin on turns, varied car colours and body styles); accident work zone with alternating one-way traffic |
+| Platform phases 1–10 | Accounts, roles and security; shared live run with lifecycle; live map and module pages; research dashboards and event centre; guided teacher demo; security, accessibility and 1,000-user load tests; performance work (first message 350 → 64 KB); playback controls; measured jitter, ACO route decisions, demand setting, platform events; deployment guide and files; user, admin, teacher and troubleshooting guides; test strategy, plan and twelve test reports |
+| November 2026 | Ambulance sent at any moment from Run control, with priority added for every controller (`sim/dispatch.py`) |
 
 **Fixes found along the way (documented in method.md):** navigation cost model (signal wait per
 junction), preemption deadlock when an ambulance changes approach, two lanes merging into the
@@ -438,7 +473,7 @@ python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev
 npm run sim:experiments          # full evaluation, 10 seeds -> results/summary.json, summary.md, plots
 python sim/analytics/evaluate.py --suite zone --workers 8     # one suite
 npm run sim:tune                 # GA tuning (signals, then ACO)
-npm test                         # Python (129), gateway and client tests
+npm test                         # Python (148), gateway (87) and client (15) tests
 npm run test:e2e                 # end-to-end with real SUMO
 ```
 
@@ -449,16 +484,24 @@ parameters) and `server/.env` (port, Python path, accounts and security, playlis
 - Same network: `HOST=0.0.0.0`, open `http://<PC-IP>:4000`.
 - Temporary public link: `cloudflared tunnel --url http://127.0.0.1:4000` (works while the PC runs).
 - Permanent: Linux server with SUMO + Python + Node, systemd service, nginx reverse proxy with
-  WebSocket upgrade and HTTPS (config in `server/README.md`). Set `NODE_ENV=production`, `TRUST_PROXY=1` and create the administrator account.
+  WebSocket upgrade and HTTPS: [deployment/DEPLOYMENT.md](deployment/DEPLOYMENT.md) and the files in
+  `deploy/`. Set `NODE_ENV=production`, `TRUST_PROXY=1` and create the administrator account
+  (`npm run create-admin` in `server/`).
   Serverless hosts do not fit (long-running process and WebSockets).
 
 ---
 
 ## 17. Quality and safety checks
 
-- **129 Python tests** (controllers, VANET, preemption, navigation, incidents, GA, evaluation,
-  driver mode, collisions, accident zone), plus gateway (Vitest) and client tests, and an end-to-end
-  test with real SUMO.
+- **148 Python tests** (controllers, VANET, preemption, navigation, incidents, GA, evaluation,
+  driver mode, collisions, accident zone, playback, live extras, ambulance on demand), **87 gateway
+  tests** (+ 4 with real SUMO), **15 dashboard tests**.
+- Browser tests in Edge: journey, every page, every role, live details, ambulance button,
+  6 screen widths (108/108), accessibility (0 violations in 45 audits).
+- Security, load (1,000 users), performance, failure and recovery, backup/restore/rollback and a
+  production-configuration check: see [testing/](testing/) and the
+  [final acceptance report](testing/FINAL_ACCEPTANCE_REPORT.md).
+- **Zero-regression test:** 12 reference runs must reproduce the stored results exactly.
 - Every run records SUMO collisions (lanes and junctions): 0 in all evaluated scenarios.
 - Accident zone: a test checks that both entry signals are never green together and that both
   directions are never in the shared lane together.
@@ -469,7 +512,12 @@ parameters) and `server/.env` (port, Python path, accounts and security, playlis
 ## 18. Limitations
 
 - Simulation only; the VANET is emulated (no OMNeT++/Veins radio model).
-- Two-phase signals per junction (north–south / east–west); no pedestrians.
+- Two-phase signals per junction (north–south / east–west); no pedestrians. Phase-order
+  optimisation such as ACO phase scheduling (Rida et al., 2020, ASTL) is therefore not used; ACO is
+  applied to route choice instead.
+- Web platform: tested on Windows with Edge; the Linux/nginx deployment, Firefox/Safari, screen
+  readers and an external security scan were not run; no e-mailed password resets or two-factor
+  sign-in.
 - Small 2×2 grid: few alternative routes, which limits what navigation and ACO can gain.
 - Eco-driving needs predictable signal timing (works with fixed-time, not adaptive).
 - Driver mode is a demo feature; one driver at a time; live runs with a driver are not evaluated.
@@ -480,12 +528,15 @@ parameters) and `server/.env` (port, Python path, accounts and security, playlis
 
 ## 19. Repository and version control
 
-- GitHub: `hasantoufiq777-dev/intelligent-traffic-signal-control`, branch `main`.
+- GitHub: `hasantoufiq777-dev/intelligent-traffic-signal-control`, branch `main` (modules 0–15);
+  branch `modules-10-13` holds the later work and the web platform (pushed 15 November 2026, not
+  yet merged into `main`).
 - Modules 0–15 and ambulance route choice: authored by Toufiq Hasan.
-- Later work (npm fix, `client/src/lib` tracking, driver mode, map fixes, car styles, accident zone):
-  authored by ShahariarEmon112.
+- Later work (npm fix, `client/src/lib` tracking, driver mode, map fixes, car styles, accident zone,
+  web platform phases 1–10, ambulance on demand): authored by ShahariarEmon112.
 - Commit messages carry no AI co-author lines.
-- `sim/scenarios/navigation.yaml` has a local, uncommitted change.
+- `sim/scenarios/navigation.yaml` now adds an ambulance (amb1, departs at 80 s); the stored
+  navigation results were measured before this change.
 
 ---
 

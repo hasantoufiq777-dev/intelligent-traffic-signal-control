@@ -48,6 +48,10 @@ flowchart LR
   GW -- REST --> UI
 ```
 
+**Start here:** [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) is the summary of the whole
+project (architecture, every algorithm, platform, results, running, limitations), and
+[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) explains each module step by step.
+
 ---
 
 ## 1. Install
