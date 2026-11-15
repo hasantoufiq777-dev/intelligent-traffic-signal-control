@@ -8,7 +8,8 @@ export const OPTIONS = {
   relay: ['on', 'off'],
   ev_routing: ['on', 'off'],
   networks: ['single', 'grid2x2', 'grid2x2_zone', 'grid2x2_city'],
-  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
+  // Run control opens on the city network (route alternatives); the research scenarios stay one click away
+  defaults: { scenario: 'city', controller: 'adaptive_vanet', nav: 'astar', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
     eco_fraction: 0.0, ev_routing: 'off', demand: 1.0 },
   // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
   demand: { min: 0.25, max: 2.0, step: 0.25 },
