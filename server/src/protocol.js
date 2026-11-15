@@ -2,7 +2,8 @@
 import { z } from 'zod';
 
 export const OPTIONS = {
-  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone', 'city'],
+  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone', 'city',
+    'city_emergency', 'city_incident', 'city_navigation'],
   controllers: ['fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],

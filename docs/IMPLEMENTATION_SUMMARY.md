@@ -361,6 +361,24 @@ non-uniform town with four signalised junctions, J0–J3, at irregular spacings.
 **Metrics** are recalculated by `sim/analytics/city_eval.py` into `results/city/`. The research grid
 is untouched.
 
+**City versions of the scenarios** (for live demonstrations; the research results stay on `grid2x2`):
+
+| Scenario | What happens | Measured (seed 1, 900 s, 0 collisions) |
+|---|---|---|
+| `city` | Mixed traffic on the redesigned town | waiting: fixed 27.3 s, adaptive 19.8 s (5 seeds) |
+| `city_emergency` | Two ambulances cross the town (east → S0, west → N3); use `adaptive_ev_vanet`, ambulance routing on | ambulance trip 73.0 s with priority, 100.5 s without (−27 %); 0 missed preemptions |
+| `city_incident` | A crash blocks the main road's middle lane between J0 and J1 for 300 s | detected over the VANET after 33 s; 12 vehicles rerouted |
+| `city_navigation` | 40 % more traffic, so the alternative roads matter; use `astar` or `aco` | ACO: waiting 28.8 s, against 31.2 s without navigation |
+
+The crash blocks one lane rather than closing the road:
+- **why not a full closure:** trucks and buses would have no legal detour there (they never turn left at
+  a signal), and this project never teleports stuck vehicles;
+- **what still happens:** traffic squeezes past in the other two lanes, and navigating cars, warned over
+  the VANET, take other roads.
+
+The app's playlist opens with these city runs.
+
+
 ---
 
 ## 8. Vehicle types and lane restrictions
