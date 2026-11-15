@@ -227,6 +227,9 @@ def run_simulation(
     )
 
     network = params.get("network") if params and "network" in params else scenario_cfg.get("network", "single")
+    # Scenario-specific signal timing (city: a longer all-red for its wider junctions); none elsewhere
+    if isinstance(scenario_cfg.get("signals"), dict):
+        ctrl_params.update(scenario_cfg["signals"])
 
     # Incident config (Module 10); params["incident"] overrides fields, e.g. {"enabled": False}
     incident_cfg: Dict[str, Any] = dict(scenario_cfg.get("incident") or {})

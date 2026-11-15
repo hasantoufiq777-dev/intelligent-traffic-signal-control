@@ -98,11 +98,14 @@ results/                    summary.json/.md, plots, GA output, raw runs (raw.cs
 - `grid2x2.net.xml`: the main network. Four signalised junctions **J0, J1, J2, J3** 250 m apart,
   2 lanes per direction, 50 km/h, entry roads on all sides.
 - `grid2x2_zone.net.xml`: the same grid with an 80 m accident work zone on the J2–J3 road (section 12).
-- `grid2x2_city.net.xml` (scenario `city`, November 2026): the same four junctions inside a small city: an
-  arterial ring (60 km/h, wide lanes, bus lanes on two sides), residential short-cuts (30 km/h, no trucks or
-  buses) and mixed vehicles (cars, eco cars, motorcycles, buses, trucks), each with its own size, speeds and
-  HBEFA4 emission class. Built by `sim/sumo/generate_city_net.py`, which checks every vehicle class can reach
-  every corner and that J0–J3 keep their signal links. The research results use `grid2x2` and are unchanged.
+- `grid2x2_city.net.xml` (scenario `city`, November 2026): a non-uniform four-junction town. J0–J3 are
+  irregularly spaced, with bends. A 3-lane main road (60 km/h) runs through J0 and J1; 2-lane secondary roads
+  (50 km/h) and collector roads (40 km/h) carry the rest; 1-lane local sub-roads (30 km/h, stop signs, no trucks
+  or buses) cross the town between them. Lane use at the signals is fixed (right turns from the right lane,
+  left turns from the inner lane, which trucks and buses may not use: they follow truck routes). Mixed
+  vehicles: cars, eco cars, motorcycles, buses, trucks, each with its own size, speeds and HBEFA4 emission class.
+  Built and checked by `sim/sumo/generate_city_net.py`; metrics in `results/city/`. The research results use
+  `grid2x2` and are unchanged.
 
 **Traffic demand** comes from scenario YAML files (`sim/scenarios/*.yaml`): origin–destination flows
 in vehicles per hour, generated with a seeded random arrival process, so each seed gives a different

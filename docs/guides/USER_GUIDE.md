@@ -38,9 +38,15 @@ every viewer sees it.
 
 ## 4. The live traffic map
 
-The map shows the 2×2 grid with junctions J0–J3 (in the `city` scenario also the ring road, bus
-lanes and residential streets around it) and every vehicle of the running simulation, moved from the
-simulation's own positions once per second.
+The map shows the four junctions J0–J3 and every vehicle of the running simulation, moved from the
+simulation's own positions once per second. In the `city` scenario the town is drawn at its real
+geometry:
+- the wide 3-lane main road;
+- the narrower secondary and collector roads;
+- the thin local sub-roads with bends;
+- the lane markings (dashed between lanes, yellow between the directions);
+- arrows for the direction of each lane;
+- the junction areas.
 
 Above the map, **Traffic control view** shows this overhead map; **Driver perspective** shows the
 road in 3D from the seat of the vehicle you drive or follow (or from just behind it), with its speed,
@@ -52,9 +58,8 @@ the speed limit, the light ahead and the efficient speed. Both show the same sim
 | Green vehicle | an eco vehicle: always this one green, on the map, in the 3D view and in the legend |
 | Blue roof dot | the vehicle has a VANET radio; vehicles without a dot are not connected. The counter at the bottom of the map shows how many are connected and the penetration (50 % by default) |
 | Yellow dot | slowing for a green |
-| Red-tinted lane | bus lane (buses and ambulances only) |
-| Light grey street | residential street: 30 km/h, no trucks or buses |
-| Hatched lane | closed to trucks and buses (they may not turn left at the signals) |
+| Light grey thin road | local sub-road: 1 lane, 30 km/h, no trucks or buses, stop sign where it joins |
+| Hatched lane | inner lane, closed to trucks and buses (they follow truck routes and never turn left at a signal) |
 | Signal lights and numbers | each approach's light and the seconds until it changes |
 | Number on an approach | cars queued there |
 | Road colour | congestion from the measured road speed (green / amber / red) |

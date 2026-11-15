@@ -51,8 +51,8 @@ for (const theme of ['light', 'dark']) {
   const dp = page.locator('section[aria-labelledby="drive-h"]');
   await dp.getByRole('button', { name: 'Drive', exact: true }).waitFor({ timeout: 60_000 }); // the seat is free
   await dp.getByRole('button', { name: 'Drive', exact: true }).click();
-  await dp.getByLabel('Start road').selectOption('SWbottom0');
-  await dp.getByLabel('Destination road').selectOption('right1NE');
+  await dp.getByLabel('Start road').selectOption('gWJ0');
+  await dp.getByLabel('Destination road').selectOption('kdgS1');
   await dp.getByRole('button', { name: 'Take the car' }).click();
   await page.locator('.advice').filter({ hasText: 'Estimated fuel-efficient speed' }).waitFor({ timeout: 90_000 });
   await audit(`${theme}: driving with the fuel-efficient speed`);

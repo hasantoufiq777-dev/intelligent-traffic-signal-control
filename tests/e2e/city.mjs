@@ -40,12 +40,12 @@ await step('Run control defaults to 50 % penetration and starts the city scenari
   await page.getByText(/Started run live-/).waitFor({ timeout: 20_000 });
 });
 
-await step('the map shows the city: ring, bus lanes, residential streets, vehicle types', async () => {
+await step('the map shows the city: main, secondary and local roads, vehicle types', async () => {
   await page.goto(`${url}/`);
   await page.locator('.map-svg').waitFor({ timeout: 60_000 });
   await page.waitForFunction(() => document.querySelectorAll('.car-g').length > 15, null, { timeout: 90_000 });
-  for (const t of ['Bus lane (buses and ambulances)', 'Residential street, 30 km/h, no trucks or buses', 'Truck', 'Bus', 'Motorcycle',
-    'Eco vehicle (always this green)']) {
+  for (const t of ['Main road (3 lanes each way)', 'Secondary / collector road (2 lanes each way)',
+    'Local sub-road (1 lane, 30 km/h, no trucks or buses)', 'Truck', 'Bus', 'Motorcycle', 'Eco vehicle (always this green)']) {
     await page.locator('.map-legend').getByText(t, { exact: true }).first().waitFor({ timeout: 5000 });
   }
   const titles = await page.locator('.car-g > title').allTextContents();
@@ -75,8 +75,8 @@ await step('eco vehicles all have the one eco colour', async () => {
 await step('the route explorer finds A* alternatives where the shortest is not the fastest', async () => {
   await page.getByRole('tab', { name: 'Routes' }).click();
   const rx = page.locator('section[aria-labelledby="routes-h"]');
-  await rx.getByLabel('From').selectOption('SWbottom0');
-  await rx.locator('select').nth(1).selectOption('right1NE');
+  await rx.getByLabel('From').selectOption('gEJ1');
+  await rx.locator('select').nth(1).selectOption('kcgS0');
   await rx.getByRole('button', { name: 'Find routes' }).click();
   const table = page.getByRole('region', { name: 'Route alternatives' });
   await table.waitFor({ timeout: 15_000 });
@@ -92,12 +92,18 @@ await step('the route explorer finds A* alternatives where the shortest is not t
 await step('a truck gets only routes legal for trucks', async () => {
   const rx = page.locator('section[aria-labelledby="routes-h"]');
   await rx.getByLabel('Vehicle').selectOption('truck');
+  await page.waitForTimeout(700); // one search per 500 ms per viewer
+  await rx.getByRole('button', { name: 'Find routes' }).click();
+  // east to S0 has no truck route (it needs a left turn at a signal): the explorer says so
+  await rx.getByRole('alert').filter({ hasText: /No route/ }).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(700);
+  await rx.locator('select').nth(1).selectOption('kegN2');
   await page.waitForTimeout(700);
   await rx.getByRole('button', { name: 'Find routes' }).click();
   await page.waitForTimeout(1500);
   const paths = await rx.locator('table tbody tr').count();
   const detail = await rx.getByText(/^Route 1:/).textContent();
-  if (/bottom1right0|left0bottom0|right1top1|top0left1/.test(detail)) throw new Error(`truck sent through a residential street: ${detail}`);
+  if (/kakb|kbka|kckd|kdkc|kekf|kfke/.test(detail)) throw new Error(`truck sent through a local sub-road: ${detail}`);
   console.log(`     ${paths} truck routes; ${detail.trim()}`);
 });
 
@@ -106,8 +112,8 @@ await step('drive a truck: accelerate, brake, desired speed; the fuel-efficient 
   const dp = page.locator('section[aria-labelledby="drive-h"]');
   await dp.getByRole('button', { name: 'Drive', exact: true }).click();
   await dp.getByLabel('Vehicle').selectOption('truck');
-  await dp.getByLabel('Start road').selectOption('SWbottom0');
-  await dp.getByLabel('Destination road').selectOption('right1NE');
+  await dp.getByLabel('Start road').selectOption('gWJ0');
+  await dp.getByLabel('Destination road').selectOption('kdgS1');
   await dp.getByRole('button', { name: 'Take the car' }).click();
   await page.getByText(/^speed limit \d+ km\/h/).waitFor({ timeout: 60_000 });
   await page.getByText('Estimated fuel-efficient speed', { exact: false }).waitFor({ timeout: 20_000 });

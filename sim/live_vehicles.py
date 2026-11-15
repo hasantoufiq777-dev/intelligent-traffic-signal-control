@@ -39,7 +39,9 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
     net = sumolib.net.readNet(str(net_path))
     tls = set(tls_ids)
     junctions = [
-        {"id": n.getID(), "x": round(n.getCoord()[0], 1), "y": round(n.getCoord()[1], 1), "tls": n.getID() in tls}
+        {"id": n.getID(), "x": round(n.getCoord()[0], 1), "y": round(n.getCoord()[1], 1), "tls": n.getID() in tls,
+         # the junction's area as SUMO computed it (drawn as is on non-grid maps and in the 3D view)
+         "shape": [[round(p[0], 1), round(p[1], 1)] for p in (n.getShape() or [])]}
         for n in net.getNodes()
     ]
     edges = []

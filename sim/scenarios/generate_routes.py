@@ -58,12 +58,14 @@ GRID_DEFAULT_OD_ROUTES: Dict[Tuple[str, str], List[str]] = {
 GRID_NETWORKS = ("grid2x2", "grid2x2_zone")  # grid2x2_zone: the grid with the accident work zone
 CITY_NETWORK = "grid2x2_city"  # the grid inside a ring, short-cuts and gates (sim/sumo/generate_city_net.py)
 
-# City trips between the four corners (sim/sumo/generate_city_net.py CITY_ENTRY / CITY_EXIT): they
-# enter on the ring road leaving a corner and leave on the ring road arriving at one. SUMO routes each
-# trip for its vehicle class at departure, so lane permissions are respected.
+# City trips between the exits of the city network (sim/sumo/generate_city_net.py CITY_ENTRY / CITY_EXIT):
+# they enter on the road leaving an exit and end on the road reaching one. SUMO routes each trip for its
+# vehicle class at departure, so lane permissions are respected.
 HEAVY_KINDS = ("bus", "truck")
-CITY_GATES_IN = {"SW": "SWbottom0", "SE": "SEright0", "NE": "NEtop1", "NW": "NWleft1"}
-CITY_GATES_OUT = {"SW": "left0SW", "SE": "bottom1SE", "NE": "right1NE", "NW": "top0NW"}
+CITY_GATES_IN = {"W": "gWJ0", "E": "gEJ1", "S0": "gS0kc", "S1": "gS1kd", "N2": "gN2ke", "N3": "gN3kf",
+                 "W2": "gW2J2", "E3": "gE3J3"}
+CITY_GATES_OUT = {"W": "J0gW", "E": "J1gE", "S0": "kcgS0", "S1": "kdgS1", "N2": "kegN2", "N3": "kfgN3",
+                  "W2": "J2gW2", "E3": "J3gE3"}
 
 
 def load_scenario_config(scenario_path: Path) -> Dict[str, Any]:
@@ -174,6 +176,11 @@ def generate_city_trips(
         {"from": a, "to": b, "rate": float(traffic_cfg.get("rate_per_od", 60.0))}
         for a in CITY_GATES_IN for b in CITY_GATES_OUT if a != b
     ]
+    # Trucks and buses follow truck routes (no left turns at the signals): they are only generated
+    # between exits they can legally reach; on other pairs that vehicle is a car instead.
+    from sim.sumo.generate_city_net import reachable_pairs
+
+    heavy_ok = {k: reachable_pairs(k) for k in HEAVY_KINDS}
     vehicles: List[Dict[str, Any]] = []
     for idx, flow in enumerate(flows):
         o = CITY_GATES_IN.get(flow["from"], flow["from"])
@@ -186,6 +193,8 @@ def generate_city_trips(
         veh_idx = 0
         while curr_time < duration:
             kind = str(rng.choice(kinds, p=probs))
+            if kind in HEAVY_KINDS and (flow["from"], flow["to"]) not in heavy_ok[kind]:
+                kind = "car"
             # Buses and trucks may not turn left at the grid signals (inner lanes are closed to them),
             # so a forced route through the grid is dropped for them; SUMO routes them legally.
             via = None if kind in HEAVY_KINDS else flow.get("via")
@@ -349,8 +358,8 @@ def _write_city_routes(config: Dict[str, Any], rng: np.random.Generator, duratio
         for ev in emergency_cfg.get("vehicles", []):
             vehicles.append({"id": ev.get("id", "amb1"), "type": "emergency",
                              "depart": round(float(ev.get("depart", 120.0)), 2),
-                             "from": CITY_GATES_IN.get(ev.get("from", "SW"), ev.get("from", "SWbottom0")),
-                             "to": CITY_GATES_OUT.get(ev.get("to", "NE"), ev.get("to", "right1NE")),
+                             "from": CITY_GATES_IN.get(ev.get("from", "W"), ev.get("from", "gWJ0")),
+                             "to": CITY_GATES_OUT.get(ev.get("to", "N3"), ev.get("to", "kfgN3")),
                              "via": ev.get("via")})
     vehicles.sort(key=lambda v: (v["depart"], v["id"]))
 

@@ -33,6 +33,7 @@
   --eco: #16a34a;        /* every eco vehicle, one colour in every theme (map, driver view, legend) */
   --bus-lane: #c0392b;   /* bus lane marking */
   --road-res: #8c8f94;   /* residential street (narrow, no trucks or buses) */
+  --road-centre: #f2c94c; /* centre line between the two directions (city map) */
   --accent: #1668c7;
   --link: #1668c7;
   --border-strong: rgba(11, 11, 11, 0.3);

@@ -20,15 +20,15 @@ from sim.navigation.graph import EdgeGraph
 from sim.navigation.planners import AcoPlanner, AStarPlanner, make_planner
 from sim.navigation.route_explorer import explore
 from sim.scenarios.generate_routes import generate_routes, load_scenario_config
-from sim.sumo.generate_city_net import CITY_ENTRY, CITY_EXIT, check
+from sim.sumo.generate_city_net import CITY_ENTRY, CITY_EXIT, check, reachable_pairs
 from sim.tests.test_playback import Script
 from sim.vehicles import CATALOG, VehicleTypeFactory, driven_type_id, is_driven_type, type_category
 
 ROOT = Path(__file__).resolve().parents[2]
 CITY_NET = ROOT / "sim" / "sumo" / "grid2x2_city.net.xml"
 GRID_NET = ROOT / "sim" / "sumo" / "grid2x2.net.xml"
-RESIDENTIAL = {"left0bottom0", "bottom0left0", "bottom1right0", "right0bottom1", "right1top1", "top1right1",
-               "top0left1", "left1top0"}
+# Local sub-roads: 1 narrow lane, 30 km/h, no trucks or buses
+LOCAL = {"kakb", "kbka", "kckd", "kdkc", "kekf", "kfke"}
 
 
 @pytest.fixture(scope="module")
@@ -39,8 +39,30 @@ def city_graph() -> EdgeGraph:
 
 
 # ---------------------------------------------------------------------------- network and vehicles
-def test_city_network_is_navigable_for_every_class_and_keeps_the_grid_signals() -> None:
-    assert check() == []  # corners reachable per class, no dead ends, J0-J3 link order as in grid2x2
+def test_city_network_is_navigable_and_its_road_classes_really_differ() -> None:
+    import sumolib
+
+    # every exit reachable per class, no dead ends, four-legged junctions with 4-phase programs
+    assert check() == []
+    net = sumolib.net.readNet(str(CITY_NET), withPrograms=True)
+    by_type = {}
+    for e in net.getEdges():
+        by_type.setdefault(e.getType(), set()).add((e.getLaneNumber(), round(sum(ln.getWidth() for ln in e.getLanes()), 2),
+                                                    round(e.getSpeed(), 2)))
+    assert {t: {x[0] for x in v} for t, v in by_type.items()} == {"main": {3}, "secondary": {2}, "collector": {2}, "local": {1}}
+    widths = {t: min(x[1] for x in v) for t, v in by_type.items()}
+    assert widths["main"] > widths["secondary"] > widths["collector"] > widths["local"]
+    speeds = {t: max(x[2] for x in v) for t, v in by_type.items()}
+    assert speeds["main"] > speeds["secondary"] > speeds["collector"] > speeds["local"]
+    # local roads and inner lanes are closed to trucks and buses; the junction areas are not uniform
+    for e in net.getEdges():
+        if e.getType() == "local":
+            assert not e.allows("truck") and not e.allows("bus") and e.allows("passenger")
+        else:  # heavy vehicles: outer lanes only (inner lanes carry the left turns)
+            assert e.getLane(0).allows("truck") and not e.getLane(e.getLaneNumber() - 1).allows("truck")
+    spacing = sorted(round(net.getNode(a).getCoord()[0] - net.getNode(b).getCoord()[0]) for a, b in (("J1", "J0"), ("J3", "J2")))
+    assert spacing[0] != spacing[1]  # irregular spacing
+    assert any(len(e.getShape()) > 2 for e in net.getEdges() if e.getType() == "local")  # bends
 
 
 def test_vehicle_factory_writes_real_sumo_types() -> None:
@@ -66,7 +88,8 @@ def test_city_trips_mix_categories_and_never_force_heavy_vehicles_through_the_gr
     kinds = {t.get("type") for t in trips}
     assert {"car", "eco_car", "motorcycle", "bus", "truck"} <= kinds
     assert all(t.get("via") is None for t in trips if t.get("type") in ("bus", "truck"))
-    assert any(t.get("via") for t in trips if t.get("type") == "car")
+    ends = {t.get("from") for t in trips} | {t.get("to") for t in trips}
+    assert {"gWJ0", "J1gE", "gEJ1", "J0gW"} <= ends  # the main corridor carries traffic
     out2 = tmp_path / "r2.rou.xml"
     generate_routes(cfg, out2, override_seed=3, network_override="grid2x2_city")
     assert out.read_text(encoding="utf-8") == out2.read_text(encoding="utf-8")  # same seed, same trips
@@ -74,11 +97,20 @@ def test_city_trips_mix_categories_and_never_force_heavy_vehicles_through_the_gr
 
 # ---------------------------------------------------------------------------- A*
 def test_lane_permissions_are_respected_by_the_router(city_graph: EdgeGraph) -> None:
-    for a in CITY_ENTRY.values():
-        for b in CITY_EXIT.values():
+    legal = reachable_pairs("truck")
+    assert len(legal) >= 24  # truck routes cover most exit pairs; every exit can be left and reached
+    assert {a for a, _ in legal} == set(CITY_ENTRY) and {b for _, b in legal} == set(CITY_EXIT)
+    for ka, a in CITY_ENTRY.items():
+        for kb, b in CITY_EXIT.items():
+            if ka == kb:
+                continue
             path, cost, _ = astar_search(city_graph, a, b, vclass="truck")
+            assert bool(path) == ((ka, kb) in legal), (ka, kb)  # A* agrees with SUMO's router
             if path:
-                assert not RESIDENTIAL & set(path), path  # trucks never use residential streets
+                assert not LOCAL & set(path), path  # trucks never use local sub-roads
+                # and never turn left at a signal: every turn into a road leaving a signal is straight or right
+                for x, y in zip(path, path[1:]):
+                    assert y in city_graph.get_successors(x, "truck")
     # on the research grid every lane allows every class: routes identical with and without a class
     grid = EdgeGraph.from_net_file(GRID_NET)
     for a, b in (("bottom0J0", "J3top1"), ("left1J2", "J1right0"), ("top0J2", "J1bottom1")):
@@ -104,7 +136,7 @@ def test_distance_search_finds_the_shortest_route(city_graph: EdgeGraph) -> None
     import sumolib
 
     net = sumolib.net.readNet(str(CITY_NET))
-    for a, b in (("SWbottom0", "right1NE"), ("NEtop1", "bottom1SE"), ("SEright0", "top0NW")):
+    for a, b in (("gWJ0", "J3gE3"), ("gEJ1", "kcgS0"), ("gS1kd", "kegN2")):
         path, cost, _ = astar_search(city_graph, a, b, cost="distance", vclass="passenger")
         ref, _ = net.getShortestPath(net.getEdge(a), net.getEdge(b), vClass="passenger")
         ref_len = sum(e.getLength() for e in ref[1:])
@@ -112,7 +144,7 @@ def test_distance_search_finds_the_shortest_route(city_graph: EdgeGraph) -> None
 
 
 def test_route_explorer_shows_that_the_shorter_route_is_not_always_faster(city_graph: EdgeGraph) -> None:
-    r = explore(city_graph, "SWbottom0", "right1NE", vclass="passenger")
+    r = explore(city_graph, "gEJ1", "kcgS0", vclass="passenger")
     assert r["ok"] and len(r["routes"]) >= 2
     fastest = next(x for x in r["routes"] if x["fastest"])
     shortest = next(x for x in r["routes"] if x["shortest"])
@@ -120,14 +152,16 @@ def test_route_explorer_shows_that_the_shorter_route_is_not_always_faster(city_g
     assert shortest["distance_m"] < fastest["distance_m"] and shortest["time_now_s"] > fastest["time_now_s"]
     # congestion on the fastest route makes another one fastest
     jam = {e: 2.0 for e in fastest["path"][1:-1]}
-    r2 = explore(city_graph, "SWbottom0", "right1NE", speed_map=jam, vclass="passenger")
+    r2 = explore(city_graph, "gEJ1", "kcgS0", speed_map=jam, vclass="passenger")
     assert next(x for x in r2["routes"] if x["fastest"])["path"] != fastest["path"]
     # units: seconds and metres; h(start) = straight line / v_max
     st = r["astar"]
     assert math.isclose(st["h_start_s"], st["straight_m"] / st["v_max"], abs_tol=0.11)
-    truck = explore(city_graph, "SWbottom0", "right1NE", vclass="truck")
-    assert all(not RESIDENTIAL & set(x["path"]) for x in truck["routes"])
-    assert not explore(city_graph, "SWbottom0", "nowhere")["ok"]
+    assert LOCAL & set(shortest["path"]) and not LOCAL & set(fastest["path"])  # the short-cut is the slow local road
+    truck = explore(city_graph, "gEJ1", "kegN2", vclass="truck")
+    assert truck["ok"] and all(not LOCAL & set(x["path"]) for x in truck["routes"])
+    assert not explore(city_graph, "gEJ1", "kcgS0", vclass="truck")["ok"]  # no legal truck route there
+    assert not explore(city_graph, "gEJ1", "nowhere")["ok"]
 
 
 def test_planner_factory_and_strategies(city_graph: EdgeGraph) -> None:
@@ -136,10 +170,10 @@ def test_planner_factory_and_strategies(city_graph: EdgeGraph) -> None:
         make_planner("teleport", city_graph)
     assert isinstance(make_planner("astar", city_graph), AStarPlanner)
     assert isinstance(make_planner("aco", city_graph, rng=random.Random(1)), AcoPlanner)
-    res = make_planner("astar", city_graph).plan("SWbottom0", "right1NE", None, None, "passenger")
-    assert res.path == astar_search(city_graph, "SWbottom0", "right1NE", vclass="passenger")[0]
-    aco1 = make_planner("aco", city_graph, rng=random.Random(5)).plan("SWbottom0", "right1NE", None, None, "passenger")
-    aco2 = make_planner("aco", city_graph, rng=random.Random(5)).plan("SWbottom0", "right1NE", None, None, "passenger")
+    res = make_planner("astar", city_graph).plan("gWJ0", "J3gE3", None, None, "passenger")
+    assert res.path == astar_search(city_graph, "gWJ0", "J3gE3", vclass="passenger")[0]
+    aco1 = make_planner("aco", city_graph, rng=random.Random(5)).plan("gWJ0", "J3gE3", None, None, "passenger")
+    aco2 = make_planner("aco", city_graph, rng=random.Random(5)).plan("gWJ0", "J3gE3", None, None, "passenger")
     assert aco1.path == aco2.path and math.isclose(sum(p for _, _, p in aco1.alternatives), 1.0, abs_tol=1e-6)
 
 
@@ -192,9 +226,9 @@ from sim.runner import run_simulation  # noqa: E402  (after the helpers above, a
 def test_city_run_half_equipped_lanes_respected_and_the_driver_capped() -> None:
     import sumolib
 
-    plan = {5: [{"cmd": "drive_start", "from": "SWbottom0", "to": "right1NE", "kind": "truck"}],
+    plan = {5: [{"cmd": "drive_start", "from": "gWJ0", "to": "kdgS1", "kind": "truck"}],
             20: [{"cmd": "drive", "mode": "ease", "speed": 50.0}],  # 180 km/h asked: never above the limit
-            40: [{"cmd": "routes", "qid": "q", "from": "SWbottom0", "to": "right1NE", "vclass": "bus"}]}
+            40: [{"cmd": "routes", "qid": "q", "from": "gEJ1", "to": "kegN2", "vclass": "bus"}]}
     result, msgs = _city_run(plan)
     assert result["collisions"] == 0
     net = sumolib.net.readNet(str(CITY_NET))
@@ -220,4 +254,4 @@ def test_city_run_half_equipped_lanes_respected_and_the_driver_capped() -> None:
     assert any(m.get("eco_speed", {}) and m["eco_speed"]["target_kmh"] <= m["limit_kmh"] + 0.01 for m in drv)
     routes = next(m for m in msgs if m["type"] == "routes")
     assert routes["ok"] and routes["qid"] == "q" and routes["vclass"] == "bus"
-    assert all(not RESIDENTIAL & set(r["path"]) for r in routes["routes"])
+    assert all(not LOCAL & set(r["path"]) for r in routes["routes"])

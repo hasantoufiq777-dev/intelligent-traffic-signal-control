@@ -17,7 +17,8 @@ export default function RouteExplorer({ live, result, onResult, selected, onSele
     [live.network]);
   const defaults = useMemo(() => {
     const ids = new Set(roads.map((r) => r.id));
-    if (ids.has('SWbottom0') && ids.has('right1NE')) return ['SWbottom0', 'right1NE'];
+    // city: a pair where the shorter route (local sub-road) is not the faster one (main road)
+    if (ids.has('gEJ1') && ids.has('kcgS0')) return ['gEJ1', 'kcgS0'];
     return [roads[0]?.id ?? '', roads[roads.length - 1]?.id ?? ''];
   }, [roads]);
   const [from, setFrom] = useState('');

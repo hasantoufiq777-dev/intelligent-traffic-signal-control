@@ -668,38 +668,102 @@ The same ambulance **without** priority was slower (checked by a test).
 The plan and its risks: [architecture/ENHANCEMENT_PLAN.md](architecture/ENHANCEMENT_PLAN.md). Design
 patterns: [architecture/DESIGN_PATTERNS.md](architecture/DESIGN_PATTERNS.md).
 
-### City network with route alternatives (`grid2x2_city`)
+### City network: a non-uniform four-junction town (`grid2x2_city`)
 
-**What it does.** It puts the 2×2 signalised grid inside a small city, so that between two points
-there are really different routes.
+**What it does.** It replaces the uniform grid with a realistic small town for the live demonstration:
+a wide main road, narrower secondary and collector roads, local sub-roads with bends, irregular
+junction spacing and several real routes between any two exits.
 
-**How it works** ([sim/sumo/generate_city_net.py](../sim/sumo/generate_city_net.py)):
-- **J0–J3 keep exactly the signal links of `grid2x2`.** The generator checks this; the junction
-  controllers rely on it.
-- **Arterial ring:** 60 km/h, two wide lanes (3.75 m and 3.5 m), joining the grid's eight outer
-  nodes and bending round four corners. Trips enter and leave on the ring at the corners.
-- **Bus lanes:** on the south and north ring sides, the right lane is for buses and ambulances only.
-- **Residential short-cuts:** cutting each corner; 30 km/h, one 3.0 m lane, cars, motorcycles and
-  ambulances only. They are shorter than the way round, but slower.
-- **Grid streets:** a 3.5 m outer lane for every vehicle and a 3.25 m inner lane for cars,
-  motorcycles and ambulances.
-- **Realistic geometry:** corner radii and turning speeds limited by curvature (3 m/s² sideways).
+**Layout** ([sim/sumo/generate_city_net.py](../sim/sumo/generate_city_net.py)):
 
-**Why heavy vehicles may not turn left at the signals.**
-- **The problem it solves:** a 10–12 m bus or truck waiting inside the junction to turn left needs
-  about 7 s to clear it from standstill. Yellow plus all-red is 5 s, so the cross traffic would get
-  green while it is still there.
-- **What was measured:** before the lane rules and geometry fixes, SUMO reported 13–21 junction
-  collisions in 30 runs. After them, **0 collisions in 30 runs** (3 controllers × 2 demands × 5
-  seeds).
+```
+              N2                    N3            exits
+               |  secondary          |
+     local  ke ┼──── bends ──────────┼ kf         1-lane sub-roads, stop signs
+               |                     |
+  W2 ─collector─ J2 ─secondary (bend)─ J3 ─collector─ E3
+               |                     |
+     local  ka ┼──── bends ──────────┼ kb
+               |  secondary          |
+  W ═══ MAIN ══ J0 ═══ (bend) ═══════ J1 ═══ MAIN ═══ E
+               |                     |
+     local  kc ┼──── bends ──────────┼ kd
+               |                     |
+              S0                    S1
+```
 
-**Checks** (`check()`):
-- every corner reaches every other corner for cars, motorcycles, buses, trucks and ambulances;
+| Road class | Lanes each way | Lane widths (m) | Speed | Who may use it |
+|---|---|---|---|---|
+| Main (W – J0 – J1 – E) | 3 | 3.6 / 3.5 / 3.3 | 60 km/h | all; inner lane: no trucks or buses |
+| Secondary (north–south, J2–J3) | 2 | 3.4 / 3.2 | 50 km/h | all; inner lane: no trucks or buses |
+| Collector (W2–J2, J3–E3) | 2 | 3.25 / 3.0 | 40 km/h | all; inner lane: no trucks or buses |
+| Local sub-roads | 1 | 3.0 | 30 km/h | cars, motorcycles, ambulances; stop sign where they join |
+
+- **J0–J3 are irregular:** different spacings and bends. Each is signalised with four legs and a
+  4-phase program written by the generator (north–south green, yellow, east–west green, yellow;
+  left turns permissive). That is the layout the signal controllers, VANET, preemption and
+  dispatcher use.
+- **Lane use at the signals is fixed, like lane markings:**
+  - right turns only from the right lane;
+  - left turns only from the inner lane;
+  - straight on from each lane into the matching lane.
+
+  Left to itself, SUMO gave trucks a left turn from the *right* lane (because the inner lane was
+  closed to them), across the cars going straight beside it.
+- **Trucks and buses follow truck routes:** straight on and right turns only, never left at a
+  signal. Trips for them are generated only between exits they can legally reach: 32 of the 56 exit
+  pairs. On other pairs that vehicle is drawn as a car.
+- **Realistic geometry:**
+  - turning speeds limited by curvature (3 m/s² sideways);
+  - SUMO's own junction shapes;
+  - a 4 s all-red in this scenario, because its junctions are 30–40 m wide (2 s on the research grid).
+
+**Why heavy vehicles may not turn left at the signals.** Measured, not assumed:
+- **The test:** plain SUMO at 1.6× demand, 4 runs.
+- **Cars and motorcycles only: 0 junction collisions.**
+- **With buses and trucks allowed to turn left: 17**, every one on a left-turn path, by a bus or truck
+  crossing oncoming traffic.
+- **What didn't help:** a larger accepted gap (4 s), no driver imperfection, faster acceleration and a
+  0.5 s time step all left 9–22.
+- **Truck routes** (no heavy left turns): **0**.
+
+**Checks** (`check()`, also a test):
+- cars, motorcycles and ambulances reach every exit from every other;
+- trucks and buses can leave and reach every exit;
 - no road a class may use is a dead end for it;
-- J0–J3 keep their signal link order.
+- four legs, 4 phases and links on both axes at each signal;
+- turns only from the allowed lanes;
+- the four road classes really differ in lanes, widths and speeds.
 
 **The research results are not affected.** `grid2x2` and the stored results are unchanged; the
-zero-regression test still passes.
+zero-regression test still passes. City metrics are stored apart, in `results/city/`
+([sim/analytics/city_eval.py](../sim/analytics/city_eval.py)).
+
+**Metrics on the redesigned network** (5 seeds × 1,200 s, 50 % penetration, mixed vehicles):
+
+| Configuration | Waiting | Travel time | Throughput | Max queue | Collisions | CO₂ |
+|---|---|---|---|---|---|---|
+| Fixed-time | 27.3 s | 118.6 s | 1,216 veh/h | 10.8 | 0 | 292 g/km |
+| Adaptive | 19.8 s (−27 %) | 110.8 s | 1,231 veh/h | 10.0 | 0 | 290 g/km |
+| Adaptive over VANET | 22.4 s (−18 %) | 113.0 s | 1,232 veh/h | 9.6 | 0 | 289 g/km |
+| Adaptive over VANET + A\* navigation | 21.5 s (−21 %) | 111.7 s | 1,225 veh/h | 9.6 | 0 | 287 g/km |
+
+The signal algorithms keep their advantage on the new network.
+
+**Which road classes the trips used** (seed 1, SUMO's own routing):
+
+| Category | Trips | Main road | Local sub-roads |
+|---|---|---|---|
+| Car | 276 | 233 | 0 |
+| Bus | 10 | 8 | 0 |
+| Truck | 28 | 21 | 0 |
+
+- **Most trips use the main road.**
+- **No trip uses a local sub-road at free flow,** because they are slower. Only navigating cars reroute
+  onto them when the main roads are congested.
+- **Trucks and buses never use a local sub-road.**
+
+**No collisions:** 0 in 30 further runs (3 controllers × normal and 1.6× demand × 5 seeds).
 
 ### Vehicle types ([sim/vehicles.py](../sim/vehicles.py))
 
@@ -710,9 +774,9 @@ One catalogue, turned into SUMO types by `VehicleTypeFactory`:
 | Car | passenger | 4.5 × 1.8 | 2.6 / 4.5 | PC petrol Euro-4 | |
 | Eco car | passenger | 4.3 × 1.8 | 2.0 / 4.0 | PC petrol Euro-6d | always connected; follows GLOSA; one fixed colour |
 | Motorcycle | motorcycle | 2.2 × 0.9 | 3.5 / 6.5 | MC 4-stroke ≤ 250 cc Euro-5 | |
-| Bus | bus | 12.0 × 2.55 | 1.2 / 4.0 | city bus 15–18 t Euro VI | bus lanes |
-| Truck | truck | 10.0 × 2.5 | 1.0 / 4.0 | rigid truck 14–20 t Euro VI | not on residential streets or inner grid lanes |
-| Ambulance | emergency | 6.5 × 2.1 | 3.5 / 6.0 | PC petrol Euro-4 | always connected; bus lanes |
+| Bus | bus | 12.0 × 2.55 | 1.2 / 4.0 | city bus 15–18 t Euro VI | outer lanes, truck routes |
+| Truck | truck | 10.0 × 2.5 | 1.0 / 4.0 | rigid truck 14–20 t Euro VI | outer lanes, truck routes, not on local roads |
+| Ambulance | emergency | 6.5 × 2.1 | 3.5 / 6.0 | PC petrol Euro-4 | always connected; every lane |
 
 - **Speed limits:** vehicles drive at most the limit (speed factor ≤ 1); ambulances excepted.
 - **Gap acceptance:** heavy vehicles accept a 2.5 s gap when crossing priority traffic, others 1.5 s.
@@ -740,9 +804,10 @@ for the distance search):
 - f(n) = g(n) + h(n).
 - The distance search uses metres, with h = the straight-line distance.
 
-**Lane permissions:** the road graph stores, for each vehicle class, which turns it may make, so
-trucks are never routed through a street closed to them. On the research grid every lane allows
-every class, and routes are identical with or without a class (tested).
+**Lane permissions:** the road graph stores, for each vehicle class, which turns it may make
+(including "no left turn at a signal" for trucks). A\* therefore finds a route exactly where SUMO's
+router does (tested for every exit pair). On the research grid every lane allows every class, and
+routes are identical with or without a class (tested).
 
 **Route explorer** (*Live traffic → Routes*): pick a start road, a destination and a vehicle type.
 The simulation answers with:
@@ -753,9 +818,13 @@ The simulation answers with:
 each with its distance, free-flow time, current estimated time, signal count and congestion. They
 are drawn on the map.
 
-**Example (cars, SW → NE):** the shortest route (1.17 km, through a residential short-cut) takes 88 s;
-the fastest (1.30 km, round the ring) takes 78 s. Congestion on the ring makes another route fastest
-(tested).
+**Examples (cars, from the east to S0):**
+- the shortest route (791 m) takes the 30 km/h local sub-road and needs 75 s;
+- the fastest (802 m) stays on the 3-lane main road through J0 and needs 67 s;
+- congestion on the main road makes another route fastest (tested).
+
+**For a truck** there is no legal route on that pair (it would need a left turn at a signal), and the
+explorer says so.
 
 ### Driver perspective and traffic control view
 
@@ -766,7 +835,7 @@ the fastest (1.30 km, round the ring) takes 78 s. Congestion on the ring makes a
 
 **What the 3D view draws, all from the same simulation frames as the map:**
 - roads from SUMO's lane shapes, at their real widths;
-- bus lanes and restricted lanes tinted;
+- lanes closed to heavy vehicles and local roads in their own colours;
 - lane markings and buildings;
 - signal heads in their live colours;
 - blocked roads as barriers;

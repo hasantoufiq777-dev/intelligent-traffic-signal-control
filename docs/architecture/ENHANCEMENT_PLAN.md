@@ -65,9 +65,34 @@ All nine steps were implemented and tested; details in [HOW_IT_WORKS.md](../HOW_
 - the 3D road hidden by the ground with a coarse depth buffer: layer heights and depth offset.
 
 **Limits:**
-- Roadside units sit at J0–J3 only. Ring roads more than 300 m from them report no speed, and
-  route costs there use the speed limit.
+- Roadside units sit at J0–J3 only. Roads more than 300 m from them report no speed, and route costs
+  there use the speed limit.
 - The fuel-efficient speed is an estimate (cost per candidate speed, not a global optimum). The
   network is flat, so road gradient is not modelled.
-- Heavy vehicles may not turn left at the grid's signals; they are routed around via the ring.
+- Heavy vehicles may not turn left at the signals: they follow truck routes, which cover 32 of the 56 exit
+  pairs of the redesigned town (section 5).
 - The 3D view draws junctions as discs, not their exact SUMO shapes.
+
+## 5. Network redesign (non-uniform four-junction town)
+
+Decided with the project owner: redesign `grid2x2_city`, keep `grid2x2` and every research result.
+
+| Requirement | How it is met |
+|---|---|
+| Main road and sub-roads | 3-lane main road W–J0–J1–E; 2-lane secondary and collector roads; 1-lane local sub-roads with bends, joining at stop-controlled T-junctions |
+| Non-uniform geometry | Irregular junction spacing; bends on the main road, J2–J3, the collectors and every local road |
+| Real lane differences | Lane counts 3 / 2 / 2 / 1, widths 3.6–3.0 m, limits 60 / 50 / 40 / 30 km/h, all in SUMO; the map draws lanes from SUMO's lane shapes at their real widths |
+| Vehicle restrictions | Local roads: cars, motorcycles, ambulances; inner lanes: no trucks or buses; lane use at signals fixed (right from the right lane, left from the inner lane) |
+| A\* | Class-aware graph; A\* finds a route exactly where SUMO's router does (tested on every exit pair) |
+| Valid routes | Network check plus SUMO routing every trip for its class; heavy trips only on legal pairs |
+| Metrics recalculated | `sim/analytics/city_eval.py` → `results/city/` |
+
+**Found while building, fixed:**
+1. **Right-lane left turns.** SUMO gave trucks a left turn from the right lane (across straight traffic).
+   Fixed by explicit lane use at the signals.
+2. **Heavy-vehicle left turns.**
+   - **The finding:** buses and trucks turning left across oncoming traffic in these 30–40 m junctions
+     collided (plain SUMO, 1.6× demand: 0 with cars only, 17 with the full mix).
+   - **What didn't help:** vehicle parameters and a 0.5 s step (9–22).
+   - **The fix:** truck routes, so heavy vehicles never turn left at a signal. 0 collisions in plain
+     SUMO, and 0 in 30 controller runs (3 controllers × 2 demands × 5 seeds).

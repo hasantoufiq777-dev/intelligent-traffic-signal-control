@@ -136,12 +136,20 @@ function buildStatic(network) {
   group.add(meshFrom(asphalt, '#3b3f45'), meshFrom(residential, '#62666b'), meshFrom(bus, '#7c2d2a'),
     meshFrom(noHeavy, '#454a52'), meshFrom(white, '#f4f4f4'), meshFrom(centre, '#f4f4f4'));
 
-  // Junction areas: an asphalt disc (signalised junctions are larger)
+  // Junction areas: SUMO's junction shape when the road map has it, otherwise an asphalt disc
   for (const j of network.junctions) {
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(j.tls ? 15 : 11, 24), new THREE.MeshLambertMaterial({ color: '#3b3f45' }));
-    disc.rotation.x = -Math.PI / 2;
-    disc.position.set(j.x, -0.05, -j.y);
-    group.add(disc);
+    let mesh;
+    if (j.shape?.length > 2) {
+      const outline = new THREE.Shape(j.shape.map(([x, y]) => new THREE.Vector2(x, y)));
+      mesh = new THREE.Mesh(new THREE.ShapeGeometry(outline), new THREE.MeshLambertMaterial({ color: '#3b3f45', side: THREE.DoubleSide }));
+      mesh.rotation.x = -Math.PI / 2; // shape x,y -> world x,-z
+      mesh.position.y = -0.05;
+    } else {
+      mesh = new THREE.Mesh(new THREE.CircleGeometry(j.tls ? 15 : 11, 24), new THREE.MeshLambertMaterial({ color: '#3b3f45' }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(j.x, -0.05, -j.y);
+    }
+    group.add(mesh);
   }
 
   // Buildings on free ground, for depth (deterministic positions and heights)
