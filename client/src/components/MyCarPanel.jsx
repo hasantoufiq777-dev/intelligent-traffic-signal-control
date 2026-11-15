@@ -8,12 +8,10 @@ function pickers(rows, onFollow) {
   const ids = (pred) => rows.filter((r) => pred(r[4])).map((r) => r[0]);
   const eco = ids((f) => has(f, FLAG.ECO));
   const amb = ids((f) => has(f, FLAG.EMERGENCY));
-  const any = rows.map((r) => r[0]);
   const pick = (list) => list.length && onFollow(list[Math.floor(Math.random() * list.length)]);
   return (
     <div className="row">
       <button type="button" className="btn primary" disabled={!eco.length} onClick={() => pick(eco)}>Follow an eco car</button>
-      <button type="button" className="btn" disabled={!any.length} onClick={() => pick(any)}>Follow any car</button>
       {amb.length > 0 && <button type="button" className="btn" onClick={() => pick(amb)}>Follow the ambulance</button>}
     </div>
   );
