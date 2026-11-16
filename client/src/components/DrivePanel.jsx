@@ -5,8 +5,10 @@
 // gaps, brakes within limits and stops at red lights.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmt, isNum, seconds } from '../lib/format.js';
+import { normalise } from '../lib/following.js';
 import { roadChoices } from '../lib/roads.js';
 import { CATEGORY_LABEL } from '../lib/vehicles.js';
+import FollowingCard from './FollowingCard.jsx';
 
 const DRIVABLE = ['car', 'eco_car', 'motorcycle', 'bus', 'truck'];
 const STEP_KMH = 5;
@@ -246,6 +248,7 @@ export default function DrivePanel({ live }) {
       else if (k === 'x' || k === 'arrowdown') { ev.preventDefault(); brake(); }
       else if (k === 'e') slowDown();
       else if (k === 's' || k === ' ') { ev.preventDefault(); send('stop'); }
+      else if (k === 'f') send('follow');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -310,7 +313,8 @@ export default function DrivePanel({ live }) {
             </div>
             <div>
               <div className="k">You asked for</div>
-              <div className="v">{s.mode === 'stop' ? 'Stop' : s.mode === 'ease' ? `At most ${fmt(s.target_kmh, 0)} km/h` : 'Normal driving (up to the limit)'}</div>
+              <div className="v">{s.mode === 'stop' ? 'Stop' : s.mode === 'ease' ? `At most ${fmt(s.target_kmh, 0)} km/h`
+                : s.mode === 'follow' ? 'Follow the car ahead (adaptive cruise)' : 'Normal driving (up to the limit)'}</div>
               {s.holding && <div className="small">Stopping after the junction</div>}
               {s.kind && <div className="small muted">{CATEGORY_LABEL[s.kind]}</div>}
             </div>
@@ -343,6 +347,10 @@ export default function DrivePanel({ live }) {
             )}
             {isNum(s.advice_followed_pct) && <span className="small muted">You followed the advice {s.advice_followed_pct}% of the time so far.</span>}
           </div>
+        )}
+
+        {!waiting && 'ahead' in s && (
+          <FollowingCard data={normalise(s, 'driver')} mine onFollow={() => send('follow')} active={s.mode === 'follow'} />
         )}
 
         {!waiting && <EcoSpeed eco={s.eco_speed} onUse={setSpeed} />}
@@ -423,7 +431,7 @@ export default function DrivePanel({ live }) {
           <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>
         </div>
         <p className="small muted" style={{ margin: 0 }}>
-          Keys while driving: W / ↑ accelerate, X / ↓ brake, E slow down, S or Space stop, G normal driving. The seat is
+          Keys while driving: W / ↑ accelerate, X / ↓ brake, E slow down, S or Space stop, G normal driving, F follow the car ahead. The seat is
           freed after {seconds((seat.idle_ms ?? 120000) / 1000)} without input.
         </p>
       </>

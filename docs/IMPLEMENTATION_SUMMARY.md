@@ -548,6 +548,62 @@ A test asks for 180 km/h and checks the vehicle never goes above the limit.
 
    ```
    cost(v) = fuel_per_metre(v) · d
+### 11.3 Car following: the car ahead and the car behind: `sim/car_following.py`
+
+**What the driver sees.** In *My car*, the *Drive a vehicle* panel and the 3D head-up display:
+
+| | Shown |
+|---|---|
+| Car ahead | its type and id, speed, acceleration in words ("braking hard (−3.6 m/s²)"), the gap in metres and seconds, and whether it shares its data by V2V or is measured by radar |
+| Advice for my car | keep your speed / ease off / too close / brake / the car ahead has stopped / you can speed up, the speed for a safe gap, and the time to collision when it is under 10 s |
+| Car behind | its speed, acceleration and gap, and what it does because of my car ("brakes because you slow down", "stops behind you") with its target speed |
+
+**Where the data comes from.**
+1. Every second, each vehicle's row in the live stream carries its acceleration
+   (`traci.vehicle.getAcceleration`), the vehicle directly ahead in its lane and the gap to it
+   (`traci.vehicle.getLeader`, up to 100 m). SUMO can return a leader further than asked, so anything
+   beyond 100 m counts as a free road.
+2. The gateway pairs the rows. The car ahead of a followed car is its leader. The car behind is the
+   vehicle whose leader it is, and the closest one when there are several. Both go out with the
+   followed car's details.
+3. For the driven car, `sim/driver.py` asks SUMO directly (`getLeader`, `getFollower`).
+
+**The rule (constant time-gap policy, as adaptive cruise control).**
+
+```
+desired gap    s* = 2.5 m + T · v
+target speed   v_t = v_lead + 0.25 · (gap − s*)  [+ 1.0 s · a_lead with V2V]
+closing in:    v_t ≤ √(v_lead² + 2 · 1.5 m/s² · (gap − s*))
+               (still able to brake gently to the leader's speed)
+time to collision = gap / (v − v_lead)   (only while closing in)
+```
+
+- **Radar only (ACC), T = 1.5 s.** At least one of the two vehicles has no OBU. The follower measures
+  only the leader's speed and the gap, so it notices braking only when the gap shrinks.
+- **Cooperative (CACC), T = 1.0 s.** Both vehicles have an OBU. The leader's acceleration also
+  arrives by V2V beacon, so the follower eases off the moment the leader brakes, before the gap
+  shrinks, and can keep a shorter gap safely.
+- **States:**
+  - *stopped*: the car ahead stands within 30 m (or twice the desired gap), or will be reached in under 8 s;
+  - *brake*: time to collision under 4 s, or a V2V leader braking at −2.5 m/s² or harder;
+  - *too close*: under 70 % of the desired gap;
+  - *slow* or *speed up*: the target is more than 1 m/s away from the current speed;
+  - *keep*: otherwise.
+
+**Following the car ahead while driving.** *Follow the car ahead* (key **F**) is a fourth driving
+mode next to Normal, Slow down and Stop. Each second the driven car is given the target speed for
+following the vehicle ahead. On a free road it drives normally up to the limit, and inside a junction
+SUMO's own following takes over. As with the other controls, SUMO still keeps safe gaps and stops at
+red lights, so the mode cannot cause a crash. The vehicle behind follows the driven car with the same
+rule, and the panel shows how it reacts.
+
+**Tested** by:
+- `sim/tests/test_car_following.py` (13): every state, cooperative against radar, limits, and the live rows;
+- a real SUMO drive in follow mode (`test_driver.py`): 0 collisions, the advice within the limit, and both neighbours reported;
+- a gateway test: the followed car gets the car ahead, and seen from that car, the car behind;
+- `client/src/lib/following.test.js` (6);
+- the browser test `tests/e2e/following.mjs` (5/5).
+
            + [if the light would be red on arrival]
                idle fuel × waiting time + extra fuel to speed up again from a stop
            + 1.5 × idle fuel rate × travel time
@@ -613,6 +669,7 @@ arrives on green instead of stopping: 15.9 mL instead of 36.6 mL, in the same ti
 | **Factory** | `create_controller()` (name → controller class); `make_planner()` (mode → planner); `VehicleTypeFactory` (catalogue → SUMO types and dashboard data) |
 | **Adapter** | `StateProvider` (exact SUMO data or VANET estimates behind one interface); `SimProcess` (Python process → gateway events) |
 | **State** | Preemption, signal changeover, run lifecycle, driver seat, work-zone turns |
+| Browser: car following (card, ride along, follow mode, 3D HUD, axe in both themes) | 5/5 |
 | **Observer** | Gateway: simulation messages → live channel → Socket.io rooms (all viewers; followers of one vehicle) |
 | **Singleton** (limited) | One live channel and configuration per gateway, created in the composition root; the fuel curves cached once. A global Singleton was avoided because the tests start several gateways |
 
@@ -626,8 +683,9 @@ Details, reasons and class relationships: [architecture/DESIGN_PATTERNS.md](arch
 |---|---|
 | Python tests (including the 12-run zero-regression test) | 160 passed |
 | City tests (`test_city.py`) | 12: network check; lane permissions; A\* equal to Dijkstra; heuristic never overestimates; A\* agrees with SUMO's router on every exit pair; explorer; planners; fuel advice; a real run (0 collisions, every vehicle on an allowed lane, 35–65 % equipped, driver capped at the limit) |
-| Gateway tests | 89 passed (+ 4 with real SUMO) |
-| Dashboard unit tests | 15 passed |
+| Car following (`test_car_following.py`, follow-mode drive in `test_driver.py`) | 13 + 1 passed |
+| Gateway tests | 90 passed (+ 4 with real SUMO) |
+| Dashboard unit tests | 21 passed |
 | Browser: city, routes, truck driving, 3D view, view switch | 9/9 |
 | Browser: ambulance on demand | 6/6 |
 | Layout at 6 widths (1920–360 px) | 108/108 |

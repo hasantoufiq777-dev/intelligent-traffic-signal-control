@@ -16,6 +16,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from sim.car_following import LOOKAHEAD_M, follow_advice
 from sim.vanet.network import resolve_lane_direction
 from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
 from sim.vehicles import CATALOG, VehicleTypeFactory, is_driven_type, type_category
@@ -23,7 +24,10 @@ from sim.vehicles import CATALOG, VehicleTypeFactory, is_driven_type, type_categ
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
                   "advice", "adv_speed", "green_in", "road", "to",
                   # vehicle category (sim/vehicles.py), lane index, speed limit for this vehicle here (m/s)
-                  "kind", "lane", "limit"]
+                  "kind", "lane", "limit",
+                  # car following (sim/car_following.py): acceleration (m/s2), the vehicle ahead in the lane
+                  # and the gap to it (m), the advice for following it, its target speed (m/s), time to collision (s)
+                  "acc", "leader", "gap", "follow", "follow_speed", "ttc"]
 FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
 LANE_CLASSES = ("passenger", "motorcycle", "bus", "truck", "emergency")  # lane permissions shown on the map
 PETROL_MG_PER_ML = 745.0
@@ -188,6 +192,13 @@ class LiveVehicleTracker:
                 limit = self._lane_limit[lane_id]  # posted speed limit of the lane
             except Exception:
                 continue
+            try:
+                acc = float(api.vehicle.getAcceleration(vid))
+                lead = api.vehicle.getLeader(vid, LOOKAHEAD_M)
+                near = bool(lead and lead[0]) and float(lead[1]) <= LOOKAHEAD_M  # SUMO may return one further away
+                leader, gap = (str(lead[0]), max(0.0, float(lead[1]))) if near else (None, None)
+            except Exception:
+                acc, leader, gap = 0.0, None, None
             vtype = self._type(vid)
             flags = 0
             if vtype == "emergency":
@@ -220,5 +231,30 @@ class LiveVehicleTracker:
                 advice.get("advice"), advice.get("speed"), advice.get("green_in"),
                 road, route[-1] if route else None,
                 type_category(vtype), lane_idx, round(limit, 2),
+                round(acc, 2), leader, None if gap is None else round(gap, 1),
             ])
+        add_follow_advice(rows)
         return {"type": "vehicles", "run_id": run_id, "t": int(t), "fields": VEHICLE_FIELDS, "rows": rows}
+
+
+def add_follow_advice(rows: List[List[Any]]) -> None:
+    """Append (follow, follow_speed, ttc) to each row (fields as VEHICLE_FIELDS up to "gap").
+
+    The leader's speed and acceleration come from its own row. Both vehicles equipped = cooperative
+    (the leader's acceleration arrives by V2V beacon); otherwise the follower only measures its speed.
+    """
+    ix = {k: VEHICLE_FIELDS.index(k) for k in ("id", "speed", "flags", "limit", "acc", "leader", "gap")}
+    by_id = {r[ix["id"]]: r for r in rows}
+    for r in rows:
+        lid = r[ix["leader"]]
+        if not lid or r[ix["gap"]] is None or (lid not in by_id and not str(lid).startswith("incblk_")):
+            r.extend([None, None, None])
+            continue
+        lead = by_id.get(lid)
+        if lead is None:  # the stopped vehicle of an incident (not shown on the map)
+            l_speed, l_acc, coop = 0.0, 0.0, False
+        else:
+            l_speed, l_acc = lead[ix["speed"]], lead[ix["acc"]]
+            coop = bool(r[ix["flags"]] & FLAG_EQUIPPED and lead[ix["flags"]] & FLAG_EQUIPPED)
+        adv = follow_advice(r[ix["speed"]], r[ix["limit"]], l_speed, l_acc, r[ix["gap"]], cooperative=coop)
+        r.extend([adv["state"], adv["speed"], adv["ttc"]])

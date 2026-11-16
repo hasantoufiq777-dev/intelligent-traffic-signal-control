@@ -58,6 +58,7 @@ export class LiveChannel {
     this.network = null; // road geometry of the current run
     this.latestVehicles = null; // latest full vehicles message from Python
     this.vehicleIndex = new Map(); // vehicle id -> detail object (latest)
+    this.followerOf = new Map(); // leader id -> the vehicle following it
 
     this._lastStateEmit = 0;
     this._lastVehiclesEmit = 0;
@@ -168,7 +169,7 @@ export class LiveChannel {
     if (!parsed.success) return;
     socket.data.follow = parsed.data;
     socket.join(`veh:${parsed.data}`);
-    const detail = this.vehicleIndex.get(parsed.data);
+    const detail = this._detail(parsed.data);
     // gone: true = the car is not (or no longer) in the simulation; false = no vehicle data yet
     socket.emit('vehicle', detail ?? { id: parsed.data, gone: this.vehicleIndex.size > 0 });
   }
@@ -258,6 +259,7 @@ export class LiveChannel {
     this.network = null;
     this.latestVehicles = null;
     this.vehicleIndex = new Map();
+    this.followerOf = new Map();
     clearTimeout(this._vehiclesTimer);
     this._vehiclesTimer = null;
     this._pendingVehicles = null;
@@ -508,16 +510,38 @@ export class LiveChannel {
     this.stats.bytes_broadcast += Buffer.byteLength(JSON.stringify(payload)) * this.viewers();
   }
 
+  /**
+   * A vehicle's detail with its neighbours in the lane: `ahead` (the vehicle it follows) and `behind`
+   * (the vehicle following it), each { id, speed, acc, gap, kind, flags, follow, follow_speed, ttc }.
+   * The gap of `ahead` is this vehicle's gap; of `behind`, the follower's gap to this vehicle.
+   */
+  _detail(id) {
+    const d = this.vehicleIndex.get(id);
+    if (!d) return undefined;
+    const side = (o, gap) => (o ? {
+      id: o.id, speed: o.speed, acc: o.acc ?? null, gap: gap ?? null, kind: o.kind ?? null, flags: o.flags,
+      follow: o.follow ?? null, follow_speed: o.follow_speed ?? null, ttc: o.ttc ?? null,
+    } : null);
+    const back = this.followerOf.get(id);
+    return { ...d, ahead: side(d.leader ? this.vehicleIndex.get(String(d.leader)) : null, d.gap), behind: side(back, back?.gap) };
+  }
+
   _onVehicles(msg) {
     this.latestVehicles = msg;
     const fields = msg.fields ?? [];
     const index = new Map();
+    const followerOf = new Map(); // leader id -> the vehicle directly behind it (smallest gap)
     for (const row of msg.rows ?? []) {
       const obj = { t: msg.t };
       fields.forEach((k, i) => { obj[k] = row[i]; });
       index.set(String(obj.id), obj);
+      if (obj.leader != null) {
+        const prev = followerOf.get(String(obj.leader));
+        if (!prev || (obj.gap ?? Infinity) < (prev.gap ?? Infinity)) followerOf.set(String(obj.leader), obj);
+      }
     }
     this.vehicleIndex = index;
+    this.followerOf = followerOf;
     // Same throttle as states: at most one map frame per STATE_INTERVAL_MS, always the latest.
     // Never in the same tick as the state broadcast: a volatile message is dropped while the
     // socket is still writing the previous one, so the frame goes out VEHICLES_OFFSET_MS later.
@@ -542,7 +566,7 @@ export class LiveChannel {
     for (const [room, members] of this.io.of('/').adapter.rooms) {
       if (!room.startsWith('veh:') || !members.size) continue;
       const id = room.slice(4);
-      const detail = this.vehicleIndex.get(id) ?? { id, t: msg.t, gone: true };
+      const detail = this._detail(id) ?? { id, t: msg.t, gone: true };
       this.io.to(room).emit('vehicle', detail);
     }
   }

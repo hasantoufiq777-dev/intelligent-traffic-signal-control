@@ -4,7 +4,8 @@
 // second and are interpolated, like the map. three.js is loaded only when this view is opened.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { fmt, isNum } from '../lib/format.js';
+import { fmt, isNum, kmh } from '../lib/format.js';
+import { accText, FOLLOW_TEXT, normalise } from '../lib/following.js';
 import { categoryOf, CATEGORY_LABEL, ECO_COLOR, fieldIndex, FLAG, has, sizeOf } from '../lib/vehicles.js';
 
 const PAINT = ['#f2f2ef', '#c4c7cb', '#2a2c30', '#c8302c', '#2f6fd0', '#22406e', '#f0c419', '#e8772e', '#1e9aa0',
@@ -434,6 +435,7 @@ export default function DriverView3D({ network, vehicles, tlsState, incidents, e
         return {
           id: egoId, category: drive.kind ?? 'car', speed: drive.speed_kmh ?? 0, limit: drive.limit_kmh ?? null,
           tls: drive.tls, dist: drive.dist, lane: null, signal: drive.advice?.signal ?? null,
+          following: 'ahead' in drive ? normalise(drive, 'driver') : null,
         };
       }
       return null;
@@ -443,6 +445,7 @@ export default function DriverView3D({ network, vehicles, tlsState, incidents, e
       limit: isNum(detail.limit) ? detail.limit * 3.6 : null, tls: detail.tls, dist: detail.dist,
       approach: detail.approach, lane: detail.lane,
       signal: detail.tls ? tlsState?.[detail.tls]?.signal?.[detail.approach] : null,
+      following: 'ahead' in detail ? normalise(detail) : null,
     };
   }, [detail, egoId, tlsState, drive]);
 
@@ -468,6 +471,20 @@ export default function DriverView3D({ network, vehicles, tlsState, incidents, e
                 {' '}{hud.tls} in {fmt(hud.dist, 0)} m: {hud.signal === 'G' || hud.signal === 'g' ? 'green' : hud.signal === 'y' ? 'yellow' : hud.signal === 'r' ? 'red' : '–'}
               </div>
             ) : <div>No signal ahead on the route</div>}
+            {hud.following?.ahead && (() => {
+              const f = hud.following;
+              const t = FOLLOW_TEXT[f.advice?.state];
+              return (
+                <div>
+                  Car ahead: <span className="num">{kmh(f.ahead.speed) ?? '–'} km/h</span>, {accText(f.ahead.acc)},
+                  {' '}<span className="num">{fmt(f.ahead.gap, 0)} m</span>
+                  {t && <> · <strong>{t.head.split(':')[0]}</strong>{f.advice.state !== 'free' && isNum(f.advice.speed) ? <> ({kmh(f.advice.speed)} km/h)</> : null}</>}
+                </div>
+              );
+            })()}
+            {hud.following?.behind && (
+              <div>Car behind: <span className="num">{fmt(hud.following.behind.gap, 0)} m</span>, {kmh(hud.following.behind.speed) ?? '–'} km/h</div>
+            )}
             {eco && (
               <div>Efficient speed: <strong>{fmt(eco.target_kmh, 0)} km/h</strong> ({eco.action})</div>
             )}

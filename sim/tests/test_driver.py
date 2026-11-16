@@ -156,3 +156,33 @@ def test_driven_car_is_not_part_of_the_run_results(tmp_path) -> None:
     assert m["avg_travel_time"] == 100 and m["avg_waiting_time"] == 10
     em = parse_tripinfo_emissions(xml)
     assert em["co2_g_per_km"] == 200.0
+
+
+def test_follow_mode_drives_behind_the_car_ahead_and_reports_both_neighbours() -> None:
+    """Car following (sim/car_following.py): the driven car sees the vehicle ahead and the one behind,
+    gets a speed for following at a safe gap, and in "follow" mode drives at it (adaptive cruise)."""
+    plan = {100: [{"cmd": "drive_start", "from": "bottom0J0", "to": "J3top1", "step_delay": 0}],
+            102: [{"cmd": "drive", "mode": "follow"}]}
+    result, msgs = _live_run(plan, scenario="congested", controller="adaptive")
+    assert result["collisions"] == 0
+    drv = [m for m in _driver_msgs(msgs) if m["status"] == "driving"]
+    assert drv and all("ahead" in m and "behind" in m and "follow" in m for m in drv)
+    assert all(m["mode"] == "follow" for m in drv if m["t"] > 103)
+    with_lead = [m for m in drv if m["ahead"]]
+    assert with_lead, "in congested traffic the driven car has a vehicle ahead"
+    for m in with_lead:
+        a, f = m["ahead"], m["follow"]
+        assert a["id"] != m["vid"] and 0 <= a["gap_m"] <= 100 and a["speed_kmh"] >= 0
+        assert f["state"] in ("keep", "slow", "brake", "stopped", "speed_up", "too_close")
+        assert 0 <= f["speed_kmh"] <= m["limit_kmh"] + 0.5
+    # a vehicle behind (when one is within 100 m) gets its own advice for following the driven car
+    assert all(m["behind"]["follow"] and m["behind"]["gap_m"] <= 100 and m["behind"]["follow_speed_kmh"] <= m["limit_kmh"] + 0.5
+               for m in drv if m["behind"])
+    # The vehicles rows carry acceleration, the leader and the gap, and the follow advice
+    vm = [m for m in msgs if m["type"] == "vehicles" and m["rows"]][-1]
+    f = vm["fields"]
+    rows = [dict(zip(f, r)) for r in vm["rows"]]
+    led = [r for r in rows if r["leader"]]
+    assert led and all(r["gap"] is not None and isinstance(r["acc"], float) for r in led)
+    known = {r["id"] for r in rows}
+    assert all(r["follow"] for r in led if r["leader"] in known)

@@ -182,6 +182,42 @@ describe('gateway with mock simulation', () => {
     await S.post('/api/live/stop').expect(200);
   }, 30_000);
 
+  it('gives a followed car the vehicle ahead and the vehicle behind (car following)', async () => {
+    const a = viewer(url);
+    sockets.push(a.socket);
+    const frames = [];
+    const details = [];
+    a.socket.on('vehicles', (m) => frames.push(m));
+    a.socket.on('vehicle', (m) => details.push(m));
+    await waitFor(() => a.got.init);
+    await S.post('/api/live/start').send({ scenario: 'normal', controller: 'fixed', seed: 3 }).expect(202);
+    await waitFor(() => frames.some((m) => m.rows.length > 8), 20_000);
+
+    // Follow cars one by one until one has a vehicle ahead in its lane
+    let withLeader = null;
+    for (const [id] of frames.at(-1).rows) {
+      a.socket.emit('follow', id);
+      const pick = () => details.findLast((x) => x.id === id && !x.gone && 'ahead' in x);
+      const d = await waitFor(pick, 5_000).then(pick).catch(() => null);
+      if (d?.ahead) { withLeader = d; break; }
+    }
+    expect(withLeader).not.toBeNull();
+    const { ahead } = withLeader;
+    expect(ahead.id).not.toBe(withLeader.id);
+    expect(typeof ahead.speed).toBe('number');
+    expect(typeof ahead.gap).toBe('number');
+    expect('acc' in ahead).toBe(true);
+    expect(['free', 'keep', 'slow', 'brake', 'stopped', 'speed_up', 'too_close']).toContain(withLeader.follow);
+    expect(typeof withLeader.follow_speed).toBe('number');
+
+    // ... and seen from the car ahead, the followed car is (one of) the vehicles behind it
+    a.socket.emit('follow', ahead.id);
+    const pickBack = () => details.findLast((x) => x.id === ahead.id && x.behind);
+    const fromAhead = await waitFor(pickBack, 10_000).then(pickBack);
+    expect(fromAhead.behind.gap).toBeGreaterThanOrEqual(0);
+    await S.post('/api/live/stop').expect(200);
+  }, 60_000);
+
   it('stops a running simulation on admin request', async () => {
     const v = viewer(url);
     sockets.push(v.socket);

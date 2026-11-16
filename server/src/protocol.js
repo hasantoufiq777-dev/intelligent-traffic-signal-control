@@ -45,9 +45,12 @@ export const DRIVABLE = ['car', 'eco_car', 'motorcycle', 'bus', 'truck']; // veh
 export const DriverStartSchema = z.object({ from: EdgeIdSchema, to: EdgeIdSchema, kind: z.enum(DRIVABLE).optional() }).strict()
   .refine((b) => b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
 
-/** One-driver mode: a driving command. speed_kmh only for "ease" (hold at most this speed). */
+/**
+ * One-driver mode: a driving command. speed_kmh only for "ease" (hold at most this speed).
+ * "follow" = adaptive cruise: drive at the speed for following the vehicle ahead (sim/car_following.py).
+ */
 export const DriverCommandSchema = z.object({
-  action: z.enum(['go', 'ease', 'stop']),
+  action: z.enum(['go', 'ease', 'stop', 'follow']),
   speed_kmh: z.coerce.number().min(5).max(90).optional(), // capped at the road's limit by the simulation
 }).strict();
 

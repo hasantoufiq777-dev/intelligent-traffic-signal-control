@@ -1,6 +1,8 @@
 import { fmt, kmh, seconds, SIGNAL_LABEL } from '../lib/format.js';
 import { ADVICE_TEXT, glosaAdvice } from '../lib/glosa.js';
+import { accText, normalise } from '../lib/following.js';
 import { APPROACH_LABEL, FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
+import FollowingCard from './FollowingCard.jsx';
 
 const DEFAULT_SPEED = 13.9; // m/s (50 km/h) when the car's own speed limit is unknown
 
@@ -85,7 +87,10 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
       )}
 
       <div className="kv">
-        <div><div className="k">Speed</div><div className="v num">{kmh(detail.speed) ?? '–'} km/h</div></div>
+        <div>
+          <div className="k">Speed</div><div className="v num">{kmh(detail.speed) ?? '–'} km/h</div>
+          {typeof detail.acc === 'number' && <div className="small muted">{accText(detail.acc)}</div>}
+        </div>
         <div>
           <div className="k">Next traffic light</div>
           <div className="v">{detail.tls ? `${detail.tls}` : 'None ahead'}</div>
@@ -131,6 +136,10 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
 
       <div className="kv">
         <div><div className="k">Fuel used so far</div><div className="v num">{fmt((detail.fuel_ml ?? 0) / 1000, 2)} L</div></div>
+      {'ahead' in detail && (
+        <FollowingCard data={normalise(detail)} mine={kind === 'driven'} onSelect={onFollow} />
+      )}
+
         <div><div className="k">CO₂ so far</div><div className="v num">{fmt(detail.co2_g, 0)} g</div></div>
       </div>
 
