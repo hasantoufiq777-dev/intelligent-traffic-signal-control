@@ -119,6 +119,7 @@ python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev
                    [--eco-fraction 0.6] [--ev-routing on|off] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
 ```
 - **Controllers:**
+  - `dynamic_vanet` (default) and `dynamic`: congestion-aware control, green 5–45 s from the measured queue, density, waiting time, arrivals and downstream space ([sim/controllers/dynamic.py](sim/controllers/dynamic.py));
   - `fixed`, `adaptive` (true queues), `adaptive_vanet` (VANET queues);
   - `adaptive_ev` (+ preemption from true EV positions), `adaptive_ev_vanet` (+ preemption over V2I/V2V);
   - `adaptive_ev_vanet_tuned` (GA-tuned).
@@ -142,6 +143,7 @@ paragraphs there are written by hand, so regenerating replaces them with placeho
 
 | Question | Result |
 |---|---|
+| Dynamic signals (default mode) | Waiting time −66 % (normal) and −71 % (congested) vs fixed-time with exact measures; −34 % and −55 % over VANET at 50 % penetration; throughput up to +13 %; 0 collisions (`python sim/analytics/compare_dynamic.py`, [results/dynamic/summary.md](results/dynamic/summary.md)) |
 | Adaptive signals with VANET sensing | Waiting time −36 to −39% vs fixed-time from 80% penetration (oracle −38%); worse than fixed-time at 20% |
 | Ambulance preemption over VANET | Ambulance travel time −25 to −27% vs adaptive at 0-50% packet loss, same as oracle; 0 missed junctions |
 | Ambulance route choice | Road closed ahead: −44% (113.7 s → 63.3 s); congested corridor: −13%; normal traffic: no change |
