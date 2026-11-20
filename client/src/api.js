@@ -74,6 +74,7 @@ export const api = {
   playlist: () => request('/api/live/playlist'),
   summary: () => request('/api/experiments/summary'),
   ga: () => request('/api/experiments/ga'),
+  dynamicComparison: () => request('/api/experiments/dynamic', { quiet: true }),
   runs: (limit = 20, offset = 0) => request(`/api/runs${q({ limit, offset })}`),
   run: (id) => request(`/api/runs/${encodeURIComponent(id)}`),
   start: (entry) => post('/api/live/start', entry),

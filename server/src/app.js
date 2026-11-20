@@ -177,6 +177,20 @@ export function createGateway(overrides = {}) {
     });
   });
 
+  // Fixed-time vs dynamic signal control on the same traffic (results/dynamic/summary.json, written by
+  // sim/analytics/compare_dynamic.py)
+  app.get('/api/experiments/dynamic', requireAuth, (_req, res) => {
+    const file = path.join(path.dirname(cfg.SUMMARY_PATH), 'dynamic', 'summary.json');
+    fs.readFile(file, 'utf8', (err, text) => {
+      if (err) return res.status(404).json({ error: 'No comparison yet. Run: python sim/analytics/compare_dynamic.py' });
+      try {
+        return res.json(JSON.parse(text));
+      } catch {
+        return res.status(500).json({ error: 'results/dynamic/summary.json is not valid JSON' });
+      }
+    });
+  });
+
   // Genetic-algorithm tuning output (results/ga/, written by sim/optimizer/ga_tuner.py): the
   // convergence history and the held-out evaluation per target. A target that was not run is null.
   app.get('/api/experiments/ga', requireAuth, async (_req, res) => {
