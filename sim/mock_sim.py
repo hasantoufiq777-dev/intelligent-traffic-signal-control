@@ -127,13 +127,14 @@ def main() -> None:
         choices=["none", "astar", "aco", "aco_tuned"],
         help="Navigation mode",
     )
-    parser.add_argument("--penetration", type=float, default=1.0, help="OBU penetration rate (0.0 to 1.0)")
+    parser.add_argument("--penetration", type=float, default=0.5, help="OBU penetration rate (0.0 to 1.0)")
     parser.add_argument("--nav-fraction", type=float, default=0.3, help="Fraction of navigating vehicles")
     parser.add_argument("--loss", type=float, default=0.0, help="Base channel loss probability")
     parser.add_argument("--range", type=float, default=300.0, dest="range_m", help="Wireless communication range")
     parser.add_argument("--relay", type=str, default="off", choices=["on", "off"], help="V2V multi-hop relaying")
     parser.add_argument("--aco-params", type=str, default=None, help="Path to custom ACO params YAML")
     parser.add_argument("--eco-fraction", type=float, default=0.0, help="Share of equipped cars following GLOSA advice")
+    parser.add_argument("--eco-select", type=str, default="data", choices=["data", "random"], help="How eco cars are chosen")
     parser.add_argument("--ev-routing", type=str, default="off", choices=["on", "off"], help="Ignored in mock")
     parser.add_argument("--demand", type=float, default=1.0, help="Traffic demand factor (scales the mock's cars)")
     parser.add_argument("--driver", action="store_true", help="One-driver mode: drive commands as JSON lines on stdin")
@@ -147,7 +148,7 @@ def main() -> None:
         pass
 
     valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation", "ev_incident", "ev_congested",
-                       "accident_zone"}
+                       "accident_zone", "city"}
     if args.scenario not in valid_scenarios and not Path(args.scenario).exists():
         err_msg = f"Unknown scenario: {args.scenario}"
         logger.error(err_msg)
@@ -172,13 +173,13 @@ def main() -> None:
                     network = sc_data.get("network", "single")
             except Exception:
                 network = "single"
-        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested", "accident_zone"):
+        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested", "accident_zone", "city"):
             network = "grid2x2"
         else:
             network = "single"
 
-    if network == "grid2x2_zone":
-        # The mock has no accident work zone (no shared-lane model): it shows the plain grid
+    if network in ("grid2x2_zone", "grid2x2_city"):
+        # The mock has no work zone or city ring: it shows the plain grid
         network = "grid2x2"
     tls_ids = ["J0", "J1", "J2", "J3"] if network == "grid2x2" else ["J0"]
     try:
@@ -348,6 +349,16 @@ def main() -> None:
                 for cmd in playback.split(commands.poll(), t):
                     if cmd.get("cmd") == "ambulance":
                         amb_events += ambulances.handle(cmd, t)
+                    elif cmd.get("cmd") == "routes":
+                        # No road graph in the mock: one direct "route", marked as mock data
+                        emit_json({"type": "routes", "run_id": args.run_id, "t": t, "qid": str(cmd.get("qid", "")),
+                                   "ok": True, "mock": True, "origin": cmd.get("from"), "destination": cmd.get("to"),
+                                   "vclass": cmd.get("vclass"), "chosen": 0, "shorter_not_faster": False,
+                                   "routes": [{"path": [cmd.get("from"), cmd.get("to")], "distance_m": 500.0,
+                                               "time_free_s": 40.0, "time_now_s": 45.0, "signals": 1,
+                                               "congestion": 1.12, "fastest": True, "shortest": True}],
+                                   "astar": {"h_start_s": 30.0, "straight_m": 416.7, "v_max": 13.89, "g_goal_s": 45.0,
+                                             "expansions": 3, "expansions_distance": 3, "signal_wait_s": 8.0}})
                     else:
                         traffic.handle_driver(cmd, t)
                 amb_events += ambulances.step(t)

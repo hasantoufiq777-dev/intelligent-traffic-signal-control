@@ -52,8 +52,8 @@ for (const w of WIDTHS) {
 await page.setViewportSize({ width: 390, height: 800 });
 await page.goto(url);
 await page.getByRole('button', { name: 'Open navigation' }).click();
-await page.getByRole('link', { name: 'Results' }).click();
-await page.waitForURL('**/results');
+await page.getByRole('link', { name: 'Documentation' }).click();
+await page.waitForURL('**/docs');
 await page.waitForTimeout(500); // the drawer slides out
 if (await page.evaluate(() => document.querySelector('.sidebar').getBoundingClientRect().right > 0)) problems.push('drawer stayed open after navigating');
 

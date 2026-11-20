@@ -7,6 +7,7 @@ time). They only change the car's target speed:
   {"cmd": "drive", "mode": "go"}                      # drive normally (SUMO's own speed choice)
   {"cmd": "drive", "mode": "ease", "speed": 8.3}      # hold at most this speed (m/s)
   {"cmd": "drive", "mode": "stop"}                    # brake to a stop
+  {"cmd": "drive", "mode": "follow"}                  # adaptive cruise: follow the vehicle ahead
   {"cmd": "drive_end", "reason": "released"}          # hand the car back to SUMO
 
 SUMO still keeps safe gaps, comfortable acceleration and braking limits, and stops at red
@@ -21,6 +22,11 @@ The driven car has an OBU. Every second it gets:
   range (loss probability of the channel), which become a warning when the ambulance will pass
   the driver's position or cross the driver's next junctions.
 
+Car following (sim/car_following.py): every second the car sees the vehicle ahead in its lane
+(speed, acceleration, gap; the acceleration only by V2V when both have an OBU) and gets a target
+speed for following it at a safe time gap. In "follow" mode that target is applied (adaptive
+cruise control); the vehicle behind is reported too, since it follows the driven car the same way.
+
 When the car arrives (or is handed back) a trip report compares it with the other cars that
 finished during the run (same origin and destination if any, otherwise all, per km).
 Live mode only. The car's vType "driven" is excluded from navigation, eco-driving and the
@@ -34,9 +40,12 @@ import math
 import random
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
+from sim.car_following import LOOKAHEAD_M, follow_advice
 from sim.commands import CommandReader  # noqa: F401  (re-exported for the runner)
+from sim.eco_speed import recommend as eco_recommend
 from sim.vanet.glosa import glosa_advice
-from sim.vanet.nodes import build_edge_info, distance_along_route
+from sim.vehicles import CATALOG, driven_type_id, is_driven_type, type_category
+from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +53,8 @@ DRIVER_VTYPE = "driven"
 DRIVER_PREFIX = "drv"
 GUI_COLOR = (170, 60, 220, 255)  # purple, as on the dashboard map
 
-MODES = ("go", "ease", "stop")
+MODES = ("go", "ease", "stop", "follow")
+DRIVABLE = ("car", "eco_car", "motorcycle", "bus", "truck")  # categories a viewer may drive
 MIN_EASE_MS = 2.0  # lowest "ease off" speed (about 7 km/h)
 FOLLOW_MARGIN_MS = 1.4  # within 5 km/h of the advised speed counts as following it
 ALERT_HOLD_S = 3.0  # keep a received ambulance alert this long (alerts repeat every second)
@@ -111,12 +121,17 @@ class DriverManager:
         self.applied: Optional[float] = None  # last value given to setSpeed (-1 = normal)
         self.last: Dict[str, Any] = {}
         self.advice: Dict[str, Any] = {"advice": "none"}
+        self.eco: Optional[Dict[str, Any]] = None  # estimated fuel-efficient speed (sim/eco_speed.py)
+        self.kind = "car"  # category of the driven vehicle
         self.adv_seconds = 0
         self.adv_followed = 0
         self.amb: Optional[Dict[str, Any]] = None
         self._amb_rx: Dict[str, float] = {}  # ambulance id -> time its alert was last received
         self.amb_warned: Set[str] = set()
         self.route: List[str] = []
+        self.ahead: Optional[Dict[str, Any]] = None  # the vehicle ahead in the lane
+        self.behind: Optional[Dict[str, Any]] = None  # the vehicle behind
+        self.follow: Dict[str, Any] = {"state": "free"}  # car-following advice (sim/car_following.py)
 
     @property
     def active(self) -> bool:
@@ -175,18 +190,23 @@ class DriverManager:
                 self._reset()
                 self._notice(t, "error", f"Could not start the drive: {e}", vid="")
 
-    def _ensure_vtype(self) -> None:
-        if self._vtype_ready:
-            return
+    def _ensure_vtype(self, kind: str = "car") -> str:
+        """The SUMO type of the driven vehicle: a copy of the chosen category ("driven" for a car,
+        "driven_<category>" otherwise), so it keeps that category's size, class and fuel model.
+        Networks without that category (the research grids) give a car."""
         types = set(self.api.vehicletype.getIDList())
-        if DRIVER_VTYPE not in types:
-            base = "car" if "car" in types else "DEFAULT_VEHTYPE"
-            self.api.vehicletype.copy(base, DRIVER_VTYPE)
+        if kind not in types:
+            kind = "car"
+        vtype = driven_type_id(kind)
+        if vtype not in types:
+            base = kind if kind in types else ("car" if "car" in types else "DEFAULT_VEHTYPE")
+            self.api.vehicletype.copy(base, vtype)
             try:
-                self.api.vehicletype.setColor(DRIVER_VTYPE, GUI_COLOR)
+                self.api.vehicletype.setColor(vtype, GUI_COLOR)
             except Exception:
                 pass
         self._vtype_ready = True
+        return vtype
 
     def _start(self, cmd: Dict[str, Any], t: float) -> None:
         if self.active:
@@ -197,17 +217,19 @@ class DriverManager:
         if origin not in edges or dest not in edges:
             self._notice(t, "error", f"Unknown road: {origin if origin not in edges else dest}", vid="")
             return
-        self._ensure_vtype()
-        route = list(self.api.simulation.findRoute(origin, dest, vType=DRIVER_VTYPE).edges)
+        kind = str(cmd.get("kind") or "car")
+        vtype = self._ensure_vtype(kind if kind in DRIVABLE else "car")
+        route = list(self.api.simulation.findRoute(origin, dest, vType=vtype).edges)
         if not route:
-            self._notice(t, "error", f"No route from {origin} to {dest}", vid="")
+            self._notice(t, "error", f"No route from {origin} to {dest} for this vehicle", vid="")
             return
         self._n += 1
         vid = f"{DRIVER_PREFIX}{self._n}"
         rid = f"{vid}_route"
         self.api.route.add(rid, route)
-        self.api.vehicle.add(vid, rid, typeID=DRIVER_VTYPE, depart="now", departLane="best", departSpeed="max")
+        self.api.vehicle.add(vid, rid, typeID=vtype, depart="now", departLane="best", departSpeed="max")
         self._reset()
+        self.kind = vtype[len(DRIVER_VTYPE) + 1:] if vtype != DRIVER_VTYPE else "car"
         self.vid, self.status = vid, "waiting"
         self.origin, self.destination, self.route = origin, dest, route
         self.t_added = t
@@ -276,6 +298,9 @@ class DriverManager:
         elif self.mode == "ease" and self.target is not None:
             limit = self.last.get("allowed") or self.target
             self._set_speed(min(self.target, limit))
+        elif self.mode == "follow" and self.follow.get("state") != "free" and not road.startswith(":"):
+            # adaptive cruise: the speed for following the vehicle ahead at a safe time gap
+            self._set_speed(float(self.follow["speed"]))
         else:
             self._set_speed(-1.0)
 
@@ -309,11 +334,13 @@ class DriverManager:
             pos = tuple(api.vehicle.getPosition(vid))
             speed = float(api.vehicle.getSpeed(vid))
             allowed = float(api.vehicle.getAllowedSpeed(vid))
+            road_limit = float(api.lane.getMaxSpeed(api.vehicle.getLaneID(vid)))  # the posted limit
         except Exception:
             return
         self.route = route
         self.last = {"route": route, "idx": idx, "road": road, "lane_pos": lane_pos, "pos": pos,
-                     "speed": speed, "allowed": allowed}
+                     "speed": speed, "allowed": allowed, "road_limit": road_limit}
+        self._neighbours(vid, speed, min(allowed, road_limit))  # advice within the posted limit
         self._apply_speed()
 
         # Next signal on the route and the advice for it
@@ -325,12 +352,54 @@ class DriverManager:
                 break
         self.last["next"] = nxt
         self.advice = self._advise(t, vid, nxt, allowed)
+        self.eco = self._eco_speed(vid, speed, allowed, road_limit, nxt, route, idx, road, lane_pos)
         if self.advice.get("advice") == "slow" and self.advice.get("speed") is not None:
             self.adv_seconds += 1
             if speed <= float(self.advice["speed"]) + FOLLOW_MARGIN_MS:
                 self.adv_followed += 1
 
         self._ambulance(t, alive, pos, route, idx, road, lane_pos)
+
+    def _neighbour(self, other: str, gap: float) -> Dict[str, Any]:
+        api = self.api
+        vtype = self._type(other)
+        return {"id": other, "gap_m": round(max(0.0, gap), 1),
+                "speed_kmh": _kmh(float(api.vehicle.getSpeed(other))),
+                "acc": round(float(api.vehicle.getAcceleration(other)), 2),
+                "kind": type_category(vtype),
+                "v2v": is_vehicle_equipped(other, vtype=vtype, penetration=getattr(self.tracker, "penetration", 0.0),
+                                           seed=getattr(self.tracker, "seed", 1))}
+
+    def _neighbours(self, vid: str, speed: float, allowed: float) -> None:
+        """The vehicle ahead and the one behind, and the advice for following the one ahead.
+        allowed: the posted limit here (m/s), the highest speed any advice gives."""
+        api = self.api
+        self.ahead = self.behind = None
+        try:
+            lead = api.vehicle.getLeader(vid, LOOKAHEAD_M)
+            if lead and lead[0] and float(lead[1]) <= LOOKAHEAD_M:  # SUMO may return one further away
+                self.ahead = self._neighbour(str(lead[0]), float(lead[1]))
+        except Exception:
+            self.ahead = None
+        try:
+            fol = api.vehicle.getFollower(vid, LOOKAHEAD_M)
+            if fol and fol[0] and float(fol[1]) <= LOOKAHEAD_M:
+                self.behind = self._neighbour(str(fol[0]), float(fol[1]))
+        except Exception:
+            self.behind = None
+        a = self.ahead
+        if a is None:
+            self.follow = follow_advice(speed, allowed)
+        else:  # the driven car has an OBU: cooperative when the vehicle ahead has one too
+            self.follow = follow_advice(speed, allowed, a["speed_kmh"] / 3.6, a["acc"], a["gap_m"], cooperative=a["v2v"])
+        try:
+            self.last["acc"] = float(api.vehicle.getAcceleration(vid))
+        except Exception:
+            self.last["acc"] = None
+        b = self.behind
+        if b is not None:  # how the vehicle behind follows the driven car (its own advice)
+            adv = follow_advice(b["speed_kmh"] / 3.6, allowed, speed, self.last["acc"], b["gap_m"], cooperative=b["v2v"])
+            b["follow"], b["follow_speed_kmh"] = adv["state"], _kmh(adv["speed"])
 
     def _advise(self, t: float, vid: str, nxt: Optional[Tuple[str, float, str]], allowed: float) -> Dict[str, Any]:
         out: Dict[str, Any] = {"advice": "none", "speed": None, "green_in": None, "signal": None}
@@ -364,6 +433,46 @@ class DriverManager:
         res = glosa_advice(dist, msg_spat, age, allowed, self.v_min, self.margin_s, self.max_uncertainty_s)
         res["signal"] = out["signal"]
         return res
+
+    def _eco_speed(self, vid: str, speed: float, allowed: float, road_limit: float,
+                   nxt: Optional[Tuple[str, float, str]],
+                   route: List[str], idx: int, road: str, lane_pos: float) -> Optional[Dict[str, Any]]:
+        """Estimated fuel-efficient speed with its reasons (sim/eco_speed.py), from what this car
+        knows: its speed limit, the next light's timing (the SPaT it received), the vehicle ahead and
+        the speed of traffic on its next road."""
+        api = self.api
+        light = None
+        a = self.advice or {}
+        if nxt is not None and a.get("signal"):
+            light = {"dist": nxt[1], "signal": a.get("signal"), "green_in": a.get("green_in"),
+                     "green_ends_in": a.get("green_ends_in")}
+        leader = None
+        try:
+            lead = api.vehicle.getLeader(vid, 100.0)
+            if lead and lead[0]:
+                leader = {"gap": float(lead[1]), "speed": float(api.vehicle.getSpeed(lead[0]))}
+        except Exception:
+            pass
+        traffic = None
+        try:
+            ahead = route[idx + 1] if idx + 1 < len(route) else None
+            if ahead and api.edge.getLastStepVehicleNumber(ahead) > 0:
+                traffic = float(api.edge.getLastStepMeanSpeed(ahead))
+        except Exception:
+            pass
+        left = None
+        if not road.startswith(":"):
+            left = max(0.0, self.edge_info.get(road, (None, 0.0))[1] - lane_pos)
+        try:
+            top = min(float(api.vehicle.getMaxSpeed(vid)), allowed)  # this vehicle never exceeds this here
+        except Exception:
+            top = allowed
+        try:
+            return eco_recommend(self.kind, speed, road_limit, max_speed=top, light=light, leader=leader,
+                                 traffic_speed=traffic, road_left_m=left)
+        except Exception as e:  # missing curve file, odd input: no advice rather than a failed run
+            logger.debug("eco speed advice failed: %s", e)
+            return None
 
     def _queue_ahead(self, vid: str) -> bool:
         try:
@@ -474,7 +583,7 @@ class DriverManager:
     def _compare(self) -> Optional[Dict[str, Any]]:
         """Other cars that finished during this run: same origin and destination if any, else all."""
         done = [r for r in (self.tracker.finished.values() if self.tracker is not None else [])
-                if r.get("vtype") not in ("emergency", DRIVER_VTYPE) and r.get("dist_m", 0) > 50]
+                if r.get("vtype") != "emergency" and not is_driven_type(r.get("vtype")) and r.get("dist_m", 0) > 50]
         same = [r for r in done if r.get("origin") == self.origin and r.get("destination") == self.destination]
         group, rows = ("same_route", same) if same else ("all", done)
         if not rows:
@@ -512,7 +621,8 @@ class DriverManager:
         a = self.advice
         msg.update({
             "speed_kmh": _kmh(last.get("speed")),
-            "limit_kmh": _kmh(last.get("allowed")),
+            "limit_kmh": _kmh(last.get("road_limit") or last.get("allowed")),  # posted limit
+            "allowed_kmh": _kmh(last.get("allowed")),  # highest speed this vehicle drives here
             "holding": self.holding,
             "road": last.get("road"),
             "dist_left_m": round(left),
@@ -527,5 +637,11 @@ class DriverManager:
             "fuel_ml": round(trip["fuel_ml"], 1),
             "co2_g": round(trip["co2_g"], 1),
             "amb": self.amb,
+            "kind": self.kind,
+            "eco_speed": self.eco,
+            "acc": None if last.get("acc") is None else round(last["acc"], 2),
+            "ahead": self.ahead,
+            "behind": self.behind,
+            "follow": {**self.follow, "speed_kmh": _kmh(self.follow.get("speed"))},
         })
         return msg

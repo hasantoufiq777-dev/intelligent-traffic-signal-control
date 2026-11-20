@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import EcoComparison from '../components/EcoComparison.jsx';
 import EcoSummary from '../components/EcoSummary.jsx';
 import JunctionPanel from '../components/JunctionPanel.jsx';
 import { TimeChart } from '../components/LiveCharts.jsx';
@@ -89,6 +90,77 @@ function PhaseStrip({ id, states }) {
   );
 }
 
+const COMPARE_ROWS = [
+  ['avg_waiting_time', 'Average waiting time', 's', 1],
+  ['avg_queue', 'Average queue per junction', 'vehicles', 2],
+  ['trips_completed', 'Vehicles through (completed trips)', '', 0],
+  ['avg_travel_time', 'Average travel time', 's', 1],
+  ['queue_veh_h', 'Total congestion (vehicle-hours queued)', 'h', 2],
+  ['stops_per_vehicle', 'Stops per vehicle', '', 2],
+  ['throughput_veh_per_hr', 'Throughput', 'veh/h', 0],
+];
+
+/** Fixed-time vs dynamic control on the same traffic (results/dynamic, sim/analytics/compare_dynamic.py). */
+function SignalComparison() {
+  const [data, setData] = useState(undefined);
+  const [scen, setScen] = useState('normal');
+  useEffect(() => { api.dynamicComparison().then(setData).catch(() => setData(null)); }, []);
+  if (data === undefined) return null;
+  const scenarios = Object.keys(data?.scenarios || {});
+  const by = data?.scenarios?.[scenarios.includes(scen) ? scen : scenarios[0]] || {};
+  const ctrls = ['fixed', 'adaptive', 'dynamic', 'dynamic_vanet'].filter((c) => by[c]);
+  return (
+    <section className="card stack" aria-labelledby="cmp-h">
+      <div className="card-head">
+        <h2 id="cmp-h">Fixed-time vs dynamic control</h2>
+        {scenarios.length > 1 && (
+          <div className="seg" role="group" aria-label="Scenario">
+            {scenarios.map((s) => (
+              <button key={s} type="button" className={`seg-btn${s === scen ? ' active' : ''}`} aria-pressed={s === scen}
+                onClick={() => setScen(s)}>{s}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      {!data ? (
+        <p className="muted small" style={{ margin: 0 }}>No comparison yet. Run <code>python sim/analytics/compare_dynamic.py</code>.</p>
+      ) : (
+        <>
+          <p className="small muted" style={{ margin: 0 }}>
+            Same traffic for every controller ({data.meta?.network}, seeds {(data.meta?.seeds || []).join(', ')},
+            {' '}{data.meta?.max_steps} s each, VANET sensing with {fmt((data.meta?.penetration ?? 0) * 100, 0)} % of cars equipped).
+            Mean over the seeds; the change is against fixed-time.
+          </p>
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Controller comparison (scrolls sideways on small screens)">
+            <table className="data">
+              <thead><tr><th>Metric</th>{ctrls.map((c) => <th key={c}>{data.labels?.[c] || c}</th>)}</tr></thead>
+              <tbody>
+                {COMPARE_ROWS.map(([k, label, unit, d]) => (
+                  <tr key={k}>
+                    <td>{label}{unit ? <span className="small muted"> ({unit})</span> : null}</td>
+                    {ctrls.map((c) => {
+                      const m = by[c]?.[k];
+                      const pct = m?.vs_fixed_pct;
+                      const lowerBetter = !['trips_completed', 'throughput_veh_per_hr'].includes(k);
+                      const good = isNum(pct) && (lowerBetter ? pct < 0 : pct > 0);
+                      return (
+                        <td key={c} className="num">
+                          {m ? fmt(m.mean, d) : '–'}
+                          {isNum(pct) && pct !== 0 && <span className={`small ${good ? 'good' : 'bad'}`}> ({pct > 0 ? '+' : ''}{fmt(pct, 0)} %)</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function Signals() {
   const live = useLive();
   const tls = live.latest?.tls || {};
@@ -101,8 +173,8 @@ export function Signals() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [live.states, ids.join()]);
   return (
-    <Shell lead="Every junction changes green → yellow 3 s → all red 2 s → green. The controller of the current run decides when; an approaching ambulance can take priority.">
-      <div className="module-grid">
+    <Shell lead="By default the signals are dynamic: every second the controller measures each road (waiting cars, queue, density, waiting time, arrivals, room on the road ahead), gives green to the busier direction and sizes the green to its queue (5–45 s). Every change still goes green → yellow 3 s → all red → green; an approaching ambulance can take priority.">
+      <div className={`module-grid${ids.some((id) => tls[id]?.dynamic) ? ' wide-cards' : ''}`}>
         {ids.map((id) => <JunctionPanel key={id} ids={[id]} selected={id} onSelect={noop} tlsState={tls} ev={live.latest?.ev} controller={controller} />)}
       </div>
       {ids.length > 0 && (
@@ -117,6 +189,7 @@ export function Signals() {
         </section>
       )}
       <TimeChart title="Vehicles waiting per junction" unit="vehicles" data={data} series={ids.map((id) => ({ key: id, name: id }))} />
+      <SignalComparison />
       <EventTable events={live.events} kinds={['preempt_start', 'preempt_end']} title="Emergency preemption"
         empty="No preemption in this run so far." />
     </Shell>
@@ -406,7 +479,8 @@ export function Glosa() {
   return (
     <Shell lead="Each roadside unit broadcasts its signal timing (SPaT). An eco car works out when it will reach the stop line and gets advice: GO, SLOW (arrive as the light turns green), STOP, or none when the timing is not predictable.">
       <EcoSummary eco={eco} />
-      {eco && (
+      <EcoComparison eco={eco} onFollow={live.follow} />
+      {eco && ((eco.eco_fraction || 0) > 0 || (eco.eco_active ?? 0) > 0) && (
         <div className="tiles">
           <Tile k="SPaT messages delivered" v={isNum(eco.spat_pdr) ? `${fmt(eco.spat_pdr * 100, 0)} %` : '–'} />
           <Tile k="Stops per trip, eco cars" v={fmt(eco.stops_eco, 2)} sub={`others ${fmt(eco.stops_non, 2)}`} />

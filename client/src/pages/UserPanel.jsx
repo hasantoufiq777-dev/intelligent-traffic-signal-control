@@ -1,6 +1,8 @@
-// Live traffic: the map is the centre of the page; the side panel shows the network overview, the
-// selected junction, the selected vehicle (and driving), and eco-driving.
-import { useEffect, useState } from 'react';
+// Live traffic: the map is the centre of the page, shown as the overhead traffic control view or as a
+// 3D driver perspective of the driven or followed vehicle (same simulation frames). The side panel
+// shows the network overview, the selected junction, the selected vehicle (and driving), the A* route
+// explorer and eco-driving.
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import DrivePanel from '../components/DrivePanel.jsx';
 import EcoSummary from '../components/EcoSummary.jsx';
@@ -10,6 +12,7 @@ import MyCarPanel from '../components/MyCarPanel.jsx';
 import { AmbulanceList, IncidentList, StatusStrip } from '../components/NetworkStatus.jsx';
 import NowPlaying from '../components/NowPlaying.jsx';
 import TrafficMap from '../components/TrafficMap.jsx';
+import RouteExplorer from '../components/RouteExplorer.jsx';
 import ZonePanel from '../components/ZonePanel.jsx';
 import { useLive } from '../hooks/useLiveSocket.js';
 import { FLAG } from '../lib/vehicles.js';
@@ -17,7 +20,10 @@ import { FLAG } from '../lib/vehicles.js';
 const USER_EVENTS = new Set(['preempt_start', 'preempt_end', 'incident_start', 'incident_detected', 'incident_end', 'ev_reroute',
   'reroute', 'driver_start', 'driver_end', 'zone_activated', 'zone_guided', 'zone_ev_priority', 'zone_deactivated']);
 const ORDER = ['J2', 'J3', 'J0', 'J1']; // as on the map: J2 J3 north, J0 J1 south
-const TABS = [['overview', 'Overview'], ['junction', 'Junction'], ['vehicle', 'Vehicle'], ['eco', 'Eco-driving']];
+const TABS = [['overview', 'Overview'], ['junction', 'Junction'], ['vehicle', 'Vehicle'], ['routes', 'Routes'], ['eco', 'Eco-driving']];
+// three.js is loaded only when the driver perspective is opened
+const DriverView3D = lazy(() => import('../components/DriverView3D.jsx'));
+const VIEW_KEY = 'itsc-view';
 
 const STALE = {
   STOPPED: 'Simulation stopped: the map shows the last state of the previous run',
@@ -35,6 +41,24 @@ export default function UserPanel() {
   const { followId, follow } = live;
   const [tab, setTab] = useState('overview');
   const [junction, setJunction] = useState(null);
+  const [routes, setRoutes] = useState(null); // route explorer answer
+  const [routeSel, setRouteSel] = useState(0);
+  const [view, setViewState] = useState(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === 'driver' ? 'driver' : 'map';
+    } catch {
+      return 'map';
+    }
+  });
+  const setView = (v) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* per-viewer convenience only */
+    }
+  };
+  const egoId = live.myDrive?.active && live.myDrive.vid ? live.myDrive.vid : live.followId;
 
   useEffect(() => {
     if (!wanted || followId || !rows.length) return;
@@ -70,10 +94,23 @@ export default function UserPanel() {
         <section className="card map-card" aria-labelledby="map-h">
           <div className="card-head">
             <h2 id="map-h">Traffic now</h2>
+            <div className="view-switch" role="group" aria-label="View">
+              <button type="button" className={`btn${view === 'map' ? ' primary' : ''}`} aria-pressed={view === 'map'}
+                onClick={() => setView('map')}>Traffic control view</button>
+              <button type="button" className={`btn${view === 'driver' ? ' primary' : ''}`} aria-pressed={view === 'driver'}
+                onClick={() => setView('driver')}>Driver perspective</button>
+            </div>
             <span className="small muted">
-              {rows.length} vehicles{latest?.t != null ? ` · t = ${latest.t} s` : ''} · select a car or a junction
+              {rows.length} vehicles{latest?.t != null ? ` · t = ${latest.t} s` : ''} · {view === 'map' ? 'select a car or a junction'
+                : egoId ? `seen from ${egoId}` : 'select a vehicle first'}
             </span>
           </div>
+          {view === 'driver' ? (
+            <Suspense fallback={<div className="notice" role="status">Loading the 3D view…</div>}>
+              <DriverView3D network={live.network} vehicles={live.vehicles} tlsState={latest?.tls} incidents={latest?.incidents}
+                egoId={egoId} detail={live.followed} drive={live.myDrive?.active ? live.myDrive.last : null} />
+            </Suspense>
+          ) : (
           <TrafficMap
             network={live.network}
             vehicles={live.vehicles}
@@ -87,7 +124,9 @@ export default function UserPanel() {
             selectedJunction={junction}
             onSelectJunction={selectJunction}
             stale={stale}
+            routeOverlay={routes ? { routes: routes.routes, selected: routeSel } : null}
           />
+          )}
         </section>
 
         <div className="side-panel">
@@ -118,6 +157,10 @@ export default function UserPanel() {
                 )}
                 <DrivePanel live={live} />
               </>
+            )}
+            {tab === 'routes' && (
+              <RouteExplorer live={live} result={routes} onResult={(r) => { setRoutes(r); if (r) setView('map'); }}
+                selected={routeSel} onSelect={setRouteSel} />
             )}
             {tab === 'eco' && <EcoSummary eco={latest?.eco} />}
           </div>

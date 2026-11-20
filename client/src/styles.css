@@ -30,6 +30,10 @@
   --zone: #f0a020;       /* accident zone: shared lane */
   --zone-strong: #b86e00;
   --driver: #8a44d6; /* the car a viewer drives (SUMO-GUI: purple too) */
+  --eco: #16a34a;        /* every eco vehicle, one colour in every theme (map, driver view, legend) */
+  --bus-lane: #c0392b;   /* bus lane marking */
+  --road-res: #8c8f94;   /* residential street (narrow, no trucks or buses) */
+  --road-centre: #f2c94c; /* centre line between the two directions (city map) */
   --accent: #1668c7;
   --link: #1668c7;
   --border-strong: rgba(11, 11, 11, 0.3);
@@ -73,6 +77,7 @@
     --zone: #f5b23c;
     --zone-strong: #ffd27a;
     --driver: #b184f5;
+    --on-driver: #1d0b33; /* text on the light purple (white is under 3:1 there) */
     --accent: #0b72b0; /* white text on it: 5.2:1 */
     --link: #62c6f2;
     --rsu: #35c9e8;
@@ -111,6 +116,7 @@
   --zone: #f5b23c;
   --zone-strong: #ffd27a;
   --driver: #b184f5;
+  --on-driver: #1d0b33;
   --accent: #0b72b0; /* white text on it: 5.2:1 */
   --link: #62c6f2;
   --rsu: #35c9e8;
@@ -256,6 +262,7 @@ main:focus { outline: none; }
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
   background: var(--surface-2); color: var(--text-secondary); font-size: 12px; white-space: nowrap;
 }
+.card-head .chip { white-space: normal; max-width: 100%; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .conn-ok { background: var(--sig-green); }
 .conn-wait { background: var(--sig-yellow); }
@@ -273,6 +280,7 @@ main:focus { outline: none; }
 
 /* ---------- Map ---------- */
 .map-wrap { position: relative; }
+.map-stage { position: relative; }
 .map-svg {
   width: 100%; height: auto; max-height: calc(100vh - 150px); min-height: 280px; display: block; background: var(--map-bg);
   border-radius: 8px; touch-action: manipulation; cursor: grab; user-select: none;
@@ -293,6 +301,10 @@ main:focus { outline: none; }
 .advice-slow { border-left-color: var(--sig-yellow); }
 .advice-stop { border-left-color: var(--sig-red); }
 .advice .headline { font-size: 18px; font-weight: 700; }
+/* car following: the car ahead and the car behind side by side, stacked on phones */
+.follow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
+.follow-side { display: grid; gap: 2px; align-content: start; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .follow-grid { grid-template-columns: 1fr; } }
 .kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
 .kv .k { color: var(--text-muted); font-size: 12px; }
 .kv .v { font-size: 18px; font-weight: 600; }
@@ -351,14 +363,36 @@ label.field input, label.field select {
 .recharts-legend-item-text { color: var(--text-secondary) !important; font-size: 12px; }
 
 /* ---------- Driving (one-driver mode) ---------- */
-.drive-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.drive-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.axis-label { font-size: 9px; fill: var(--text-secondary); }
+/* Driver perspective (3D) */
+.view-switch { display: inline-flex; gap: 4px; }
+.driver-view { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 280px; border-radius: 8px; overflow: hidden; background: #a9cbe8; }
+.driver-canvas, .driver-canvas canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.driver-empty { position: absolute; inset: auto 12px 12px 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border-strong); font-size: 14px; }
+.driver-hud { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(12, 16, 22, 0.78); color: #f4f6f8; max-width: calc(100% - 24px); }
+.hud-speed { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.hud-speed .num { font-size: 34px; font-weight: 700; }
+.hud-limit { width: 40px; height: 40px; border-radius: 50%; border: 5px solid #d62828; background: #fff; color: #111; display: grid; place-items: center; font-weight: 800; font-size: 15px; }
+.hud-info { display: flex; flex-direction: column; gap: 2px; color: #e6e9ee; }
+.hud-sig { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #6b7280; vertical-align: -1px; }
+.hud-sig.sig-G, .hud-sig.sig-g { background: #22c55e; }
+.hud-sig.sig-y { background: #facc15; }
+.hud-sig.sig-r { background: #ef4444; }
+.driver-cam { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+.driver-cam .btn { padding: 4px 10px; font-size: 13px; }
+@media (max-width: 560px) {
+  .driver-view { aspect-ratio: 4 / 5; }
+  .hud-speed .num { font-size: 26px; }
+  .driver-cam { left: 12px; right: auto; }
+}
 .drive-controls .btn { padding-top: 12px; padding-bottom: 12px; font-weight: 600; }
 .drive-controls kbd, .btn kbd {
   font: inherit; font-size: 11px; padding: 0 5px; margin-left: 4px; border-radius: 4px;
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
 }
 .drive-speed { font-size: 28px; }
-.drive-chip { background: var(--driver); color: #fff; border-color: transparent; }
+.drive-chip { background: var(--driver); color: var(--on-driver, #fff); border-color: transparent; }
 .drive-alert {
   padding: 10px 12px; border-radius: var(--radius); font-weight: 600;
   background: var(--surface-2); border-left: 4px solid var(--sig-red);
@@ -398,6 +432,10 @@ label.field input, label.field select {
 .truncate { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.bad { color: var(--bad-text); }
 .chip.warn { color: var(--warn-text); }
+.chip.good { color: var(--good-text); margin-left: 6px; }
+.linkish { background: none; border: 0; padding: 2px 4px; font: inherit; color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; }
+.linkish[aria-pressed="true"] { font-weight: 700; }
+.swatch { display: inline-block; width: 14px; height: 6px; border-radius: 3px; }
 
 /* ---------- Live traffic page ---------- */
 .status-strip { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); margin-bottom: 16px; }
@@ -431,6 +469,10 @@ label.field input, label.field select {
   position: absolute; left: 10px; top: 10px; max-width: calc(100% - 70px); padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
   background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border-strong); border-left: 4px solid var(--sig-yellow);
 }
+.map-chip {
+  position: absolute; right: 10px; bottom: 10px; max-width: calc(100% - 20px); padding: 3px 9px; border-radius: 999px; font-size: 12px;
+  background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--border); pointer-events: none;
+}
 .map-legend-box { margin-top: 8px; }
 .map-legend-box summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
 .map-label { font-size: 9px; fill: var(--text-primary); paint-order: stroke; stroke: var(--map-bg); stroke-width: 2.6px; stroke-linejoin: round; pointer-events: none; }
@@ -439,7 +481,17 @@ label.field input, label.field select {
 .map-label.junction-note { font-size: 7px; font-weight: 700; fill: #fff; stroke: none; letter-spacing: 0.04em; }
 .map-label.queue { font-size: 9.5px; font-weight: 700; stroke: none; }
 .map-label.timer { font-size: 9px; font-weight: 700; }
+/* Dynamic signals: priority rank and score per road, caption per junction */
+.prio-pill rect { fill: var(--surface-1); stroke: var(--border-strong); stroke-width: 0.9; }
+.prio-pill.served rect { fill: var(--sig-green); stroke: #0b0d12; }
+.prio-pill.served .map-label.prio { fill: #fff; }
+.prio-pill.blocked rect { stroke: var(--sig-red); stroke-width: 1.6; }
+.map-label.prio { font-size: 8px; font-weight: 700; stroke: none; fill: var(--text-primary); }
+.signal-decisions { padding: 8px 2px 0; }
+.signal-decisions ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.signal-decisions li { line-height: 1.5; }
 .map-label.road-name { font-size: 7.5px; fill: var(--text-secondary); }
+.map-label.road-length { font-size: 8px; font-weight: 600; }
 .sig-text-G { fill: var(--sig-green); }
 .sig-text-y { fill: var(--sig-yellow); }
 .sig-text-r { fill: #ff7a7a; }
@@ -473,6 +525,12 @@ label.field input, label.field select {
 .page-lead { margin: 0 0 16px; color: var(--text-secondary); max-width: 90ch; }
 .module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .module-grid { grid-template-columns: minmax(0, 1fr); } }
+/* Junction cards with the dynamic controller's road table: one per row unless the screen is very wide */
+.module-grid.wide-cards { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1700px) { .module-grid.wide-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.dyn-table .sig { width: 20px; height: 20px; font-size: 11px; }
+.dyn-table td, .dyn-table th { white-space: nowrap; }
+.dyn { border-top: 1px solid var(--border); padding-top: 10px; }
 table.data.left th, table.data.left td { text-align: left; }
 table.data td.wrap, table.data th.wrap { white-space: normal; min-width: 220px; }
 table.data tr.selected td { background: var(--surface-2); }

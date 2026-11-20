@@ -32,7 +32,8 @@ logger = logging.getLogger("sim.main")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Intelligent Traffic Signal Control Simulation CLI")
     parser.add_argument("--scenario", type=str, default="normal", help="Scenario name or YAML file path")
-    parser.add_argument("--controller", type=str, default="fixed", help="Controller name (fixed, adaptive, etc.)")
+    parser.add_argument("--controller", type=str, default="dynamic_vanet",
+                        help="Controller name (default dynamic_vanet: congestion-aware over VANET; also dynamic, fixed, adaptive, ...)")
     parser.add_argument("--seed", type=int, default=1, help="Random seed")
     parser.add_argument("--gui", action="store_true", help="Launch SUMO with GUI")
     parser.add_argument("--params", type=str, default=None, help="Path to custom parameters YAML file")
@@ -48,7 +49,8 @@ def main() -> None:
         choices=["none", "astar", "aco", "aco_tuned"],
         help="Navigation mode",
     )
-    parser.add_argument("--penetration", type=float, default=1.0, help="OBU penetration rate (0.0 to 1.0)")
+    parser.add_argument("--penetration", type=float, default=0.5,
+                        help="Share of ordinary vehicles with a VANET radio, 0.0 to 1.0 (default 0.5)")
     parser.add_argument("--nav-fraction", type=float, default=0.3, help="Fraction of navigating vehicles (0.0 to 1.0)")
     parser.add_argument("--loss", type=float, default=0.0, help="Base channel loss probability (0.0 to 1.0)")
     parser.add_argument("--range", type=float, default=300.0, dest="range_m", help="Wireless communication range in meters")
@@ -59,6 +61,11 @@ def main() -> None:
         help="Fraction of equipped vehicles that follow GLOSA eco-driving advice (0 = off)",
     )
     parser.add_argument(
+        "--eco-select", type=str, default="data", choices=["data", "random"],
+        help="How eco cars are chosen: data = the cars burning most fuel above the SUMO fuel-curve model "
+             "(default), random = a seeded random share",
+    )
+    parser.add_argument(
         "--demand", type=float, default=1.0,
         help="Traffic demand factor: every flow of the scenario multiplied by this (0.25 to 2; 1 = as defined)",
     )
@@ -67,7 +74,7 @@ def main() -> None:
         help="Ambulances choose and update their route with A* on the TMC map (off: scenario route)",
     )
     parser.add_argument(
-        "--network", type=str, default=None, choices=["single", "grid2x2", "grid2x2_zone"],
+        "--network", type=str, default=None, choices=["single", "grid2x2", "grid2x2_zone", "grid2x2_city"],
         help="Override the scenario's network (default: the scenario YAML's network)",
     )
     parser.add_argument(
@@ -135,6 +142,7 @@ def main() -> None:
             aco_params=args.aco_params,
             step_delay=max(0.0, args.step_delay),
             eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
+            eco_select=args.eco_select,
             ev_routing=(args.ev_routing == "on"),
             driver=args.driver,
             demand=min(2.0, max(0.25, args.demand)),

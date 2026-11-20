@@ -5,6 +5,7 @@ Provides per-step CSV logging and tripinfo XML extraction for performance evalua
 
 from __future__ import annotations
 
+from sim.vehicles import is_driven_type
 import csv
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -39,6 +40,14 @@ class StepMetricsLogger:
         self.writer = csv.writer(self.file)
         self.writer.writerow(self.CSV_HEADER)
         self.max_queue: int = 0
+        # Queue totals for the run: vehicle-seconds stopped at the signals, and junction-steps logged
+        self.queue_veh_s: float = 0.0
+        self.junction_steps: int = 0
+
+    @property
+    def avg_queue(self) -> float:
+        """Mean number of vehicles queued at a junction (all approaches together) per second."""
+        return round(self.queue_veh_s / self.junction_steps, 2) if self.junction_steps else 0.0
 
     def log_step(
         self,
@@ -58,6 +67,8 @@ class StepMetricsLogger:
     ) -> None:
         """Write one row of metrics."""
         step_max_q = max(queue_n, queue_s, queue_e, queue_w)
+        self.queue_veh_s += float(queue_n + queue_s + queue_e + queue_w)
+        self.junction_steps += 1
         if step_max_q > self.max_queue:
             self.max_queue = step_max_q
 
@@ -145,7 +156,7 @@ def parse_tripinfo(
         vid = trip.attrib.get("id", "")
 
         # Synthetic incident blockers (Module 10) and the dashboard driver's car are not scenario traffic
-        if vid.startswith("incblk_") or vtype in ("incident_blocker", "driven"):
+        if vid.startswith("incblk_") or vtype == "incident_blocker" or is_driven_type(vtype):
             continue
 
         waiting_times.append(w)
@@ -166,6 +177,7 @@ def parse_tripinfo(
         "ev_travel_time": round(float(np.mean(ev_durations)) if ev_durations else 0.0, 2),
         "max_queue": float(max_queue),
         "throughput_veh_per_hr": throughput,
+        "trips_completed": total_vehicles,
     }
 
 
@@ -202,7 +214,7 @@ def parse_tripinfo_emissions(
     for trip in root.findall("tripinfo"):
         vid = trip.attrib.get("id", "")
         vtype = trip.attrib.get("vType", "")
-        if vid.startswith("incblk_") or vtype in ("incident_blocker", "driven"):
+        if vid.startswith("incblk_") or vtype == "incident_blocker" or is_driven_type(vtype):
             continue
         em = trip.find("emissions")
         if em is None:

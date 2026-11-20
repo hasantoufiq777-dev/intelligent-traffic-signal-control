@@ -48,6 +48,10 @@ flowchart LR
   GW -- REST --> UI
 ```
 
+**Start here:** [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) is the summary of the whole
+project (architecture, every algorithm, platform, results, running, limitations), and
+[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) explains each module step by step.
+
 ---
 
 ## 1. Install
@@ -115,6 +119,7 @@ python sim/main.py --scenario <normal|congested|emergency|incident|navigation|ev
                    [--eco-fraction 0.6] [--ev-routing on|off] [--gui] [--live] [--step-delay 0.25] [--max-steps 600]
 ```
 - **Controllers:**
+  - `dynamic_vanet` (default) and `dynamic`: congestion-aware control, green 5–45 s from the measured queue, density, waiting time, arrivals and downstream space ([sim/controllers/dynamic.py](sim/controllers/dynamic.py));
   - `fixed`, `adaptive` (true queues), `adaptive_vanet` (VANET queues);
   - `adaptive_ev` (+ preemption from true EV positions), `adaptive_ev_vanet` (+ preemption over V2I/V2V);
   - `adaptive_ev_vanet_tuned` (GA-tuned).
@@ -138,6 +143,8 @@ paragraphs there are written by hand, so regenerating replaces them with placeho
 
 | Question | Result |
 |---|---|
+| Dynamic signals (default mode) | Waiting time −66 % (normal) and −71 % (congested) vs fixed-time with exact measures; −34 % and −55 % over VANET at 50 % penetration; throughput up to +13 %; 0 collisions (`python sim/analytics/compare_dynamic.py`, [results/dynamic/summary.md](results/dynamic/summary.md)) |
+| Eco cars chosen by data (vs SUMO fuel model) | Fixed-time signals, 60 % eco: CO₂ and fuel of all cars −2.4 % vs −1.1 % for a random choice; stops −22 % either way (`python sim/analytics/compare_eco_select.py`, [results/eco_select/summary.md](results/eco_select/summary.md)) |
 | Adaptive signals with VANET sensing | Waiting time −36 to −39% vs fixed-time from 80% penetration (oracle −38%); worse than fixed-time at 20% |
 | Ambulance preemption over VANET | Ambulance travel time −25 to −27% vs adaptive at 0-50% packet loss, same as oracle; 0 missed junctions |
 | Ambulance route choice | Road closed ahead: −44% (113.7 s → 63.3 s); congested corridor: −13%; normal traffic: no change |
@@ -168,7 +175,7 @@ and the [final acceptance report](docs/testing/FINAL_ACCEPTANCE_REPORT.md) gives
 | `TRUST_PROXY` | Number of reverse proxies in front (nginx or a tunnel: 1) |
 | `MAX_CONNECTIONS` | Limit on concurrent live connections (default 1000); more are refused with a clear message |
 | `LIVE_LOOP` | Loop `server/playlist.json` |
-| `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 0.25) |
+| `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 1.0 = real time; the dashboard can play at 0.5×–4×) |
 | `SIM_GUI` | Open live runs in SUMO-GUI from the start |
 | `DRIVER_MODE` | Allow one viewer to drive a car (default true; the admin can switch it off at run time) |
 | `DRIVER_IDLE_MS`, `DRIVER_MAX_MS` | Free the driver seat after 2 min without input / 10 min in total |

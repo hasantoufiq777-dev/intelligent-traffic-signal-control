@@ -1,6 +1,8 @@
 import { fmt, kmh, seconds, SIGNAL_LABEL } from '../lib/format.js';
 import { ADVICE_TEXT, glosaAdvice } from '../lib/glosa.js';
+import { accText, normalise } from '../lib/following.js';
 import { APPROACH_LABEL, FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
+import FollowingCard from './FollowingCard.jsx';
 
 const DEFAULT_SPEED = 13.9; // m/s (50 km/h) when the car's own speed limit is unknown
 
@@ -8,12 +10,10 @@ function pickers(rows, onFollow) {
   const ids = (pred) => rows.filter((r) => pred(r[4])).map((r) => r[0]);
   const eco = ids((f) => has(f, FLAG.ECO));
   const amb = ids((f) => has(f, FLAG.EMERGENCY));
-  const any = rows.map((r) => r[0]);
   const pick = (list) => list.length && onFollow(list[Math.floor(Math.random() * list.length)]);
   return (
     <div className="row">
       <button type="button" className="btn primary" disabled={!eco.length} onClick={() => pick(eco)}>Follow an eco car</button>
-      <button type="button" className="btn" disabled={!any.length} onClick={() => pick(any)}>Follow any car</button>
       {amb.length > 0 && <button type="button" className="btn" onClick={() => pick(amb)}>Follow the ambulance</button>}
     </div>
   );
@@ -87,7 +87,10 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
       )}
 
       <div className="kv">
-        <div><div className="k">Speed</div><div className="v num">{kmh(detail.speed) ?? '–'} km/h</div></div>
+        <div>
+          <div className="k">Speed</div><div className="v num">{kmh(detail.speed) ?? '–'} km/h</div>
+          {typeof detail.acc === 'number' && <div className="small muted">{accText(detail.acc)}</div>}
+        </div>
         <div>
           <div className="k">Next traffic light</div>
           <div className="v">{detail.tls ? `${detail.tls}` : 'None ahead'}</div>
@@ -129,6 +132,10 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
         )}
         {advice.advice === 'stop' && <span className="small">Coast towards the line; the red is too long to reach it on green</span>}
       </div>
+      )}
+
+      {'ahead' in detail && (
+        <FollowingCard data={normalise(detail)} mine={kind === 'driven'} onSelect={onFollow} />
       )}
 
       <div className="kv">
