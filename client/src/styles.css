@@ -262,6 +262,7 @@ main:focus { outline: none; }
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
   background: var(--surface-2); color: var(--text-secondary); font-size: 12px; white-space: nowrap;
 }
+.card-head .chip { white-space: normal; max-width: 100%; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .conn-ok { background: var(--sig-green); }
 .conn-wait { background: var(--sig-yellow); }

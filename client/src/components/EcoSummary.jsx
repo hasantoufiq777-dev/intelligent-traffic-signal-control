@@ -24,7 +24,9 @@ export default function EcoSummary({ eco }) {
     <section className="card stack" aria-labelledby="eco-h">
       <div className="card-head">
         <h2 id="eco-h">Eco-driving</h2>
-        <span className="chip">{share > 0 ? `${Math.round(share * 100)}% of connected cars follow advice`
+        <span className="chip">{share > 0 && eco.eco_select === 'data'
+          ? `up to ${Math.round(share * 100)}%, chosen from data`
+          : share > 0 ? `${Math.round(share * 100)}% of connected cars follow advice`
           : on ? 'the green eco cars follow advice' : 'off in this run'}</span>
       </div>
       {!on && (
