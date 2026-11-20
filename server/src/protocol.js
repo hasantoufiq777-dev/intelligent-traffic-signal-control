@@ -2,17 +2,43 @@
 import { z } from 'zod';
 
 export const OPTIONS = {
-  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone'],
-  controllers: ['fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
+  scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone', 'city'],
+  // dynamic_vanet is the default mode: congestion-aware phase choice and green length over the VANET
+  controllers: ['dynamic_vanet', 'dynamic', 'fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
   ev_routing: ['on', 'off'],
-  networks: ['single', 'grid2x2', 'grid2x2_zone'],
-  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 1.0, loss: 0.0, relay: 'off',
-    eco_fraction: 0.0, ev_routing: 'off', demand: 1.0 },
+  // How eco cars are chosen: the most wasteful against the SUMO fuel-curve model, or at random
+  eco_select: ['data', 'random'],
+  networks: ['single', 'grid2x2', 'grid2x2_zone', 'grid2x2_city'],
+  defaults: { scenario: 'normal', controller: 'dynamic_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
+    eco_fraction: 0.0, eco_select: 'data', ev_routing: 'off', demand: 1.0 },
   // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
   demand: { min: 0.25, max: 2.0, step: 0.25 },
 };
+
+/**
+ * Networks each scenario can run on (its routes and incident roads must exist there). Tested by
+ * starting every scenario on every network: the grid scenarios use the grid's road names, so they
+ * cannot run on the city network, and the city scenario only runs on the city network.
+ */
+const GRID_FAMILY = ['single', 'grid2x2', 'grid2x2_zone'];
+const GRID_ONLY = ['grid2x2', 'grid2x2_zone']; // their incident roads or ambulance route do not exist on 'single'
+export const SCENARIO_NETWORKS = {
+  normal: GRID_FAMILY, congested: GRID_FAMILY, emergency: GRID_FAMILY, ev_congested: GRID_FAMILY,
+  incident: GRID_ONLY, navigation: GRID_ONLY, ev_incident: GRID_ONLY,
+  accident_zone: ['grid2x2_zone', 'grid2x2'],
+  city: ['grid2x2_city'],
+};
+OPTIONS.scenario_networks = SCENARIO_NETWORKS;
+
+/** Why a scenario cannot run on a network, or null when it can (or no network is given). */
+export function networkProblem(scenario, network) {
+  if (!network) return null;
+  const ok = SCENARIO_NETWORKS[scenario] ?? OPTIONS.networks;
+  return ok.includes(network) ? null
+    : `The ${scenario} scenario cannot run on the ${network} network (its roads do not exist there). Use: ${ok.join(', ')}, or leave the network on the scenario default.`;
+}
 
 /** A live run request (admin start body, playlist entry). Unknown keys are rejected. */
 export const RunEntrySchema = z
@@ -21,32 +47,41 @@ export const RunEntrySchema = z
     controller: z.enum(OPTIONS.controllers),
     nav: z.enum(OPTIONS.nav).default('none'),
     seed: z.coerce.number().int().min(0).max(1_000_000).default(1),
-    penetration: z.coerce.number().min(0).max(1).default(1.0),
+    penetration: z.coerce.number().min(0).max(1).default(0.5), // share of ordinary vehicles with a radio
     loss: z.coerce.number().min(0).max(1).default(0.0),
     relay: z.enum(OPTIONS.relay).default('off'),
     eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
+    eco_select: z.enum(OPTIONS.eco_select).default('data'),
     ev_routing: z.enum(OPTIONS.ev_routing).default('off'), // ambulances pick their route on the TMC map
     demand: z.coerce.number().min(0.25).max(2).default(1.0), // traffic demand factor (number of cars)
     network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
     label: z.string().max(120).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((e, ctx) => {
+    const problem = networkProblem(e.scenario, e.network);
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['network'], message: problem });
+  });
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 
-const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback']) }).passthrough();
+const MessageSchema = z.object({ type: z.enum(['status', 'state', 'event', 'result', 'network', 'vehicles', 'driver', 'playback', 'routes']) }).passthrough();
 
 /** Road ids a driver may pick (normal edges: no ":" internal junction lanes). */
 const EdgeIdSchema = z.string().min(1).max(64).regex(/^[\w.#-]+$/);
 
 /** One-driver mode: take a car from one road to another. */
-export const DriverStartSchema = z.object({ from: EdgeIdSchema, to: EdgeIdSchema }).strict()
+export const DRIVABLE = ['car', 'eco_car', 'motorcycle', 'bus', 'truck']; // vehicle categories a viewer may drive
+export const DriverStartSchema = z.object({ from: EdgeIdSchema, to: EdgeIdSchema, kind: z.enum(DRIVABLE).optional() }).strict()
   .refine((b) => b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
 
-/** One-driver mode: a driving command. speed_kmh only for "ease" (hold at most this speed). */
+/**
+ * One-driver mode: a driving command. speed_kmh only for "ease" (hold at most this speed).
+ * "follow" = adaptive cruise: drive at the speed for following the vehicle ahead (sim/car_following.py).
+ */
 export const DriverCommandSchema = z.object({
-  action: z.enum(['go', 'ease', 'stop']),
-  speed_kmh: z.coerce.number().min(5).max(60).optional(),
+  action: z.enum(['go', 'ease', 'stop', 'follow']),
+  speed_kmh: z.coerce.number().min(5).max(90).optional(), // capped at the road's limit by the simulation
 }).strict();
 
 /**
@@ -56,6 +91,12 @@ export const DriverCommandSchema = z.object({
 export const AmbulanceSchema = z.object({ from: EdgeIdSchema.optional(), to: EdgeIdSchema.optional() }).strict()
   .refine((b) => Boolean(b.from) === Boolean(b.to), { message: 'Give both start and destination, or neither', path: ['to'] })
   .refine((b) => !b.from || b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
+
+/** Route explorer: A* alternatives between two roads for one vehicle class (answered by the simulation). */
+export const ROUTE_CLASSES = ['passenger', 'motorcycle', 'bus', 'truck', 'emergency'];
+export const RouteQuerySchema = z.object({
+  from: EdgeIdSchema, to: EdgeIdSchema, vclass: z.enum(ROUTE_CLASSES).default('passenger'),
+}).strict().refine((b) => b.from !== b.to, { message: 'Start and destination must differ', path: ['to'] });
 
 /** Vehicle ids a viewer may follow (also used as a Socket.io room name suffix). */
 // Live playback speed, relative to the run's normal pacing (the simulation accepts the same values)
@@ -102,6 +143,7 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--loss', String(entry.loss),
     '--relay', entry.relay,
     '--eco-fraction', String(entry.eco_fraction ?? 0),
+    '--eco-select', entry.eco_select ?? 'data',
     '--ev-routing', entry.ev_routing ?? 'off',
     '--live',
     '--driver', // read commands on stdin: one-driver mode and playback (pause, resume, speed)

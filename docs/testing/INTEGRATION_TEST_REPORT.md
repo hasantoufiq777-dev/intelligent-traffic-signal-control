@@ -22,6 +22,7 @@ crashes, fails to start or prints invalid output.
 | `playback.test.js` | 7 | platform events (run started, finished, connection limit) reach viewers and the run's history; pause, resume, speed and restart: refused to viewers and when nothing runs; the paused state is the one the simulation confirmed and simulated time stands still; only the speeds 0.5/1/2/4; restart from the first second; a researcher controls only their own run; audit entries; a paused run stops promptly |
 | `snapshot.test.js` | 5 | history rows, HTTP compression, security headers, the traffic demand setting (validation, simulation argument, stored with the run) |
 | `ambulance.test.js` | 5 | ambulance on demand (added after the final run, 14 November 2026): refused when nothing runs, to viewers and with invalid roads; dispatched into a fixed-time run with priority added, events in order (sent, preemption start and end, arrived), stored events and audit; dispatched trips in the stored result; the junctions' own priority with `adaptive_ev`, sent while paused, at most 3 on the road; a researcher only into their own run |
+| `routes.test.js` | 2 | route explorer (15 November 2026): refused when nothing runs, invalid roads and classes rejected; the answer goes only to the asking viewer, without the internal request id; one open search per viewer (rate limited). Gateway suite with it: **89 passed**, 4 skipped (real SUMO, run separately: 4 passed) |
 
 ## 2. Gateway with real SUMO (`server/test/e2e.real.test.js`)
 

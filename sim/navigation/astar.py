@@ -23,6 +23,8 @@ def astar_search(
     heuristic: str = "euclid",
     v_min: float = 1.0,
     junction_delay_s: Optional[float] = None,
+    vclass: Optional[str] = None,
+    cost: str = "time",
 ) -> Tuple[List[str], float, int]:
     """Execute A* heuristic search from start_edge to goal_edge.
 
@@ -35,6 +37,11 @@ def astar_search(
         heuristic: 'euclid' for admissible Euclidean heuristic, 'zero' for exact Dijkstra.
         v_min: Minimum velocity floor for edge traversal time computation.
         junction_delay_s: Wait added per traffic light (None = the graph's default).
+        vclass: SUMO vehicle class; only roads and turns this class may use are searched
+            (None = no restriction).
+        cost: "time" (seconds: length / current speed + signal wait; heuristic = straight-line
+            distance / maximum network speed) or "distance" (metres; heuristic = straight-line
+            distance). Both heuristics never overestimate, so the route found is optimal for its cost.
 
     Returns:
         Tuple of (path, total_cost, expansions):
@@ -48,12 +55,18 @@ def astar_search(
     if closed_edges and (start_edge in closed_edges or goal_edge in closed_edges):
         return ([], float("inf"), 0)
 
+    if vclass is not None and not graph.allows(goal_edge, vclass):
+        return ([], float("inf"), 0)
+
     if start_edge == goal_edge:
         return ([start_edge], 0.0, 0)
 
     goal_node = graph.edges[goal_edge]
     goal_coord = goal_node.end_coord
-    max_speed = max(graph.max_network_speed, 1.0)
+    by_distance = cost == "distance"
+    # h = straight-line distance / v_max: the time at top speed in a straight line, never more than the
+    # real remaining time. For distance cost the divisor is 1, so h is the straight-line distance.
+    max_speed = 1.0 if by_distance else max(graph.max_network_speed, 1.0)
     use_euclid = (heuristic.lower() == "euclid")
 
     def calc_h(edge_id: str) -> float:
@@ -89,14 +102,18 @@ def astar_search(
         current_g = g_score[current]
 
         # Expand legal outgoing edges
-        for neighbor in graph.get_successors(current):
-            edge_cost = graph.get_edge_cost(
-                neighbor,
-                speed_map=speed_map,
-                closed_edges=closed_edges,
-                v_min=v_min,
-                junction_delay_s=junction_delay_s,
-            )
+        for neighbor in graph.get_successors(current, vclass):
+            if by_distance:
+                edge_cost = (float("inf") if closed_edges and neighbor in closed_edges
+                             else graph.edges[neighbor].length)
+            else:
+                edge_cost = graph.get_edge_cost(
+                    neighbor,
+                    speed_map=speed_map,
+                    closed_edges=closed_edges,
+                    v_min=v_min,
+                    junction_delay_s=junction_delay_s,
+                )
             if math.isinf(edge_cost):
                 continue
 

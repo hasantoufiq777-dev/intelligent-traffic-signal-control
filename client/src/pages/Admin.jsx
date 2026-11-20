@@ -138,7 +138,13 @@ export default function Admin() {
       .catch((e) => setMsg({ error: true, text: e.message }));
   }, []);
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k) => (e) => setForm((f) => {
+    const next = { ...f, [k]: e.target.value };
+    // A new scenario may not run on the chosen network: go back to the scenario's own network
+    const ok = options?.scenario_networks?.[next.scenario];
+    if (k === 'scenario' && next.network && ok && !ok.includes(next.network)) next.network = '';
+    return next;
+  });
 
   async function start(e) {
     e.preventDefault();
@@ -240,13 +246,14 @@ export default function Admin() {
               <label className="field">network
                 <select value={form.network || ''} onChange={set('network')}>
                   <option value="">scenario default</option>
-                  {(options.networks || []).map((v) => <option key={v} value={v}>{v}</option>)}
+                  {(options.scenario_networks?.[form.scenario] ?? options.networks ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
               </label>
               {num('seed', { min: 0, step: 1 })}
               {num('penetration', { min: 0, max: 1, step: 0.1 })}
               {num('loss', { min: 0, max: 1, step: 0.05 })}
               {num('eco_fraction', { min: 0, max: 1, step: 0.1 })}
+              {sel('eco_select', options.eco_select || ['data', 'random'])}
               {num('demand', { min: 0.25, max: 2, step: 0.25, title: 'Traffic demand: every flow of the scenario multiplied by this (1 = as defined)' })}
             </div>
             <div className="row">

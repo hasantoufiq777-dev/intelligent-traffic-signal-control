@@ -65,8 +65,8 @@ const viewer = await signedIn(people.VIEWER, PW);
 const vp = viewer.page;
 await step('viewer sees monitoring and research, not run control or administration', async () => {
   const links = await vp.locator('.sidebar .nav-item').allTextContents();
-  for (const want of ['Live traffic', 'Signals', 'Results', 'Guided demo', 'Documentation']) if (!links.includes(want)) throw new Error(`missing ${want}`);
-  for (const not of ['Run control', 'Administration']) if (links.includes(not)) throw new Error(`should not see ${not}`);
+  for (const want of ['Live traffic', 'Signals', 'GA optimisation', 'Documentation']) if (!links.includes(want)) throw new Error(`missing ${want}`);
+  for (const not of ['Run control', 'Administration', 'Results', 'Guided demo', 'Run history']) if (links.includes(not)) throw new Error(`should not see ${not}`);
 });
 await step('viewer opening /admin or /administration directly gets a refusal', async () => {
   for (const p of ['/admin', '/administration']) {

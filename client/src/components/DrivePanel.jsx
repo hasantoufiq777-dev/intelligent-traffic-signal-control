@@ -1,8 +1,104 @@
-// One-driver mode: take a car, drive it with Go / Ease off / Stop, see the advice and ambulance
+// One-driver mode: take a vehicle, drive it (accelerate, brake, slow down, stop, or set a desired
+// speed), see the signal advice, the estimated fuel-efficient speed with its reasons, ambulance
 // warnings, and get a trip report at the end. One viewer drives at a time; the others can follow.
+// Every input only sets the vehicle's target speed: SUMO still caps it at the speed limit, keeps safe
+// gaps, brakes within limits and stops at red lights.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fmt, isNum, seconds } from '../lib/format.js';
+import { normalise } from '../lib/following.js';
 import { roadChoices } from '../lib/roads.js';
+import { CATEGORY_LABEL } from '../lib/vehicles.js';
+import FollowingCard from './FollowingCard.jsx';
+
+const DRIVABLE = ['car', 'eco_car', 'motorcycle', 'bus', 'truck'];
+const STEP_KMH = 5;
+const ACTION_TEXT = { maintain: 'Keep this speed', increase: 'Speed up', reduce: 'Slow down' };
+
+/** Fuel against steady speed for this vehicle (from SUMO's HBEFA4 model), with the current and
+ * recommended speeds marked. */
+function FuelCurve({ curve, current, target }) {
+  if (!curve?.length) return null;
+  const W = 260;
+  const H = 110;
+  const pad = { l: 34, r: 8, t: 8, b: 24 };
+  const xs = curve.map((c) => c.kmh);
+  const ys = curve.map((c) => c.l_100km);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const y0 = 0;
+  const y1 = Math.max(...ys) * 1.1;
+  const X = (v) => pad.l + ((v - x0) / (x1 - x0 || 1)) * (W - pad.l - pad.r);
+  const Y = (v) => H - pad.b - ((v - y0) / (y1 - y0 || 1)) * (H - pad.t - pad.b);
+  const at = (v) => {
+    for (let i = 1; i < curve.length; i += 1) {
+      if (v <= curve[i].kmh) {
+        const f = (v - curve[i - 1].kmh) / (curve[i].kmh - curve[i - 1].kmh);
+        return curve[i - 1].l_100km + f * (curve[i].l_100km - curve[i - 1].l_100km);
+      }
+    }
+    return curve[curve.length - 1].l_100km;
+  };
+  const d = curve.map((c, i) => `${i ? 'L' : 'M'}${X(c.kmh).toFixed(1)} ${Y(c.l_100km).toFixed(1)}`).join(' ');
+  const mark = (v, color, label) => isNum(v) && v >= x0 && v <= x1 && (
+    <g>
+      <circle cx={X(v)} cy={Y(at(v))} r={4} fill={color} stroke="var(--surface-1)" strokeWidth={1.5} />
+      <title>{`${label}: ${fmt(v, 0)} km/h, ${fmt(at(v), 1)} L/100 km`}</title>
+    </g>
+  );
+  return (
+    <figure className="fuel-curve" style={{ margin: 0 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img"
+        aria-label={`Fuel at steady speeds: lowest ${fmt(Math.min(...ys), 1)} L/100 km. Current ${fmt(current, 0)} km/h, recommended ${fmt(target, 0)} km/h.`}>
+        <line x1={pad.l} y1={H - pad.b} x2={W - pad.r} y2={H - pad.b} stroke="var(--border-strong)" />
+        <line x1={pad.l} y1={pad.t} x2={pad.l} y2={H - pad.b} stroke="var(--border-strong)" />
+        {[x0, Math.round((x0 + x1) / 2), x1].map((v) => (
+          <text key={v} x={X(v)} y={H - 8} textAnchor="middle" className="axis-label">{v}</text>
+        ))}
+        {[0, y1 / 2, y1].map((v) => (
+          <text key={v} x={pad.l - 4} y={Y(v) + 3} textAnchor="end" className="axis-label">{fmt(v, 0)}</text>
+        ))}
+        <path d={d} fill="none" stroke="var(--series-1)" strokeWidth={2} />
+        {mark(current, 'var(--text-secondary)', 'Now')}
+        {mark(target, 'var(--eco)', 'Recommended')}
+      </svg>
+      <figcaption className="small muted">Fuel (L/100 km) against steady speed (km/h) for this vehicle · grey: now · green: recommended</figcaption>
+    </figure>
+  );
+}
+
+function EcoSpeed({ eco, onUse }) {
+  if (!eco?.ok) return null;
+  return (
+    <div className={`advice advice-${eco.action === 'maintain' ? 'go' : 'slow'}`}>
+      <span className="small muted">Estimated fuel-efficient speed (next {eco.horizon_m} m)</span>
+      <span className="headline">{fmt(eco.target_kmh, 0)} km/h · {ACTION_TEXT[eco.action]}</span>
+      <ul className="small" style={{ margin: 0, paddingLeft: '1.1em' }}>
+        {eco.reasons.map((r) => <li key={r.code}>{r.text}</li>)}
+      </ul>
+      {eco.current && eco.recommended && (
+        <div className="table-wrap" tabIndex={0} role="region" aria-label="Fuel estimate for the distance ahead">
+          <table className="data">
+            <thead><tr><th /><th>Speed</th><th>Fuel</th><th>CO₂</th><th>Time</th><th>Stop</th></tr></thead>
+            <tbody>
+              {[['Now', eco.current], ['Recommended', eco.recommended]].map(([k, v]) => (
+                <tr key={k}><td>{k}</td><td className="num">{fmt(v.speed_kmh, 0)} km/h</td><td className="num">{fmt(v.fuel_ml, 1)} mL</td>
+                  <td className="num">{fmt(v.co2_g, 0)} g</td><td className="num">{fmt(v.time_s, 0)} s</td><td>{v.stop ? 'yes' : 'no'}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <FuelCurve curve={eco.curve} current={eco.current?.speed_kmh} target={eco.target_kmh} />
+      <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => onUse(eco.target_kmh)}>
+        Drive at {fmt(eco.target_kmh, 0)} km/h
+      </button>
+      <span className="small muted">
+        From SUMO&apos;s HBEFA4 fuel model for this vehicle type, the light&apos;s timing, the vehicle ahead and the traffic
+        ahead. An estimate, not a proven optimum.
+      </span>
+    </div>
+  );
+}
 
 const ENDED_TEXT = {
   released: 'You handed the car back. It finishes its trip as normal traffic.',
@@ -76,9 +172,13 @@ function TripReport({ report, ended, onAgain, onClose }) {
 export default function DrivePanel({ live }) {
   const { network, driverSeat: seat, myDrive, startDrive, driveCommand, endDrive, clearDrive, follow, followId } = live;
   const choices = useMemo(() => roadChoices(network), [network]);
+  // Vehicle categories this network has (the research networks: cars only)
+  const kinds = useMemo(() => DRIVABLE.filter((k) => network?.vehicle_types?.some((t) => t.id === k))
+    .filter((k) => k === 'car' || network?.edges?.some((e) => e.type && e.type !== 'grid')), [network]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [ease, setEase] = useState(30);
+  const [kind, setKind] = useState('car');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -117,7 +217,25 @@ export default function DrivePanel({ live }) {
     setMsg(res?.ok ? null : { error: true, text: res?.error || 'Command failed' });
   }, [driveCommand]);
 
-  // Keyboard: G = go, E = ease off, S or Space = stop
+  // Desired speed: hold at most this speed (never above the limit; SUMO also caps it)
+  const limitKmh = state?.limit_kmh ?? 50;
+  const setSpeed = useCallback((kmh) => {
+    const v = Math.max(5, Math.min(Math.round(kmh), Math.round(limitKmh)));
+    setEase(v);
+    if (v >= Math.round(limitKmh)) send('go');
+    else send('ease', v);
+  }, [limitKmh, send]);
+  const desired = state?.mode === 'ease' && isNum(state?.target_kmh) ? state.target_kmh
+    : state?.mode === 'stop' ? 0 : (state?.speed_kmh ?? 0);
+  const accelerate = useCallback(() => setSpeed(Math.max(desired, state?.speed_kmh ?? 0) + STEP_KMH), [desired, state, setSpeed]);
+  const brake = useCallback(() => {
+    const v = Math.min(desired, state?.speed_kmh ?? desired) - STEP_KMH;
+    if (v < 5) send('stop');
+    else setSpeed(v);
+  }, [desired, state, send, setSpeed]);
+  const slowDown = useCallback(() => setSpeed(Math.max(10, Math.round((state?.speed_kmh ?? 30) * 0.6))), [state, setSpeed]);
+
+  // Keyboard: W or Up = accelerate, X or Down = brake, E = slow down, G = normal driving, S or Space = stop
   useEffect(() => {
     if (!driving) return undefined;
     const onKey = (ev) => {
@@ -126,17 +244,20 @@ export default function DrivePanel({ live }) {
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       const k = ev.key.toLowerCase();
       if (k === 'g') send('go');
-      else if (k === 'e') send('ease', ease);
+      else if (k === 'w' || k === 'arrowup') { ev.preventDefault(); accelerate(); }
+      else if (k === 'x' || k === 'arrowdown') { ev.preventDefault(); brake(); }
+      else if (k === 'e') slowDown();
       else if (k === 's' || k === ' ') { ev.preventDefault(); send('stop'); }
+      else if (k === 'f') send('follow');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [driving, send, ease]);
+  }, [driving, send, accelerate, brake, slowDown]);
 
   async function take() {
     setBusy(true);
     setMsg(null);
-    const res = await startDrive(from, to);
+    const res = await startDrive(from, to, kinds.length > 1 ? kind : undefined);
     setBusy(false);
     if (!res?.ok) setMsg({ error: true, text: res?.error || 'Could not take a car' });
     else lastInput.current = Date.now();
@@ -150,7 +271,7 @@ export default function DrivePanel({ live }) {
 
   const head = (
     <div className="card-head">
-      <h2 id="drive-h">Drive a car</h2>
+      <h2 id="drive-h">Drive a vehicle</h2>
       {seat?.busy && !driving && <span className="chip">someone is driving</span>}
       {driving && <span className="chip drive-chip">{myDrive.vid || 'your car'}</span>}
     </div>
@@ -182,31 +303,35 @@ export default function DrivePanel({ live }) {
           </div>
         )}
         {waiting ? (
-          <p className="muted" style={{ margin: 0 }}>Your car is entering the road at {myDrive.from}…{isNum(s?.waiting_s) && s.waiting_s > 3 ? ` (waiting for a gap, ${s.waiting_s} s)` : ''}</p>
+          <p className="muted" style={{ margin: 0 }}>Your {CATEGORY_LABEL[s?.kind ?? kind]?.toLowerCase() ?? 'vehicle'} is entering the road at {myDrive.from}…{isNum(s?.waiting_s) && s.waiting_s > 3 ? ` (waiting for a gap, ${s.waiting_s} s)` : ''}</p>
         ) : (
           <div className="kv">
             <div>
               <div className="k">Speed</div>
               <div className="v num drive-speed">{fmt(s.speed_kmh, 0)} <span className="small muted">km/h</span></div>
-              <div className="small muted">limit {fmt(s.limit_kmh, 0)} km/h</div>
+              <div className="small muted">speed limit {fmt(s.limit_kmh, 0)} km/h</div>
             </div>
             <div>
               <div className="k">You asked for</div>
-              <div className="v">{s.mode === 'stop' ? 'Stop' : s.mode === 'ease' ? `At most ${fmt(s.target_kmh, 0)} km/h` : 'Go'}</div>
+              <div className="v">{s.mode === 'stop' ? 'Stop' : s.mode === 'ease' ? `At most ${fmt(s.target_kmh, 0)} km/h`
+                : s.mode === 'follow' ? 'Follow the car ahead (adaptive cruise)' : 'Normal driving (up to the limit)'}</div>
               {s.holding && <div className="small">Stopping after the junction</div>}
+              {s.kind && <div className="small muted">{CATEGORY_LABEL[s.kind]}</div>}
             </div>
           </div>
         )}
 
         <div className="drive-controls" role="group" aria-label="Driving controls">
-          <button type="button" className={`btn${s?.mode === 'go' ? ' primary' : ''}`} onClick={() => send('go')} aria-keyshortcuts="G">Go <kbd>G</kbd></button>
-          <button type="button" className={`btn${s?.mode === 'ease' ? ' primary' : ''}`} onClick={() => send('ease', ease)} aria-keyshortcuts="E">Ease off <kbd>E</kbd></button>
+          <button type="button" className="btn" onClick={accelerate} aria-keyshortcuts="W ArrowUp">Accelerate <kbd>W</kbd></button>
+          <button type="button" className="btn" onClick={brake} aria-keyshortcuts="X ArrowDown">Brake <kbd>X</kbd></button>
+          <button type="button" className={`btn${s?.mode === 'ease' ? ' primary' : ''}`} onClick={slowDown} aria-keyshortcuts="E">Slow down <kbd>E</kbd></button>
           <button type="button" className={`btn${s?.mode === 'stop' ? ' danger' : ''}`} onClick={() => send('stop')} aria-keyshortcuts="S">Stop <kbd>S</kbd></button>
+          <button type="button" className={`btn${s?.mode === 'go' ? ' primary' : ''}`} onClick={() => send('go')} aria-keyshortcuts="G">Normal <kbd>G</kbd></button>
         </div>
-        <label className="field">Ease-off speed: {ease} km/h
-          <input type="range" min={10} max={50} step={1} value={ease} onChange={(e) => setEase(Number(e.target.value))}
-            onMouseUp={() => s?.mode === 'ease' && send('ease', ease)} onKeyUp={() => s?.mode === 'ease' && send('ease', ease)}
-            onTouchEnd={() => s?.mode === 'ease' && send('ease', ease)} />
+        <label className="field">Desired speed: {ease} km/h (limit {fmt(limitKmh, 0)})
+          <input type="range" min={5} max={Math.max(10, Math.round(limitKmh))} step={1} value={Math.min(ease, Math.round(limitKmh))}
+            onChange={(e) => setEase(Number(e.target.value))}
+            onMouseUp={() => setSpeed(ease)} onKeyUp={() => setSpeed(ease)} onTouchEnd={() => setSpeed(ease)} />
         </label>
 
         {!waiting && (
@@ -224,6 +349,12 @@ export default function DrivePanel({ live }) {
           </div>
         )}
 
+        {!waiting && 'ahead' in s && (
+          <FollowingCard data={normalise(s, 'driver')} mine onFollow={() => send('follow')} active={s.mode === 'follow'} />
+        )}
+
+        {!waiting && <EcoSpeed eco={s.eco_speed} onUse={setSpeed} />}
+
         {!waiting && (
           <div className="kv">
             <div><div className="k">To go</div><div className="v num">{fmt(s.dist_left_m / 1000, 2)} km</div></div>
@@ -239,7 +370,8 @@ export default function DrivePanel({ live }) {
           <span className="small muted">Destination {myDrive.to}. The seat is freed after {seconds(idleLeft / 1000)} without input.</span>
         </div>
         <p className="small muted" style={{ margin: 0 }}>
-          Your buttons set the car&apos;s target speed only. The simulation still keeps safe gaps, brakes within limits and stops at red lights.
+          Your controls set the vehicle&apos;s target speed only, never above the speed limit. The simulation still keeps safe
+          gaps, brakes within limits, uses only lanes this vehicle may use and stops at red lights.
         </p>
       </section>
     );
@@ -266,8 +398,8 @@ export default function DrivePanel({ live }) {
     body = (
       <>
         <p className="muted" style={{ margin: 0 }}>
-          Take a car into the live traffic and drive it yourself with Go, Ease off and Stop. You get the same
-          speed advice and ambulance warnings as a connected car, and a trip report at the end.
+          Take a vehicle into the live traffic and drive it yourself: accelerate, brake, slow down, stop or set a speed.
+          You get signal advice, an estimated fuel-efficient speed with its reasons, ambulance warnings and a trip report.
         </p>
         <div className="row"><button type="button" className="btn primary" onClick={() => setOpen(true)}>Drive</button></div>
       </>
@@ -276,6 +408,13 @@ export default function DrivePanel({ live }) {
     body = (
       <>
         <div className="form-grid">
+          {kinds.length > 1 && (
+            <label className="field">Vehicle
+              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                {kinds.map((k) => <option key={k} value={k}>{CATEGORY_LABEL[k]}</option>)}
+              </select>
+            </label>
+          )}
           <label className="field">Start road
             <select value={from} onChange={(e) => setFrom(e.target.value)}>
               {choices.starts.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -292,7 +431,8 @@ export default function DrivePanel({ live }) {
           <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>
         </div>
         <p className="small muted" style={{ margin: 0 }}>
-          Keys while driving: G go, E ease off, S or Space stop. The seat is freed after {seconds((seat.idle_ms ?? 120000) / 1000)} without input.
+          Keys while driving: W / ↑ accelerate, X / ↓ brake, E slow down, S or Space stop, G normal driving, F follow the car ahead. The seat is
+          freed after {seconds((seat.idle_ms ?? 120000) / 1000)} without input.
         </p>
       </>
     );

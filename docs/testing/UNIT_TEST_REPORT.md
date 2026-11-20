@@ -31,13 +31,18 @@ reproduced exactly.
 | `test_playback.py` | 5 | pause, resume and speed (Phase 10): applied and confirmed, invalid speeds ignored, driver commands kept while paused, the pause ends when the run stops, and **a paused and re-speeded real SUMO run gives the same states, second by second, and the same results as an undisturbed one** |
 | `test_live_extras.py` | 4 | demand factor scales every flow and is the identity at 1; 2× demand gives more than twice the cars of 0.5×; jitter is the standard deviation of delivered delays (incremental); the live state carries jitter and the latest ACO decision (probabilities sum to 1) **and the run's results equal those of a run without live output** |
 | `test_dispatch.py` | 9 | ambulance on demand (added 14 November 2026): wrapping keeps the running controller; priority added only where missing; invalid requests change nothing; **an ambulance sent mid-run gets green at every junction it crosses** with fixed and with VANET adaptive control (events in order, on the map, no collision, no missed preemption); **it is faster with priority than the same ambulance without**; `adaptive_ev`'s own priority and a chosen route; at most 3 on the road; work-zone run stays conflict-free; a run without a dispatch is unchanged second by second |
-| `test_regression.py` | 1 | **12 reference runs identical to `regression_baseline.json`** |
+| `test_regression.py` | 1 |
+| `test_city.py` | 12 | city network check (every class reaches every corner, no dead ends, J0–J3 links unchanged); vehicle factory; city trips; **lane permissions in routing**; **A\* heuristic admissible and A\* cost equal to Dijkstra** on 40 random pairs with random congestion; distance search equal to SUMO's shortest path; **route explorer: shortest not fastest, congestion changes the fastest**; planner and controller factories; fuel curves; speed advice never above the limit, the leader or traffic ahead, and avoids a stop at red; **a real city run: 0 collisions, every vehicle on a lane its class may use, 35–65 % of ordinary vehicles equipped, the driven truck never above the limit when 180 km/h is asked** | **12 reference runs identical to `regression_baseline.json`** |
 
 (Counts are test functions; pytest's 138 includes parametrised cases.)
 
 **Re-run after adding ambulance on demand (14 November 2026): 148 passed** (138 + 10 in
 `test_dispatch.py`), 1 warning, in 13 min 50 s, with other suites running at the same time. The
 zero-regression test still reproduces its 12 baseline runs exactly.
+
+**Re-run after the supervisor enhancements (15 November 2026): 160 passed** (148 + 12 in `test_city.py`), in
+13 min 53 s. The zero-regression test still reproduces its 12 baseline runs exactly, after the route-planner
+(Strategy) and controller-factory refactors.
 
 **Defect found by these tests (Phase 10, fixed before release):** driver commands that arrived while
 a run was paused were put in a list that was then replaced, so they were lost. The fix takes the

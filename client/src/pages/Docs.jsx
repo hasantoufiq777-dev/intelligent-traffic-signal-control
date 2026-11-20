@@ -87,13 +87,16 @@ export default function Docs() {
             <table className="data left">
               <thead><tr><th>Controller</th><th>Rule</th></tr></thead>
               <tbody>
+                <tr><td>Dynamic (default)</td><td className="wrap">Every second, measure each road: waiting vehicles, queue length, density, mean waiting time, arrivals per minute and how full the road ahead is. Give green to the direction with the higher priority score, for a time that fits its queue (5–45 s). Extend while the queue is still clearing or cars are arriving at the line; end early when the road is empty, when the road ahead is blocked, or when a car on red has waited 40 s. No green for a direction with no vehicles. <em>dynamic_vanet</em> takes the same measures from the roadside unit’s beacons.</td></tr>
                 <tr><td>Fixed-time</td><td className="wrap">30 s green per direction, whatever the traffic (the baseline).</td></tr>
                 <tr><td>Adaptive</td><td className="wrap">Every 5 s compare the north–south and east–west queues. Green lasts 10–50 s. Switch early when the other side has at least 5 more vehicles waiting, when the served side is empty, or when an approach has been red for 60 s.</td></tr>
                 <tr><td>Adaptive over VANET</td><td className="wrap">The same rule, with queues estimated by the roadside unit from car beacons.</td></tr>
               </tbody>
             </table>
           </div>
-          <Formula note="switch from north–south to east–west">switch if Q_EW − Q_NS ≥ 5, or Q_NS ≤ 1 and Q_EW &gt; 0, or red time ≥ 60 s; always 10 s ≤ green ≤ 50 s</Formula>
+          <Formula note="dynamic: priority score of a road">S = (Q + 0.5·10·ρ/ρ_jam + 0.2·F) · (1 − 0.6·D) + 0.5·W/10   (× 0.2 instead when the road ahead is blocked)</Formula>
+          <Formula note="dynamic: green length">G = clamp(2 s + 2 s · Q_released / lanes, 5 s, 45 s), Q_released = min(Q, room on the road ahead)</Formula>
+          <Formula note="adaptive: switch from north–south to east–west">switch if Q_EW − Q_NS ≥ 5, or Q_NS ≤ 1 and Q_EW &gt; 0, or red time ≥ 60 s; always 10 s ≤ green ≤ 50 s</Formula>
         </section>
 
         <section id="vanet" className="card">

@@ -87,11 +87,11 @@ export class DriverSeat {
     }
     const parsed = DriverStartSchema.safeParse(body ?? {});
     if (!parsed.success) return fail('Pick a start road and a destination road', { issues: parsed.error.issues.map((i) => i.message) });
-    const { from, to } = parsed.data;
+    const { from, to, kind } = parsed.data;
     const edges = new Set((live.network?.edges ?? []).map((e) => e.id));
     if (edges.size && (!edges.has(from) || !edges.has(to))) return fail('Unknown road');
 
-    const cmd = { cmd: 'drive_start', from, to };
+    const cmd = { cmd: 'drive_start', from, to, ...(kind ? { kind } : {}) };
     if (!this.cfg.USE_MOCK) cmd.step_delay = this.cfg.DRIVER_STEP_DELAY;
     if (!live.proc.send(cmd)) return fail('The simulation is not accepting commands');
 

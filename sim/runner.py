@@ -20,10 +20,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import yaml
 from sim.analytics.metrics import StepMetricsLogger, parse_tripinfo
-from sim.controllers.fixed import FixedTimeController
-from sim.scenarios.generate_routes import generate_routes, load_scenario_config, scale_demand
+from sim.controllers.factory import create_controller  # noqa: F401  (Factory; re-exported for callers)
+from sim.scenarios.generate_routes import CITY_NETWORK, generate_routes, load_scenario_config, scale_demand
 from sim.sensing import OracleStateProvider, StateProvider
 from sim.vanet.nodes import internal_lane_junction, is_vehicle_equipped
+from sim.vehicles import is_driven_type
 
 logger = logging.getLogger(__name__)
 
@@ -56,35 +57,6 @@ def get_sumo_backend(gui: bool = False) -> Tuple[Any, bool]:
         return traci, False
 
 
-def create_controller(
-    controller_name: str,
-    tls_id: str,
-    params: Dict[str, Any],
-    provider: StateProvider,
-    sumo_api: Any = None,
-) -> Any:
-    """Factory to instantiate the appropriate controller with injected StateProvider."""
-    ctrl_lower = controller_name.lower()
-    if ctrl_lower == "fixed":
-        return FixedTimeController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
-    elif ctrl_lower in ("adaptive", "adaptive_vanet", "adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
-        try:
-            from sim.controllers.adaptive import AdaptiveController
-            if ctrl_lower in ("adaptive", "adaptive_vanet"):
-                return AdaptiveController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
-        except ImportError:
-            pass
-
-        try:
-            from sim.controllers.preemption import PreemptionController
-            if ctrl_lower in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
-                return PreemptionController(tls_id, params=params, provider=provider, sumo_api=sumo_api)
-        except ImportError:
-            pass
-
-    raise ValueError(f"Controller '{controller_name}' is not supported or not implemented yet.")
-
-
 # SUMO-GUI colours matching the dashboard legend (RGBA)
 GUI_COLORS = {
     "plain": (128, 128, 128, 255),     # car without radio
@@ -98,7 +70,7 @@ def _color_vehicle_for_gui(sumo_api: Any, vid: str, vtype: str, penetration: flo
                            eco_fraction: float) -> None:
     """Colour a new vehicle in SUMO-GUI like the dashboard map (ambulances and the driven car keep
     their vType colour)."""
-    if vtype in ("emergency", "driven"):
+    if vtype == "emergency" or is_driven_type(vtype):
         return
     from sim.vanet.glosa import is_eco_vehicle
 
@@ -173,6 +145,7 @@ def run_simulation(
     output_dir: Optional[Path] = None,
     step_delay: float = 0.0,
     eco_fraction: float = 0.0,
+    eco_select: str = "random",
     ev_routing: bool = False,
     driver: bool = False,
     driver_commands: Optional[Any] = None,
@@ -212,6 +185,8 @@ def run_simulation(
     if ctrl_section is None:
         if controller == "adaptive_vanet":
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
+        elif controller == "dynamic_vanet":
+            ctrl_section = base_config.get("controllers", {}).get("dynamic", {})
         elif controller in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {}).copy()
             ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
@@ -255,6 +230,9 @@ def run_simulation(
     )
 
     network = params.get("network") if params and "network" in params else scenario_cfg.get("network", "single")
+    # Scenario-specific signal timing (city: a longer all-red for its wider junctions); none elsewhere
+    if isinstance(scenario_cfg.get("signals"), dict):
+        ctrl_params.update(scenario_cfg["signals"])
 
     # Incident config (Module 10); params["incident"] overrides fields, e.g. {"enabled": False}
     incident_cfg: Dict[str, Any] = dict(scenario_cfg.get("incident") or {})
@@ -295,6 +273,8 @@ def run_simulation(
         net_path = project_root / "sim" / "sumo" / "grid2x2.net.xml"
     elif network == ZONE_NETWORK:
         net_path = project_root / "sim" / "sumo" / "grid2x2_zone.net.xml"
+    elif network == CITY_NETWORK:
+        net_path = project_root / "sim" / "sumo" / "grid2x2_city.net.xml"
     else:
         net_path = project_root / "sim" / "sumo" / "net.xml"
 
@@ -329,7 +309,8 @@ def run_simulation(
     if network == "single" and decorations_file.exists():
         sumo_cmd.extend(["-a", str(decorations_file)])
 
-    settings_name = "gui-settings-grid.cfg.xml" if network in ("grid2x2", ZONE_NETWORK) else "gui-settings.cfg.xml"
+    settings_name = ("gui-settings-grid.cfg.xml" if network in ("grid2x2", ZONE_NETWORK, CITY_NETWORK)
+                     else "gui-settings.cfg.xml")
     gui_settings_file = project_root / "sim" / "sumo" / settings_name
     if gui:
         if gui_settings_file.exists():
@@ -341,7 +322,7 @@ def run_simulation(
     t = 0.0
     arrived_count = 0
     was_interrupted = False
-    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"))
+    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned", "dynamic_vanet"))
     vanet_net: Optional[Any] = None
     vtype_cache: Dict[str, str] = {}
     ev_crossings: set = set()  # (ev id, signalised junction) pairs the EV drove through
@@ -372,7 +353,8 @@ def run_simulation(
         det_mode = str(vanet_cfg.get("incident_detection", "auto")).lower()
         incident_detection_on = det_mode == "on" or (det_mode == "auto" and incident_enabled)
 
-        eco_on = float(eco_fraction or 0.0) > 0.0
+        # Eco-driving: by share of equipped cars (eco_fraction), or the city's eco-car category
+        eco_on = float(eco_fraction or 0.0) > 0.0 or network == CITY_NETWORK
         if is_vanet_controller or incident_detection_on or eco_on:
             from sim.vanet.network import VanetNetwork
             from sim.vanet.sensing_vanet import VanetStateProvider
@@ -499,6 +481,7 @@ def run_simulation(
                 penetration=penetration,
                 seed=seed,
                 track_live_emissions=live,
+                eco_select=eco_select,
             )
 
         # Live map data: road geometry once, then per-vehicle rows every emitted second
@@ -694,6 +677,9 @@ def run_simulation(
                 if live and hasattr(ctrl, "get_spat"):
                     # Signal Phase and Timing as broadcast by the RSU (countdowns in the dashboard)
                     tls_state_dict[tid]["spat"] = ctrl.get_spat()
+                if live and hasattr(ctrl, "get_live_info"):
+                    # Dynamic controller: road measures, scores and the reason for each decision
+                    tls_state_dict[tid]["dynamic"] = ctrl.get_live_info()
 
             # Step Navigation (Module 9)
             speed_map = provider.get_edge_speeds()
@@ -725,7 +711,8 @@ def run_simulation(
                 speed_map=speed_map,
                 closed_edges=closed_edges or None,
                 incident_edges=set(tmc_incidents) or None,
-                equipped_check_fn=lambda vid: is_vehicle_equipped(vid, penetration=penetration, seed=seed),
+                equipped_check_fn=lambda vid: is_vehicle_equipped(vid, vtype=vtype_cache.get(vid, "car"),
+                                                                  penetration=penetration, seed=seed),
             )
             if live:
                 for n_ev in navigator.pop_events():
@@ -740,6 +727,17 @@ def run_simulation(
                 for cmd in playback.split(driver_commands.poll(), t):
                     if cmd.get("cmd") == "ambulance" and dispatcher is not None:
                         dispatcher.handle(cmd, t)
+                    elif cmd.get("cmd") == "routes":
+                        # Route explorer: A* alternatives on the same costs navigation uses right now
+                        from sim.navigation.route_explorer import explore
+
+                        nav_speeds = navigator.smoothed_speeds(t, speed_map, keep_raw=set(tmc_incidents) or None)
+                        vc = cmd.get("vclass") if cmd.get("vclass") in ("passenger", "motorcycle", "bus", "truck",
+                                                                         "emergency") else "passenger"
+                        reply = explore(edge_graph, str(cmd.get("from") or ""), str(cmd.get("to") or ""),
+                                        speed_map=nav_speeds, closed_edges=closed_edges, vclass=vc)
+                        emit_json_line({"type": "routes", "run_id": run_id, "t": int(t),
+                                        "qid": str(cmd.get("qid") or "")[:40], **reply})
                     else:
                         driver_mgr.handle(cmd, t)
                 driver_mgr.step(t, active_vehs)
@@ -901,11 +899,17 @@ def run_simulation(
     def _eco_group(vid: str, vtype: str) -> Optional[str]:
         if vtype == "emergency":
             return None
+        if eco_mgr is not None:  # the cars that really were eco cars (also when chosen from data)
+            return "eco" if vid in eco_mgr.ever_eco else "non"
         return "eco" if is_eco_vehicle(vid, vtype, float(eco_fraction or 0.0), penetration, seed) else "non"
 
-    emission_metrics = parse_tripinfo_emissions(
-        tripinfo_path, group_fn=_eco_group if float(eco_fraction or 0.0) > 0.0 else None
-    )
+    def _city_group(vid: str, vtype: str) -> Optional[str]:
+        # City: eco cars against ordinary cars only (buses, trucks and motorcycles burn differently)
+        return {"eco_car": "eco", "car": "non"}.get(vtype)
+
+    group_fn = (_city_group if network == CITY_NETWORK
+                else _eco_group if float(eco_fraction or 0.0) > 0.0 else None)
+    emission_metrics = parse_tripinfo_emissions(tripinfo_path, group_fn=group_fn)
 
     if tripinfo_path.exists():
         try:
@@ -921,6 +925,10 @@ def run_simulation(
         "ev_travel_time": metrics["ev_travel_time"],
         "max_queue": metrics["max_queue"],
         "throughput_veh_per_hr": metrics["throughput_veh_per_hr"],
+        "trips_completed": metrics.get("trips_completed"),
+        # Queues at the signals: mean vehicles queued per junction, and total vehicle-hours queued
+        "avg_queue": logger_step.avg_queue,
+        "queue_veh_h": round(logger_step.queue_veh_s / 3600.0, 2),
         "seed": seed,
         "controller": controller,
         "scenario": scenario_name,
@@ -958,6 +966,7 @@ def run_simulation(
 
     # Eco-driving and emission fields (eco-specific ones stay null when eco-driving is off)
     result_payload["eco_fraction"] = float(eco_fraction or 0.0)
+    result_payload["eco_select"] = eco_select
     for key in ("co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
                 "stops_per_vehicle_eco", "stops_per_vehicle_non", "travel_time_eco", "travel_time_non",
                 "eco_advised_vehicles", "eco_advice_share_slow", "eco_advice_share_stop", "spat_pdr"):
@@ -994,7 +1003,8 @@ def run_simulation(
         from sim.navigation.navigator import is_vehicle_navigating
 
         def _is_nav(vid: str) -> bool:
-            if nav == "none" or not is_vehicle_equipped(vid, penetration=penetration, seed=seed):
+            if nav == "none" or not is_vehicle_equipped(vid, vtype=vtype_cache.get(vid, "car"),
+                                                        penetration=penetration, seed=seed):
                 return False
             return is_vehicle_navigating(vid, nav_fraction=nav_frac, seed=seed)
 
