@@ -515,6 +515,12 @@ label.field input, label.field select {
 .page-lead { margin: 0 0 16px; color: var(--text-secondary); max-width: 90ch; }
 .module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 @media (max-width: 1000px) { .module-grid { grid-template-columns: minmax(0, 1fr); } }
+/* Junction cards with the dynamic controller's road table: one per row unless the screen is very wide */
+.module-grid.wide-cards { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1700px) { .module-grid.wide-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.dyn-table .sig { width: 20px; height: 20px; font-size: 11px; }
+.dyn-table td, .dyn-table th { white-space: nowrap; }
+.dyn { border-top: 1px solid var(--border); padding-top: 10px; }
 table.data.left th, table.data.left td { text-align: left; }
 table.data td.wrap, table.data th.wrap { white-space: normal; min-width: 220px; }
 table.data tr.selected td { background: var(--surface-2); }
