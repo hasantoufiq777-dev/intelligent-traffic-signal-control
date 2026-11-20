@@ -62,6 +62,7 @@ export const LAYERS = [
   { id: 'rsu', label: 'Roadside units (RSU)', on: true },
   { id: 'range', label: 'VANET radio range', on: false },
   { id: 'labels', label: 'Road names', on: false },
+  { id: 'lengths', label: 'Road lengths', on: true },
 ];
 const LAYER_KEY = 'itsc-map-layers';
 
@@ -203,7 +204,7 @@ function buildGeometry(network) {
     edges[e.id] = {
       id: e.id, d: path(band), w: rw * S - (isCity ? 0.4 : 1.5), limit: e.speed ?? null, type: e.type || 'grid',
       mid: isCity ? pt((midPt[0] + midNext[0]) / 2, (midPt[1] + midNext[1]) / 2) : pt((fx + x2) / 2, (fy + y2) / 2),
-      horizontal, from: e.from, to: e.to,
+      horizontal, from: e.from, to: e.to, length: e.length ?? null,
       tls: end?.tls ? e.to : null, approach: end?.tls ? approachOf(e.shape) : null,
     };
     if (!end?.tls) continue;
@@ -277,9 +278,45 @@ function buildGeometry(network) {
     }
   }
 
+  // Road lengths: one label per road (both directions), between its two carriageways
+  const byRoad = {};
+  for (const e of Object.values(edges)) {
+    if (e.length == null) continue;
+    const key = [e.from, e.to].sort().join('|');
+    (byRoad[key] ??= []).push(e);
+  }
+  const degree = {};
+  for (const key of Object.keys(byRoad)) for (const n of key.split('|')) degree[n] = (degree[n] ?? 0) + 1;
+  const roadLengths = Object.entries(byRoad).map(([key, list]) => {
+    const lens = [...new Set(list.map((e) => Math.round(e.length)))];
+    let x = list.reduce((t, e) => t + e.mid[0], 0) / list.length;
+    let y = list.reduce((t, e) => t + e.mid[1], 0) / list.length;
+    // An exit road runs off the edge of the map: put its label near the junction it starts from
+    const [n1, n2] = key.split('|');
+    const exit = degree[n1] === 1 ? n1 : degree[n2] === 1 ? n2 : null;
+    const inner = exit && node[exit === n1 ? n2 : n1];
+    if (inner && node[exit]) {
+      const [ix, iy] = pt(inner.x, inner.y);
+      const [ox, oy] = pt(node[exit].x, node[exit].y);
+      const L = Math.hypot(ox - ix, oy - iy) || 1;
+      const d = Math.min(L / 2, jHalf + 60);
+      x = ix + ((ox - ix) / L) * d;
+      y = iy + ((oy - iy) / L) * d;
+    }
+    return {
+      key,
+      x,
+      y,
+      horizontal: list[0].horizontal,
+      text: `${lens.join(' / ')} m`,
+      title: list.map((e) => `${e.id}: ${e.length.toFixed(1)} m`).join(', '),
+    };
+  });
+
   const range = network.vanet?.active ? network.vanet.range_m : null;
   return {
     isCity,
+    roadLengths,
     cityLanes,
     cityMarks,
     cityArrows,
@@ -673,6 +710,13 @@ function TrafficMapInner({
           {layers.labels && Object.values(geo.edges).map((e) => (
             <text key={`n-${e.id}`} x={e.mid[0]} y={e.mid[1]} textAnchor="middle" className="map-label road-name"
               transform={e.horizontal ? undefined : `rotate(-90 ${e.mid[0]} ${e.mid[1]})`} dy={3}>{e.id}</text>
+          ))}
+
+          {layers.lengths && geo.roadLengths.map((r) => (
+            <text key={`len-${r.key}`} x={r.x} y={r.y} textAnchor="middle" className="map-label road-length" dy={3}
+              transform={r.horizontal ? undefined : `rotate(-90 ${r.x} ${r.y})`}>
+              {r.text}<title>{r.title}</title>
+            </text>
           ))}
 
           {followed && (() => {
