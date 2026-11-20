@@ -279,6 +279,7 @@ main:focus { outline: none; }
 
 /* ---------- Map ---------- */
 .map-wrap { position: relative; }
+.map-stage { position: relative; }
 .map-svg {
   width: 100%; height: auto; max-height: calc(100vh - 150px); min-height: 280px; display: block; background: var(--map-bg);
   border-radius: 8px; touch-action: manipulation; cursor: grab; user-select: none;
@@ -468,7 +469,7 @@ label.field input, label.field select {
   background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border-strong); border-left: 4px solid var(--sig-yellow);
 }
 .map-chip {
-  position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); padding: 3px 9px; border-radius: 999px; font-size: 12px;
+  position: absolute; right: 10px; bottom: 10px; max-width: calc(100% - 20px); padding: 3px 9px; border-radius: 999px; font-size: 12px;
   background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--border); pointer-events: none;
 }
 .map-legend-box { margin-top: 8px; }
