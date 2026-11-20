@@ -50,7 +50,8 @@ const EnvSchema = z.object({
   // Extra browser origins allowed to call the API with cookies (comma separated). Empty = same origin only.
   CORS_ORIGIN: z.string().default(''),
   // Real-time pacing of the live simulation (wall-clock seconds per simulated second)
-  SIM_STEP_DELAY: z.coerce.number().min(0).default(0.25),
+  // Wall-clock seconds per simulated second: 1 = real time, so cars move at a speed people can follow
+  SIM_STEP_DELAY: z.coerce.number().min(0).default(1.0),
   SIM_MAX_STEPS: z.coerce.number().int().positive().optional(),
   // Open the live run in the SUMO-GUI window too (only useful when the gateway runs on a desktop)
   SIM_GUI: bool.default(false),
