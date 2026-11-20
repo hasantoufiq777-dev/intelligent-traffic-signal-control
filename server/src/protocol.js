@@ -14,6 +14,29 @@ export const OPTIONS = {
   demand: { min: 0.25, max: 2.0, step: 0.25 },
 };
 
+/**
+ * Networks each scenario can run on (its routes and incident roads must exist there). Tested by
+ * starting every scenario on every network: the grid scenarios use the grid's road names, so they
+ * cannot run on the city network, and the city scenario only runs on the city network.
+ */
+const GRID_FAMILY = ['single', 'grid2x2', 'grid2x2_zone'];
+const GRID_ONLY = ['grid2x2', 'grid2x2_zone']; // their incident roads or ambulance route do not exist on 'single'
+export const SCENARIO_NETWORKS = {
+  normal: GRID_FAMILY, congested: GRID_FAMILY, emergency: GRID_FAMILY, ev_congested: GRID_FAMILY,
+  incident: GRID_ONLY, navigation: GRID_ONLY, ev_incident: GRID_ONLY,
+  accident_zone: ['grid2x2_zone', 'grid2x2'],
+  city: ['grid2x2_city'],
+};
+OPTIONS.scenario_networks = SCENARIO_NETWORKS;
+
+/** Why a scenario cannot run on a network, or null when it can (or no network is given). */
+export function networkProblem(scenario, network) {
+  if (!network) return null;
+  const ok = SCENARIO_NETWORKS[scenario] ?? OPTIONS.networks;
+  return ok.includes(network) ? null
+    : `The ${scenario} scenario cannot run on the ${network} network (its roads do not exist there). Use: ${ok.join(', ')}, or leave the network on the scenario default.`;
+}
+
 /** A live run request (admin start body, playlist entry). Unknown keys are rejected. */
 export const RunEntrySchema = z
   .object({
@@ -30,7 +53,11 @@ export const RunEntrySchema = z
     network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
     label: z.string().max(120).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((e, ctx) => {
+    const problem = networkProblem(e.scenario, e.network);
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['network'], message: problem });
+  });
 
 export const PlaylistSchema = z.array(RunEntrySchema).min(1);
 

@@ -260,6 +260,18 @@ describe('gateway with mock simulation', () => {
     expect(RunEntrySchema.safeParse({ ...base, ev_routing: 'yes' }).success).toBe(false);
   });
 
+  it('refuses a scenario on a network its roads do not exist on (the run would fail in SUMO at once)', async () => {
+    const run = (scenario, network) => RunEntrySchema.safeParse({ scenario, controller: 'fixed', network });
+    expect(run('normal', 'grid2x2_city').success).toBe(false); // grid routes on the city network
+    expect(run('city', 'grid2x2').success).toBe(false);
+    expect(run('incident', 'single').success).toBe(false); // the incident road J0J1 is not on the single junction
+    for (const [s, n] of [['normal', 'grid2x2'], ['normal', 'single'], ['incident', 'grid2x2'], ['city', 'grid2x2_city'],
+      ['accident_zone', 'grid2x2_zone'], ['normal', undefined]]) expect(run(s, n).success).toBe(true);
+    const res = await S.post('/api/live/start').send({ scenario: 'normal', controller: 'fixed', eco_fraction: 0.6, network: 'grid2x2_city' }).expect(400);
+    expect(res.body.issues[0].message).toMatch(/cannot run on the grid2x2_city network/);
+    expect((await S.get('/api/options').expect(200)).body.scenario_networks.city).toEqual(['grid2x2_city']);
+  });
+
   it('serves the GA tuning output per target, and null for a target that was not run', async () => {
     await request(gw.app).get('/api/experiments/ga').expect(401);
     expect((await S.get('/api/experiments/ga').expect(200)).body).toEqual({ signals: null, aco: null });
