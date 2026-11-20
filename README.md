@@ -144,6 +144,7 @@ paragraphs there are written by hand, so regenerating replaces them with placeho
 | Question | Result |
 |---|---|
 | Dynamic signals (default mode) | Waiting time −66 % (normal) and −71 % (congested) vs fixed-time with exact measures; −34 % and −55 % over VANET at 50 % penetration; throughput up to +13 %; 0 collisions (`python sim/analytics/compare_dynamic.py`, [results/dynamic/summary.md](results/dynamic/summary.md)) |
+| Eco cars chosen by data (vs SUMO fuel model) | Fixed-time signals, 60 % eco: CO₂ and fuel of all cars −2.4 % vs −1.1 % for a random choice; stops −22 % either way (`python sim/analytics/compare_eco_select.py`, [results/eco_select/summary.md](results/eco_select/summary.md)) |
 | Adaptive signals with VANET sensing | Waiting time −36 to −39% vs fixed-time from 80% penetration (oracle −38%); worse than fixed-time at 20% |
 | Ambulance preemption over VANET | Ambulance travel time −25 to −27% vs adaptive at 0-50% packet loss, same as oracle; 0 missed junctions |
 | Ambulance route choice | Road closed ahead: −44% (113.7 s → 63.3 s); congested corridor: −13%; normal traffic: no change |
