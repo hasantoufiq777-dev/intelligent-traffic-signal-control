@@ -147,7 +147,7 @@ def main() -> None:
         pass
 
     valid_scenarios = {"normal", "congested", "emergency", "incident", "navigation", "ev_incident", "ev_congested",
-                       "accident_zone", "city", "city_emergency", "city_incident", "city_navigation"}
+                       "accident_zone", "city"}
     if args.scenario not in valid_scenarios and not Path(args.scenario).exists():
         err_msg = f"Unknown scenario: {args.scenario}"
         logger.error(err_msg)
@@ -172,7 +172,7 @@ def main() -> None:
                     network = sc_data.get("network", "single")
             except Exception:
                 network = "single"
-        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested", "accident_zone") or args.scenario.startswith("city"):
+        elif args.scenario in ("navigation", "incident", "ev_incident", "ev_congested", "accident_zone", "city"):
             network = "grid2x2"
         else:
             network = "single"
