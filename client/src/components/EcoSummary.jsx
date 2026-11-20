@@ -16,17 +16,24 @@ function Compare({ label, eco, non, unit, digits = 1 }) {
 
 export default function EcoSummary({ eco }) {
   if (!eco) return null;
-  const on = (eco.eco_fraction || 0) > 0;
+  const share = eco.eco_fraction || 0;
+  // On when a share of connected cars follows advice, or when the run has eco cars of its own
+  // (the city network's green eco-car type always follows advice)
+  const on = share > 0 || (eco.eco_active ?? 0) > 0;
   return (
     <section className="card stack" aria-labelledby="eco-h">
       <div className="card-head">
         <h2 id="eco-h">Eco-driving</h2>
-        <span className="chip">{on ? `${Math.round(eco.eco_fraction * 100)}% of connected cars follow advice` : 'off in this run'}</span>
+        <span className="chip">{share > 0 ? `${Math.round(share * 100)}% of connected cars follow advice`
+          : on ? 'the green eco cars follow advice' : 'off in this run'}</span>
       </div>
       {!on && (
         <p className="muted small" style={{ margin: 0 }}>
-          In runs with eco-driving, roadside units broadcast when each light turns green, and eco cars
-          slow down early to arrive on green instead of stopping. Totals below cover finished trips.
+          This run has no eco cars, so there is nothing to compare. In runs with eco-driving, roadside
+          units broadcast when each light turns green, and eco cars slow down early to arrive on green
+          instead of stopping. Eco-driving is on in every city run (its green eco cars), in the
+          playlist's normal run with 60 % eco cars, and in any run started with an <em>eco fraction</em> above
+          0 in Run control.
         </p>
       )}
       <div className="tiles">
@@ -36,9 +43,13 @@ export default function EcoSummary({ eco }) {
             <div className="tile"><div className="k">Slowing for green now</div><div className="v num">{eco.advised_now ?? 0}</div></div>
           </>
         )}
-        <Compare label="CO₂ per km (eco cars)" eco={eco.co2_g_per_km_eco} non={eco.co2_g_per_km_non} unit="g/km" digits={0} />
-        <Compare label="Fuel (eco cars)" eco={eco.fuel_l_100km_eco} non={eco.fuel_l_100km_non} unit="L/100 km" />
-        <Compare label="Stops per trip (eco cars)" eco={eco.stops_eco} non={eco.stops_non} unit="" />
+        {on && (
+          <>
+            <Compare label="CO₂ per km (eco cars)" eco={eco.co2_g_per_km_eco} non={eco.co2_g_per_km_non} unit="g/km" digits={0} />
+            <Compare label="Fuel (eco cars)" eco={eco.fuel_l_100km_eco} non={eco.fuel_l_100km_non} unit="L/100 km" />
+            <Compare label="Stops per trip (eco cars)" eco={eco.stops_eco} non={eco.stops_non} unit="" />
+          </>
+        )}
         {on && (
           <div className="tile"><div className="k">Timing messages delivered</div><div className="v num">{isNum(eco.spat_pdr) ? `${Math.round(eco.spat_pdr * 100)}%` : '–'}</div></div>
         )}
