@@ -32,7 +32,8 @@ logger = logging.getLogger("sim.main")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Intelligent Traffic Signal Control Simulation CLI")
     parser.add_argument("--scenario", type=str, default="normal", help="Scenario name or YAML file path")
-    parser.add_argument("--controller", type=str, default="fixed", help="Controller name (fixed, adaptive, etc.)")
+    parser.add_argument("--controller", type=str, default="dynamic_vanet",
+                        help="Controller name (default dynamic_vanet: congestion-aware over VANET; also dynamic, fixed, adaptive, ...)")
     parser.add_argument("--seed", type=int, default=1, help="Random seed")
     parser.add_argument("--gui", action="store_true", help="Launch SUMO with GUI")
     parser.add_argument("--params", type=str, default=None, help="Path to custom parameters YAML file")
