@@ -175,7 +175,7 @@ and the [final acceptance report](docs/testing/FINAL_ACCEPTANCE_REPORT.md) gives
 | `TRUST_PROXY` | Number of reverse proxies in front (nginx or a tunnel: 1) |
 | `MAX_CONNECTIONS` | Limit on concurrent live connections (default 1000); more are refused with a clear message |
 | `LIVE_LOOP` | Loop `server/playlist.json` |
-| `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 0.25) |
+| `SIM_STEP_DELAY` | Wall-clock seconds per simulated second for live runs (default 1.0 = real time; the dashboard can play at 0.5×–4×) |
 | `SIM_GUI` | Open live runs in SUMO-GUI from the start |
 | `DRIVER_MODE` | Allow one viewer to drive a car (default true; the admin can switch it off at run time) |
 | `DRIVER_IDLE_MS`, `DRIVER_MAX_MS` | Free the driver seat after 2 min without input / 10 min in total |
