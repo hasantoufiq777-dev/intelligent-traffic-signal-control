@@ -8,9 +8,11 @@ export const OPTIONS = {
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
   ev_routing: ['on', 'off'],
+  // How eco cars are chosen: the most wasteful against the SUMO fuel-curve model, or at random
+  eco_select: ['data', 'random'],
   networks: ['single', 'grid2x2', 'grid2x2_zone', 'grid2x2_city'],
   defaults: { scenario: 'normal', controller: 'dynamic_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
-    eco_fraction: 0.0, ev_routing: 'off', demand: 1.0 },
+    eco_fraction: 0.0, eco_select: 'data', ev_routing: 'off', demand: 1.0 },
   // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
   demand: { min: 0.25, max: 2.0, step: 0.25 },
 };
@@ -49,6 +51,7 @@ export const RunEntrySchema = z
     loss: z.coerce.number().min(0).max(1).default(0.0),
     relay: z.enum(OPTIONS.relay).default('off'),
     eco_fraction: z.coerce.number().min(0).max(1).default(0.0), // share of equipped cars following GLOSA advice
+    eco_select: z.enum(OPTIONS.eco_select).default('data'),
     ev_routing: z.enum(OPTIONS.ev_routing).default('off'), // ambulances pick their route on the TMC map
     demand: z.coerce.number().min(0.25).max(2).default(1.0), // traffic demand factor (number of cars)
     network: z.enum(OPTIONS.networks).optional(), // default: the scenario's own network
@@ -140,6 +143,7 @@ export function buildSimArgs(entry, runId, cfg, opts = {}) {
     '--loss', String(entry.loss),
     '--relay', entry.relay,
     '--eco-fraction', String(entry.eco_fraction ?? 0),
+    '--eco-select', entry.eco_select ?? 'data',
     '--ev-routing', entry.ev_routing ?? 'off',
     '--live',
     '--driver', // read commands on stdin: one-driver mode and playback (pause, resume, speed)
