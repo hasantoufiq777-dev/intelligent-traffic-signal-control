@@ -472,6 +472,7 @@ function TrafficMapInner({
 
   return (
     <div className="map-wrap">
+      <div className="map-stage">
       <svg
         ref={svgRef}
         className={`map-svg${zoomed ? ' zoomed' : ''}`}
@@ -730,13 +731,15 @@ function TrafficMapInner({
           })()}
         </g>
       </svg>
-
-      {stale && <div className="map-stale" role="status">{stale}</div>}
+      {/* bottom right of the map itself, so it never covers the legend below */}
       <div className="map-chip">
         {network.vanet?.active
           ? `VANET: ${connected} of ${rows.length} vehicles connected · penetration ${Math.round((network.vanet.penetration ?? 0) * 100)} %`
           : `No VANET in this run · ${rows.length} vehicles`}
       </div>
+      </div>
+
+      {stale && <div className="map-stale" role="status">{stale}</div>}
 
       <div className="map-controls" role="group" aria-label="Map controls">
         <button type="button" className="map-btn" onClick={() => zoomAt(1.4, geo.width / 2, geo.height / 2)} aria-label="Zoom in"
