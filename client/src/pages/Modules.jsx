@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import EcoComparison from '../components/EcoComparison.jsx';
 import EcoSummary from '../components/EcoSummary.jsx';
 import JunctionPanel from '../components/JunctionPanel.jsx';
 import { TimeChart } from '../components/LiveCharts.jsx';
@@ -478,6 +479,7 @@ export function Glosa() {
   return (
     <Shell lead="Each roadside unit broadcasts its signal timing (SPaT). An eco car works out when it will reach the stop line and gets advice: GO, SLOW (arrive as the light turns green), STOP, or none when the timing is not predictable.">
       <EcoSummary eco={eco} />
+      <EcoComparison eco={eco} onFollow={live.follow} />
       {eco && ((eco.eco_fraction || 0) > 0 || (eco.eco_active ?? 0) > 0) && (
         <div className="tiles">
           <Tile k="SPaT messages delivered" v={isNum(eco.spat_pdr) ? `${fmt(eco.spat_pdr * 100, 0)} %` : '–'} />
