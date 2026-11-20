@@ -30,16 +30,14 @@ export const ROUTE_COLORS = ['#2563eb', '#d97706', '#7c3aed', '#0e9488'];
 const MAX_ZOOM = 6;
 
 /**
- * Congestion of one road direction: null, 'slow' or 'heavy'. A low speed alone is not congestion
+ * Congestion of one road direction: 'congested' or null. A low speed alone is not congestion
  * (cars waiting at a red light are slow too), so a road that ends at a signal also needs a queue.
  */
 export function congestion(speed, limit, queue) {
   if (!(limit > 0) || speed == null) return null;
   const ratio = speed / limit;
-  if (queue == null) return ratio < 0.2 ? 'heavy' : null; // exit road: only a standstill counts
-  if (ratio < 0.35 && queue >= 6) return 'heavy';
-  if (ratio < 0.65 && queue >= 3) return 'slow';
-  return null;
+  if (queue == null) return ratio < 0.2 ? 'congested' : null; // exit road: only a standstill counts
+  return ratio < 0.35 && queue >= 6 ? 'congested' : null;
 }
 
 const ROAD_TYPE_TEXT = {
@@ -506,13 +504,11 @@ function TrafficMapInner({
               {Object.entries(edgeSpeeds).map(([id, v]) => {
                 const e = geo.edges[id];
                 if (!e) return null;
-                const level = congestion(v, e.limit, e.tls ? tlsState?.[e.tls]?.queues?.[e.approach] ?? 0 : null);
-                if (!level) return null;
-                const heavy = level === 'heavy';
+                if (!congestion(v, e.limit, e.tls ? tlsState?.[e.tls]?.queues?.[e.approach] ?? 0 : null)) return null;
                 return (
-                  <path key={id} d={e.d} stroke={heavy ? 'var(--sig-red)' : 'var(--sig-yellow)'} strokeOpacity={heavy ? 0.5 : 0.42}
+                  <path key={id} d={e.d} stroke="var(--sig-yellow)" strokeOpacity={0.5}
                     strokeWidth={e.w} fill="none" strokeLinecap="butt">
-                    <title>{`${id}: ${heavy ? 'congested' : 'slow'}, ${(v * 3.6).toFixed(0)} km/h (limit ${(e.limit * 3.6).toFixed(0)})`}</title>
+                    <title>{`${id}: congested, ${(v * 3.6).toFixed(0)} km/h (limit ${(e.limit * 3.6).toFixed(0)})`}</title>
                   </path>
                 );
               })}
@@ -739,8 +735,7 @@ function TrafficMapInner({
           <span><CarIcon kind="driven" />Driven by a viewer</span>
           <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.6" fill="var(--sig-green)" stroke="#0b0d12" strokeWidth="1.2" /></svg>Signal (green / yellow / red) with seconds left</span>
           <span><svg width="20" height="14"><rect x="1" y="1" width="18" height="12" rx="6" fill="var(--surface-1)" stroke="var(--border-strong)" /><text x="10" y="10.5" textAnchor="middle" fontSize="9" fill="var(--text-primary)">5</text></svg>Vehicles waiting</span>
-          <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--sig-yellow)" fillOpacity="0.5" /></svg>Slow road</span>
-          <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--sig-red)" fillOpacity="0.55" /></svg>Congested road</span>
+          <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--sig-yellow)" fillOpacity="0.5" /></svg>Congested road</span>
           <span><svg width="14" height="14"><path d="M7 1 L13 13 H1 Z" fill="var(--sig-red)" /><path d="M7 5 V9 M7 10.5 V11.5" stroke="#fff" strokeWidth="1.4" /></svg>Accident / road closed</span>
           <span><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="var(--surface-1)" stroke="var(--rsu)" strokeWidth="1.2" /><path d="M4.5 7.5 A5 5 0 0 1 11.5 7.5 M6 9.3 A2.8 2.8 0 0 1 10 9.3" stroke="var(--rsu)" strokeWidth="1.2" fill="none" /></svg>Roadside unit (RSU)</span>
           {geo.zone && <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--zone)" fillOpacity="0.45" /></svg>Shared lane, one direction at a time</span>}
