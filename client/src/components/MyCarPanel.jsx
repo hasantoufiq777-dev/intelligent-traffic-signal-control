@@ -134,12 +134,12 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
       </div>
       )}
 
-      <div className="kv">
-        <div><div className="k">Fuel used so far</div><div className="v num">{fmt((detail.fuel_ml ?? 0) / 1000, 2)} L</div></div>
       {'ahead' in detail && (
         <FollowingCard data={normalise(detail)} mine={kind === 'driven'} onSelect={onFollow} />
       )}
 
+      <div className="kv">
+        <div><div className="k">Fuel used so far</div><div className="v num">{fmt((detail.fuel_ml ?? 0) / 1000, 2)} L</div></div>
         <div><div className="k">CO₂ so far</div><div className="v num">{fmt(detail.co2_g, 0)} g</div></div>
       </div>
 
