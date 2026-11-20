@@ -61,6 +61,11 @@ def main() -> None:
         help="Fraction of equipped vehicles that follow GLOSA eco-driving advice (0 = off)",
     )
     parser.add_argument(
+        "--eco-select", type=str, default="data", choices=["data", "random"],
+        help="How eco cars are chosen: data = the cars burning most fuel above the SUMO fuel-curve model "
+             "(default), random = a seeded random share",
+    )
+    parser.add_argument(
         "--demand", type=float, default=1.0,
         help="Traffic demand factor: every flow of the scenario multiplied by this (0.25 to 2; 1 = as defined)",
     )
@@ -137,6 +142,7 @@ def main() -> None:
             aco_params=args.aco_params,
             step_delay=max(0.0, args.step_delay),
             eco_fraction=min(1.0, max(0.0, args.eco_fraction)),
+            eco_select=args.eco_select,
             ev_routing=(args.ev_routing == "on"),
             driver=args.driver,
             demand=min(2.0, max(0.25, args.demand)),
