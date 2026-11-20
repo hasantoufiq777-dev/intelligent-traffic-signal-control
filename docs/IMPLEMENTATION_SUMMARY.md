@@ -361,24 +361,6 @@ non-uniform town with four signalised junctions, J0–J3, at irregular spacings.
 **Metrics** are recalculated by `sim/analytics/city_eval.py` into `results/city/`. The research grid
 is untouched.
 
-**City versions of the scenarios** (for live demonstrations; the research results stay on `grid2x2`):
-
-| Scenario | What happens | Measured (seed 1, 900 s, 0 collisions) |
-|---|---|---|
-| `city` | Mixed traffic on the redesigned town | waiting: fixed 27.3 s, adaptive 19.8 s (5 seeds) |
-| `city_emergency` | Two ambulances cross the town (east → S0, west → N3); use `adaptive_ev_vanet`, ambulance routing on | ambulance trip 73.0 s with priority, 100.5 s without (−27 %); 0 missed preemptions |
-| `city_incident` | A crash blocks the main road's middle lane between J0 and J1 for 300 s | detected over the VANET after 33 s; 12 vehicles rerouted |
-| `city_navigation` | 40 % more traffic, so the alternative roads matter; use `astar` or `aco` | ACO: waiting 28.8 s, against 31.2 s without navigation |
-
-The crash blocks one lane rather than closing the road:
-- **why not a full closure:** trucks and buses would have no legal detour there (they never turn left at
-  a signal), and this project never teleports stuck vehicles;
-- **what still happens:** traffic squeezes past in the other two lanes, and navigating cars, warned over
-  the VANET, take other roads.
-
-The app's playlist opens with these city runs.
-
-
 ---
 
 ## 8. Vehicle types and lane restrictions
@@ -548,6 +530,24 @@ A test asks for 180 km/h and checks the vehicle never goes above the limit.
 
    ```
    cost(v) = fuel_per_metre(v) · d
+           + [if the light would be red on arrival]
+               idle fuel × waiting time + extra fuel to speed up again from a stop
+           + 1.5 × idle fuel rate × travel time
+   ```
+
+   - **Whether the light is red on arrival** comes from its timing, received over the VANET (SPaT).
+   - **The time term** stops the advice from slowing the vehicle right down just to save a little fuel.
+4. **The cheapest speed is recommended:**
+   - "keep this speed" if within 1 m/s of the current speed, otherwise "speed up" or "slow down";
+   - with its reasons;
+   - fuel, CO₂ and time for now against recommended;
+   - a fuel-against-speed chart.
+
+   It is labelled an **estimate**.
+
+**Example.** A car at 50 km/h, 200 m from a red light that turns green in 20 s, is advised 35 km/h. It
+arrives on green instead of stopping: 15.9 mL instead of 36.6 mL, in the same time.
+
 ### 11.3 Car following: the car ahead and the car behind: `sim/car_following.py`
 
 **What the driver sees.** In *My car*, the *Drive a vehicle* panel and the 3D head-up display:
@@ -604,24 +604,6 @@ rule, and the panel shows how it reacts.
 - `client/src/lib/following.test.js` (6);
 - the browser test `tests/e2e/following.mjs` (5/5).
 
-           + [if the light would be red on arrival]
-               idle fuel × waiting time + extra fuel to speed up again from a stop
-           + 1.5 × idle fuel rate × travel time
-   ```
-
-   - **Whether the light is red on arrival** comes from its timing, received over the VANET (SPaT).
-   - **The time term** stops the advice from slowing the vehicle right down just to save a little fuel.
-4. **The cheapest speed is recommended:**
-   - "keep this speed" if within 1 m/s of the current speed, otherwise "speed up" or "slow down";
-   - with its reasons;
-   - fuel, CO₂ and time for now against recommended;
-   - a fuel-against-speed chart.
-
-   It is labelled an **estimate**.
-
-**Example.** A car at 50 km/h, 200 m from a red light that turns green in 20 s, is advised 35 km/h. It
-arrives on green instead of stopping: 15.9 mL instead of 36.6 mL, in the same time.
-
 ---
 
 ## 12. Eco-driving (GLOSA) and the genetic algorithm
@@ -669,7 +651,6 @@ arrives on green instead of stopping: 15.9 mL instead of 36.6 mL, in the same ti
 | **Factory** | `create_controller()` (name → controller class); `make_planner()` (mode → planner); `VehicleTypeFactory` (catalogue → SUMO types and dashboard data) |
 | **Adapter** | `StateProvider` (exact SUMO data or VANET estimates behind one interface); `SimProcess` (Python process → gateway events) |
 | **State** | Preemption, signal changeover, run lifecycle, driver seat, work-zone turns |
-| Browser: car following (card, ride along, follow mode, 3D HUD, axe in both themes) | 5/5 |
 | **Observer** | Gateway: simulation messages → live channel → Socket.io rooms (all viewers; followers of one vehicle) |
 | **Singleton** (limited) | One live channel and configuration per gateway, created in the composition root; the fuel curves cached once. A global Singleton was avoided because the tests start several gateways |
 
@@ -688,6 +669,7 @@ Details, reasons and class relationships: [architecture/DESIGN_PATTERNS.md](arch
 | Dashboard unit tests | 21 passed |
 | Browser: city, routes, truck driving, 3D view, view switch | 9/9 |
 | Browser: ambulance on demand | 6/6 |
+| Browser: car following (card, ride along, follow mode, 3D HUD, axe in both themes) | 5/5 |
 | Layout at 6 widths (1920–360 px) | 108/108 |
 | Accessibility (WCAG 2.2 AA, axe) | 0 violations: 45 general audits + 8 audits of the new screens, light and dark |
 | Collision sweep, city network | 0 in 30 runs |

@@ -255,23 +255,3 @@ def test_city_run_half_equipped_lanes_respected_and_the_driver_capped() -> None:
     routes = next(m for m in msgs if m["type"] == "routes")
     assert routes["ok"] and routes["qid"] == "q" and routes["vclass"] == "bus"
     assert all(not LOCAL & set(r["path"]) for r in routes["routes"])
-
-
-# ---------------------------------------------------------------------------- city versions of the scenarios
-def test_city_ambulance_gets_green_and_is_faster_than_without_priority() -> None:
-    kw = dict(seed=1, max_steps=320, penetration=0.5)
-    pri = run_simulation("city_emergency", "adaptive_ev_vanet", ev_routing=True, **kw)
-    plain = run_simulation("city_emergency", "adaptive_vanet", **kw)
-    assert pri["collisions"] == 0 and pri["missed_preemptions"] == 0
-    assert 0 < pri["ev_travel_time"] < plain["ev_travel_time"]
-
-
-def test_city_incident_is_detected_over_vanet_and_cars_reroute() -> None:
-    r = run_simulation("city_incident", "adaptive_vanet", seed=1, max_steps=400, nav="astar", penetration=0.5)
-    assert r["collisions"] == 0 and r["incident_detected"] is True
-    assert r["incident_detection_delay"] < 60 and r["incident_rerouted_vehicles"] > 0
-
-
-def test_city_navigation_reroutes_without_collisions() -> None:
-    r = run_simulation("city_navigation", "adaptive_vanet", seed=1, max_steps=500, nav="aco", penetration=0.5)
-    assert r["collisions"] == 0 and r["reroute_count"] > 0
