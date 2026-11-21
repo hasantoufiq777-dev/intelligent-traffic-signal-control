@@ -34,16 +34,31 @@ const PAGES = [
   ['Navigation', '/navigation', 'How a route is chosen'],
   ['Incidents', '/incidents', 'Incident timeline'],
   ['Work zone', '/work-zone', 'Evaluated results'],
-  ['Eco-driving', '/glosa', 'Signal phase and timing (SPaT)'],
+  ['Driving', '/glosa', 'Signal phase and timing (SPaT)'],
   ['Events', '/events', 'important only'],
-  ['Results', '/results', 'Download this table (CSV)'],
   ['GA optimisation', '/ga', 'Check on held-out seeds'],
-  ['Run history', '/runs', 'stored'],
   ['Documentation', '/docs', 'Problem and objectives'],
-  ['Guided demo', '/demo', 'Step 1 of 13'],
   ['Run control', '/admin', 'Live run control'],
   ['Administration', '/administration', 'Add a user'],
 ];
+// Not in the sidebar (hidden), but they still open by address and keep their title
+const HIDDEN = [
+  ['Results', '/results', 'Download this table (CSV)'],
+  ['Run history', '/runs', 'stored'],
+  ['Guided demo', '/demo', 'Step 1 of 13'],
+];
+await step('the sidebar shows only GA optimisation and Documentation under Research', async () => {
+  const links = await page.locator('.sidebar .nav-item').allTextContents();
+  for (const [link] of HIDDEN) if (links.includes(link)) throw new Error(`${link} should be hidden`);
+});
+for (const [link, path, text] of HIDDEN) {
+  await step(`${link} (${path}) by address`, async () => {
+    await page.goto(`${url}${path}`);
+    await page.getByText(text, { exact: false }).first().waitFor({ timeout: 15_000 });
+    const title = await page.locator('.page-title').textContent();
+    if (title !== link) throw new Error(`page title is "${title}"`);
+  });
+}
 for (const [link, path, text] of PAGES) {
   await step(`${link} (${path})`, async () => {
     await page.getByRole('link', { name: link, exact: true }).click();
