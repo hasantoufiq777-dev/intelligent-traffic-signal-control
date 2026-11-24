@@ -14,6 +14,30 @@ controllers:
     yellow_time: 3
     all_red_time: 2
 
+  # Default mode: dynamic congestion-aware control (sim/controllers/dynamic.py). The green length
+  # is computed from the traffic, between min_green and max_green; yellow and all-red stay fixed
+  # for safety. `dynamic` uses exact data, `dynamic_vanet` the roadside units' beacons.
+  dynamic:
+    min_green: 5
+    max_green: 45
+    yellow_time: 3
+    all_red_time: 2
+    decision_interval: 1      # s between checks during a green
+    startup_lost_s: 2.0       # first vehicle's start-up time
+    headway_s: 2.0            # s per queued vehicle per lane to clear the stop line
+    fairness_wait_s: 40       # a car on red waiting this long ends the current green (after min_green)
+    gap_dist_m: 30            # a vehicle this close to the stop line keeps the green going
+    w_queue: 1.0              # priority score weights (see dynamic.py)
+    w_wait: 0.5               # per 10 s of mean waiting time
+    w_density: 0.5            # per 10 % of jam density
+    w_flow: 0.2               # per vehicle per minute arriving
+    w_down: 0.6               # score reduction per unit of downstream occupancy
+    blocked_factor: 0.2       # score multiplier when the downstream road is blocked
+    down_busy_occ: 0.4        # downstream occupancy shown as "busy"
+    down_blocked_occ: 0.75    # downstream occupancy treated as "blocked"
+    light_max_s: 15           # green up to this long is "short" (light traffic)
+    moderate_max_s: 30        # up to this "medium"; longer "long" (heavy)
+
   adaptive:
     decision_interval: 5
     min_green: 10

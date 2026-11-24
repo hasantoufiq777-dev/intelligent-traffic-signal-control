@@ -13,6 +13,7 @@ from typing import Any, Dict, Type
 
 from sim.controllers.adaptive import AdaptiveController
 from sim.controllers.base import BaseController
+from sim.controllers.dynamic import DynamicController
 from sim.controllers.fixed import FixedTimeController
 from sim.controllers.preemption import PreemptionController
 from sim.sensing import StateProvider
@@ -20,6 +21,8 @@ from sim.sensing import StateProvider
 # name -> controller class (the provider decides whether it sees exact data or VANET estimates)
 CONTROLLERS: Dict[str, Type[BaseController]] = {
     "fixed": FixedTimeController,
+    "dynamic": DynamicController,  # default mode: congestion-aware phase choice and green length
+    "dynamic_vanet": DynamicController,
     "adaptive": AdaptiveController,
     "adaptive_vanet": AdaptiveController,
     "adaptive_ev": PreemptionController,
