@@ -97,6 +97,11 @@ It shows:
 - the number of direction changes and the expected wait each way;
 - the rules and a zone timeline.
 
+### Eco driving
+Everything about eco cars. Select any car in the table to see its details: Eco %, fuel and CO₂ against the
+SUMO HBEFA4 reference, average and most efficient speed, stops, stopped time, why it is an eco car, and the
+advice it is getting now. The page also compares eco cars with other cars, and each run's selection results.
+
 ### Driving
 Eco-driving with green-light speed advice (GLOSA). Each roadside unit broadcasts its signal timing (SPaT). An eco car
 works out when it will reach the light and gets advice: **GO**, **SLOW** (to arrive just as the light
