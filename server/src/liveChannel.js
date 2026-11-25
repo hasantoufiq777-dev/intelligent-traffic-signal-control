@@ -25,6 +25,8 @@ export function historyRow(msg, runId = msg.run_id) {
     comm: msg.comm ? { pdr: msg.comm.pdr } : undefined, nav };
 }
 
+const MAX_ECO_CARS = 5000; // per-car eco comparisons kept for one run
+
 export class LiveChannel {
   constructor({ cfg, io, db, logger, playlist }) {
     this.cfg = cfg;
@@ -58,6 +60,8 @@ export class LiveChannel {
     this.network = null; // road geometry of the current run
     this.latestVehicles = null; // latest full vehicles message from Python
     this.vehicleIndex = new Map(); // vehicle id -> detail object (latest)
+    this.ecoCars = new Map(); // vehicle id -> this run's latest comparison with HBEFA4
+    this.ecoCarsT = null;
     this.followerOf = new Map(); // leader id -> the vehicle following it
 
     this._lastStateEmit = 0;
@@ -257,6 +261,8 @@ export class LiveChannel {
     this.lastSampleT = -Infinity;
     this.sawFinalStatus = false;
     this.network = null;
+    this.ecoCars = new Map();
+    this.ecoCarsT = null;
     this.latestVehicles = null;
     this.vehicleIndex = new Map();
     this.followerOf = new Map();
@@ -441,6 +447,14 @@ export class LiveChannel {
         break;
       case 'vehicles':
         this._onVehicles(msg);
+        break;
+      case 'eco_cars':
+        for (const row of msg.rows ?? []) {
+          this.ecoCars.delete(row.id); // re-insert: the oldest update is dropped first at the cap
+          this.ecoCars.set(row.id, row);
+        }
+        while (this.ecoCars.size > MAX_ECO_CARS) this.ecoCars.delete(this.ecoCars.keys().next().value);
+        this.ecoCarsT = msg.t ?? null;
         break;
       case 'driver':
         this.driver.onSimMessage({ ...msg, run_id: runId });
