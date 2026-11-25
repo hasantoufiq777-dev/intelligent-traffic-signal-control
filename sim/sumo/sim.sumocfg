@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
     <input>
-        <net-file value="net.xml"/>
-        <route-files value="routes.rou.xml"/>
-        <additional-files value="decorations.add.xml"/>
+        <net-file value="xml/networks/net.xml"/>
+        <route-files value="xml/routes/routes.rou.xml"/>
+        <additional-files value="xml/gui/decorations.add.xml"/>
     </input>
     <output>
-        <tripinfo-output value="tripinfo.out.xml"/>
+        <tripinfo-output value="xml/generated/tripinfo.out.xml"/>
     </output>
     <time>
         <begin value="0"/>

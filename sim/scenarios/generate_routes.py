@@ -392,7 +392,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default="sim/sumo/routes.rou.xml",
+        default="sim/sumo/xml/routes/routes.rou.xml",
         help="Target output routes file",
     )
     args = parser.parse_args()

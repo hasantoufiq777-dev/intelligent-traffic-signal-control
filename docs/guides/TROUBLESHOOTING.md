@@ -42,7 +42,7 @@ restart, and start the run again to see the Python traceback.
 | `Simulation process error: spawn ... ENOENT` | `PYTHON_BIN` wrong | point it at the virtual environment's interpreter (`.venv/bin/python` or `.venv\Scripts\python.exe`) |
 | `[sim]` lines about `SUMO_HOME`, `sumolib` or `traci` | SUMO not installed or `SUMO_HOME` unset | install SUMO and set `SUMO_HOME`; check with `python sim/smoke_test.py` |
 | "Simulation exited with code 1" | the run crashed | the `[sim]` lines before it show the Python error; run the same scenario directly with `python sim/main.py --scenario ...` |
-| `[sim]` permission errors writing `sim/sumo/routes_*.rou.xml` or `results/` (Linux service) | the systemd hardening does not allow the path | keep `ReadWritePaths=... /srv/itsc/results /srv/itsc/sim/sumo` from `deploy/itsc-gateway.service` |
+| `[sim]` permission errors writing `sim/sumo/xml/generated/routes_*.rou.xml` or `results/` (Linux service) | the systemd hardening does not allow the path | keep `ReadWritePaths=... /srv/itsc/results /srv/itsc/sim/sumo` from `deploy/itsc-gateway.service` |
 | "N runs failed in a row: the playlist is paused" | `MAX_SIM_FAILURES` reached: deliberately no endless restarts | fix the cause, then start a run |
 
 Without SUMO, `USE_MOCK=true` streams a mock simulation, which is enough for checking the

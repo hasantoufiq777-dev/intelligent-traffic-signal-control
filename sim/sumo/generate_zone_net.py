@@ -25,8 +25,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
-BASE_NET = HERE / "grid2x2.net.xml"
-OUT_NET = HERE / "grid2x2_zone.net.xml"
+BASE_NET = HERE / "xml" / "networks" / "grid2x2.net.xml"
+OUT_NET = HERE / "xml" / "networks" / "grid2x2_zone.net.xml"
 
 ZW_X, ZE_X, ROAD_Y = 340.0, 420.0, 500.0
 SHARED_LANE_Y = 495.2  # centre line of J2J3_0, the eastbound outer lane
