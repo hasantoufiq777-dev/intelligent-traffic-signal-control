@@ -184,6 +184,8 @@ def run_simulation(
     if ctrl_section is None:
         if controller == "adaptive_vanet":
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {})
+        elif controller == "dynamic_vanet":
+            ctrl_section = base_config.get("controllers", {}).get("dynamic", {})
         elif controller in ("adaptive_ev", "adaptive_ev_tuned", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"):
             ctrl_section = base_config.get("controllers", {}).get("adaptive", {}).copy()
             ctrl_section.update(base_config.get("controllers", {}).get("preemption", {}))
@@ -319,7 +321,7 @@ def run_simulation(
     t = 0.0
     arrived_count = 0
     was_interrupted = False
-    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned"))
+    is_vanet_controller = (controller in ("adaptive_vanet", "adaptive_ev_vanet", "adaptive_ev_vanet_tuned", "dynamic_vanet"))
     vanet_net: Optional[Any] = None
     vtype_cache: Dict[str, str] = {}
     ev_crossings: set = set()  # (ev id, signalised junction) pairs the EV drove through
@@ -673,6 +675,9 @@ def run_simulation(
                 if live and hasattr(ctrl, "get_spat"):
                     # Signal Phase and Timing as broadcast by the RSU (countdowns in the dashboard)
                     tls_state_dict[tid]["spat"] = ctrl.get_spat()
+                if live and hasattr(ctrl, "get_live_info"):
+                    # Dynamic controller: road measures, scores and the reason for each decision
+                    tls_state_dict[tid]["dynamic"] = ctrl.get_live_info()
 
             # Step Navigation (Module 9)
             speed_map = provider.get_edge_speeds()
@@ -916,6 +921,10 @@ def run_simulation(
         "ev_travel_time": metrics["ev_travel_time"],
         "max_queue": metrics["max_queue"],
         "throughput_veh_per_hr": metrics["throughput_veh_per_hr"],
+        "trips_completed": metrics.get("trips_completed"),
+        # Queues at the signals: mean vehicles queued per junction, and total vehicle-hours queued
+        "avg_queue": logger_step.avg_queue,
+        "queue_veh_h": round(logger_step.queue_veh_s / 3600.0, 2),
         "seed": seed,
         "controller": controller,
         "scenario": scenario_name,
