@@ -196,7 +196,7 @@ def parse_tripinfo_emissions(
     """
     out: Dict[str, Any] = {
         "co2_total_kg": None, "fuel_total_l": None, "co2_g_per_km": None, "fuel_l_per_100km": None,
-        "stops_per_vehicle": None,
+        "stops_per_vehicle": None, "idle_s_per_vehicle": None,
     }
     path = Path(xml_path)
     if not path.exists():
@@ -257,6 +257,7 @@ def parse_tripinfo_emissions(
         "co2_g_per_km": t["co2_g_per_km"],
         "fuel_l_per_100km": t["fuel_l_per_100km"],
         "stops_per_vehicle": t["stops_per_vehicle"],
+        "idle_s_per_vehicle": t["waiting_time"],  # tripinfo waitingTime: seconds stopped per trip
     })
     if group_fn is not None:
         for name, acc in groups.items():
@@ -265,5 +266,6 @@ def parse_tripinfo_emissions(
             out[f"fuel_l_per_100km_{name}"] = g["fuel_l_per_100km"]
             out[f"stops_per_vehicle_{name}"] = g["stops_per_vehicle"]
             out[f"travel_time_{name}"] = g["travel_time"]
+            out[f"idle_s_per_vehicle_{name}"] = g["waiting_time"]
             out[f"n_trips_{name}"] = g["n"]
     return out

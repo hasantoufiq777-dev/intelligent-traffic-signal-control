@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import heapq
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from sim.navigation.graph import EdgeGraph
 
@@ -25,6 +25,8 @@ def astar_search(
     junction_delay_s: Optional[float] = None,
     vclass: Optional[str] = None,
     cost: str = "time",
+    cost_fn: Optional[Callable[[str], float]] = None,
+    h_per_m: Optional[float] = None,
 ) -> Tuple[List[str], float, int]:
     """Execute A* heuristic search from start_edge to goal_edge.
 
@@ -42,6 +44,8 @@ def astar_search(
         cost: "time" (seconds: length / current speed + signal wait; heuristic = straight-line
             distance / maximum network speed) or "distance" (metres; heuristic = straight-line
             distance). Both heuristics never overestimate, so the route found is optimal for its cost.
+        cost_fn: optional cost of entering a road (used for fuel). Replaces `cost`.
+        h_per_m: with cost_fn, a lower bound of its cost per metre (heuristic = straight-line distance x this).
 
     Returns:
         Tuple of (path, total_cost, expansions):
@@ -74,7 +78,8 @@ def astar_search(
             return 0.0
         node = graph.edges[edge_id]
         dist = math.hypot(node.end_coord[0] - goal_coord[0], node.end_coord[1] - goal_coord[1])
-        return dist / max_speed
+        return dist * h_per_m if cost_fn is not None and h_per_m is not None else (
+            0.0 if cost_fn is not None else dist / max_speed)
 
     # Priority queue: (f_score, h_score, tie_breaker_counter, current_edge)
     counter = 0
@@ -103,7 +108,9 @@ def astar_search(
 
         # Expand legal outgoing edges
         for neighbor in graph.get_successors(current, vclass):
-            if by_distance:
+            if cost_fn is not None:
+                edge_cost = cost_fn(neighbor)
+            elif by_distance:
                 edge_cost = (float("inf") if closed_edges and neighbor in closed_edges
                              else graph.edges[neighbor].length)
             else:

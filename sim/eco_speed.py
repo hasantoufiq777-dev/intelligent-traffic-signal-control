@@ -74,6 +74,29 @@ def co2_per_m(kind: str, v_ms: float) -> float:
     return _interp(c["speeds_kmh"], c["co2_mg_per_m"], v_ms * 3.6)
 
 
+def min_fuel_per_m(kind: str) -> float:
+    """The category's lowest fuel per metre at any speed: a lower bound for route-search heuristics."""
+    return float(min(_curve_for(kind)["fuel_mg_per_m"]))
+
+
+def eco_edge_cost(kind: str, length_m: float, v_ms: float, signal_delay_s: float = 0.0,
+                  stop_probability: float = 0.7) -> float:
+    """Expected fuel (mg) to drive a road at speed v_ms from the HBEFA4 curves:
+
+        cost = fuel_per_m(v) x L + idle_fuel x signal_delay + P(stop) x fuel to pull away again
+
+    The last two terms apply only to a road that ends at a traffic light.
+    """
+    cruise = fuel_per_m(kind, v_ms)
+    cost = cruise * float(length_m)
+    if signal_delay_s > 0.0:
+        c = _curve_for(kind)
+        restart = _accel(kind, v_ms)
+        extra = max(0.0, float(restart["fuel_mg"]) - cruise * float(restart["dist_m"]))
+        cost += float(c["idle_fuel_mg_s"]) * float(signal_delay_s) + float(stop_probability) * extra
+    return cost
+
+
 def _accel(kind: str, v_ms: float) -> Dict[str, float]:
     c = _curve_for(kind)
     keys = sorted(int(k) for k in c["accel_from_stop"])
