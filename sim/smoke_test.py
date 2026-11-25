@@ -64,7 +64,9 @@ def main() -> None:
     ]
 
     try:
-        traci.start(sumo_cmd)
+        from sumo_connect import start_sumo  # reliable TraCI connection (sim/sumo_connect.py)
+
+        start_sumo(traci, sumo_cmd)
         for _ in range(10):
             traci.simulationStep()
         traci.close()
