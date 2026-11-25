@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import CarEcoScores from '../components/CarEcoScores.jsx';
+import EcoCarDetails from '../components/EcoCarDetails.jsx';
 import EcoComparison from '../components/EcoComparison.jsx';
 import EcoSummary from '../components/EcoSummary.jsx';
 import JunctionPanel from '../components/JunctionPanel.jsx';
@@ -11,7 +13,9 @@ import { AmbulanceList, IncidentList } from '../components/NetworkStatus.jsx';
 import NowPlaying from '../components/NowPlaying.jsx';
 import { NavPanel, VanetPanel } from '../components/VanetNavPanels.jsx';
 import ZonePanel from '../components/ZonePanel.jsx';
+import { useEcoCars } from '../hooks/useEcoCars.js';
 import { useLive } from '../hooks/useLiveSocket.js';
+import { usePersistentState } from '../hooks/usePersistentState.js';
 import { fmt, isNum } from '../lib/format.js';
 
 const ORDER = ['J2', 'J3', 'J0', 'J1'];
@@ -58,9 +62,11 @@ function EventTable({ events, kinds, title, empty }) {
 }
 
 // ---------------------------------------------------------------- signals
-const PHASE_COLOR = { NS_GREEN: 'var(--series-1)', EW_GREEN: 'var(--series-3)', NS_YELLOW: 'var(--sig-yellow)', EW_YELLOW: 'var(--sig-yellow)',
+const PHASE_COLOR = { N_GREEN: 'var(--series-1)', S_GREEN: 'var(--series-1)', E_GREEN: 'var(--series-3)', W_GREEN: 'var(--series-3)',
+  N_YELLOW: 'var(--sig-yellow)', S_YELLOW: 'var(--sig-yellow)', E_YELLOW: 'var(--sig-yellow)', W_YELLOW: 'var(--sig-yellow)',
+  NS_GREEN: 'var(--series-1)', EW_GREEN: 'var(--series-3)', NS_YELLOW: 'var(--sig-yellow)', EW_YELLOW: 'var(--sig-yellow)',
   ALL_RED: 'var(--sig-red)', EV_GREEN: 'var(--ev-route)' };
-const PHASE_LEGEND = [['NS_GREEN', 'North–south green'], ['EW_GREEN', 'East–west green'], ['NS_YELLOW', 'Yellow'], ['ALL_RED', 'All red'],
+const PHASE_LEGEND = [['NS_GREEN', 'North and/or south green'], ['EW_GREEN', 'East and/or west green'], ['NS_YELLOW', 'Yellow'], ['ALL_RED', 'All red'],
   ['EV_GREEN', 'Ambulance green'], [null, 'Other / transition']];
 
 /** Phase of one junction over the stored history (last two simulated minutes), as a strip. */
@@ -103,7 +109,7 @@ const COMPARE_ROWS = [
 /** Fixed-time vs dynamic control on the same traffic (results/dynamic, sim/analytics/compare_dynamic.py). */
 function SignalComparison() {
   const [data, setData] = useState(undefined);
-  const [scen, setScen] = useState('normal');
+  const [scen, setScen] = usePersistentState('signals-comparison', 'normal');
   useEffect(() => { api.dynamicComparison().then(setData).catch(() => setData(null)); }, []);
   if (data === undefined) return null;
   const scenarios = Object.keys(data?.scenarios || {});
@@ -173,7 +179,7 @@ export function Signals() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [live.states, ids.join()]);
   return (
-    <Shell lead="By default the signals are dynamic: every second the controller measures each road (waiting cars, queue, density, waiting time, arrivals, room on the road ahead), gives green to the busier direction and sizes the green to its queue (5–45 s). Every change still goes green → yellow 3 s → all red → green; an approaching ambulance can take priority.">
+    <Shell lead="By default the signals level the queues: the road with the most cars gets the green only until it is down to the second-longest queue. The level roads then take turns (facing roads go together), and any cars left are freed. Every change goes green → yellow (from the road's speed) → all red until the junction is empty → green.">
       <div className={`module-grid${ids.some((id) => tls[id]?.dynamic) ? ' wide-cards' : ''}`}>
         {ids.map((id) => <JunctionPanel key={id} ids={[id]} selected={id} onSelect={noop} tlsState={tls} ev={live.latest?.ev} controller={controller} />)}
       </div>
@@ -470,6 +476,31 @@ function nextGreen(sp) {
   return b == null || a === b ? `${a} s` : `${a}–${b} s`;
 }
 
+// Eco driving: choose a car to see its eco details; every car's score; eco cars against other cars.
+export function EcoDriving() {
+  const live = useLive();
+  const eco = live.latest?.eco;
+  const source = useEcoCars();
+  const runId = live.nowPlaying?.current?.run_id ?? null;
+  const [pickedCar, setPickedCar] = usePersistentState('eco-selected', null); // the selected car, for one run
+  const picked = pickedCar?.runId === runId ? pickedCar.id : null;
+  const selectedId = picked ?? live.followId;
+  const select = (car) => {
+    setPickedCar({ runId, id: car.id });
+    live.follow(car.finished ? null : car.id);
+  };
+  return (
+    <Shell lead="Eco cars receive each light's timing over the VANET and adjust their speed to arrive on green. Select a car in the table to see how close it is to the SUMO HBEFA4 fuel reference, why it is an eco car, and the advice it is getting.">
+      {selectedId
+        ? <EcoCarDetails id={selectedId} detail={live.followed} source={source} showRegular />
+        : <div className="notice" role="status">Select a car below to see its eco details. Use the <strong>Eco cars</strong> filter to list only eco cars.</div>}
+      <CarEcoScores onSelect={select} selectedId={selectedId} source={source} />
+      <EcoSummary eco={eco} />
+      <EcoComparison eco={eco} onFollow={(id) => select({ id, finished: false })} />
+    </Shell>
+  );
+}
+
 export function Glosa() {
   const live = useLive();
   const tls = live.latest?.tls || {};
@@ -478,8 +509,7 @@ export function Glosa() {
   const detail = live.followed;
   return (
     <Shell lead="Each roadside unit broadcasts its signal timing (SPaT). An eco car works out when it will reach the stop line and gets advice: GO, SLOW (arrive as the light turns green), STOP, or none when the timing is not predictable.">
-      <EcoSummary eco={eco} />
-      <EcoComparison eco={eco} onFollow={live.follow} />
+      <p className="small" style={{ margin: 0 }}>Each car's eco score and details are on the <Link to="/eco">Eco driving</Link> page.</p>
       {eco && ((eco.eco_fraction || 0) > 0 || (eco.eco_active ?? 0) > 0) && (
         <div className="tiles">
           <Tile k="SPaT messages delivered" v={isNum(eco.spat_pdr) ? `${fmt(eco.spat_pdr * 100, 0)} %` : '–'} />

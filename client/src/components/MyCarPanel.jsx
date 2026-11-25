@@ -2,6 +2,7 @@ import { fmt, kmh, seconds, SIGNAL_LABEL } from '../lib/format.js';
 import { ADVICE_TEXT, glosaAdvice } from '../lib/glosa.js';
 import { accText, normalise } from '../lib/following.js';
 import { APPROACH_LABEL, FLAG, has, KIND_LABEL, vehicleKind } from '../lib/vehicles.js';
+import EcoCarDetails from './EcoCarDetails.jsx';
 import FollowingCard from './FollowingCard.jsx';
 
 const DEFAULT_SPEED = 13.9; // m/s (50 km/h) when the car's own speed limit is unknown
@@ -74,6 +75,7 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
   const cd = countdownText(spat);
 
   return (
+    <>
     <section className="card stack" aria-labelledby="mycar-h" aria-live="polite">
       <div className="card-head">
         <h2 id="mycar-h">Vehicle {detail.id}</h2>
@@ -148,5 +150,7 @@ export default function MyCarPanel({ followId, detail, rows, tlsState, onFollow,
         <button type="button" className="btn" onClick={() => onFollow(null)}>Stop following</button>
       </div>
     </section>
+    {isEco && <EcoCarDetails id={detail.id} detail={detail} />}
+    </>
   );
 }

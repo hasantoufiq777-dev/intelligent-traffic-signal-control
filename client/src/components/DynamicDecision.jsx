@@ -4,14 +4,14 @@ import { fmt } from '../lib/format.js';
 
 const DIRS = ['N', 'E', 'S', 'W'];
 const FROM = { N: 'North', S: 'South', E: 'East', W: 'West' };
-const GROUP = { NS: 'North–South', EW: 'East–West' };
-const IN_GROUP = { N: 'NS', S: 'NS', E: 'EW', W: 'EW' };
+const GROUP = { NS: 'North + South', EW: 'East + West', N: 'North', S: 'South', E: 'East', W: 'West' };
 const SIG_WORD = { G: 'Green', y: 'Yellow', r: 'Red' };
 const DOWN = {
   clear: ['Clear', 'good'], busy: ['Busy', ''], blocked: ['Blocked', 'bad'], closed: ['Road closed', 'bad'],
 };
 const TIER = { short: 'short (light traffic)', medium: 'medium (moderate traffic)', long: 'long (heavy traffic)' };
 
+// Junction panel: which road has priority, its green time, each road's measures, and the reason.
 export default function DynamicDecision({ info, id }) {
   if (!info) return null;
   const serving = info.serving;
@@ -27,6 +27,7 @@ export default function DynamicDecision({ info, id }) {
         ) : (
           <span className="chip">{info.transition === 'ALL_RED' ? 'All red' : 'Yellow'}{info.next ? `, then ${GROUP[info.next]}` : ''}</span>
         )}
+        {serving && info.locked_s != null && <span className="chip">Change announced: {fmt(info.locked_s, 0)} s</span>}
         {serving && info.planned_s != null && (
           <span className="small">
             Green <strong className="num">{fmt(info.planned_s, 0)} s</strong> {TIER[info.tier] ? `· ${TIER[info.tier]}` : ''}
@@ -37,23 +38,33 @@ export default function DynamicDecision({ info, id }) {
           </span>
         )}
       </div>
+      {info.mode === 'level' ? (
+        <p className="small muted" style={{ margin: 0 }}>
+          The road with the most cars goes first, {serving ? <>down to <strong className="num">{fmt(info.target_queue, 0)}</strong> cars (the next longest queue)</> : 'down to the next longest queue'}.
+          Level roads then take turns, and the cars left are freed. Green {fmt(info.params?.min_green, 0)}–{fmt(info.params?.max_green, 0)} s; yellow {fmt(info.params?.yellow, 0)} s (from the road's speed);
+          {info.params?.dynamic_clearance
+            ? <> all red {fmt(info.params?.all_red_min, 0)}–{fmt(info.params?.all_red_max, 0)} s, until the junction is empty{info.params?.last_all_red != null ? ` (last: ${fmt(info.params.last_all_red, 0)} s)` : ''}.</>
+            : <> all red {fmt(info.params?.all_red, 0)} s.</>}
+        </p>
+      ) : (
       <p className="small muted" style={{ margin: 0 }}>
         Priority score North–South <strong className="num">{fmt(ns, 1)}</strong> · East–West <strong className="num">{fmt(ew, 1)}</strong>.
         Green length between {fmt(info.params?.min_green, 0)} and {fmt(info.params?.max_green, 0)} s from the queue; yellow {fmt(info.params?.yellow, 0)} s, all red {fmt(info.params?.all_red, 0)} s.
       </p>
+      )}
       <div className="table-wrap" tabIndex={0} role="region" aria-label={`Road measures at ${id} (scrolls sideways on small screens)`}>
         <table className="data dyn-table">
           <thead>
             <tr>
               <th>Road</th><th>Signal</th><th>Waiting</th><th>Queue</th><th>Density</th><th>Avg wait</th>
-              <th>Arriving</th><th>Downstream</th><th>Score</th>
+              <th>Arriving</th><th>Downstream</th><th>{info.mode === 'level' ? 'Rank value' : 'Score'}</th>
             </tr>
           </thead>
           <tbody>
             {DIRS.filter((d) => roads[d]).map((d) => {
               const r = roads[d];
               const [downText, downCls] = DOWN[r.down_status] || [r.down_status, ''];
-              const prio = serving && IN_GROUP[d] === serving;
+              const prio = Boolean(serving?.includes(d));
               return (
                 <tr key={d} className={prio ? 'selected' : ''}>
                   <td>
