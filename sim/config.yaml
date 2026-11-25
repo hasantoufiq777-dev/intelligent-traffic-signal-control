@@ -14,7 +14,7 @@ controllers:
     yellow_time: 3
     all_red_time: 2
 
-  # Default mode: dynamic congestion-aware control (sim/controllers/dynamic.py). The green length
+  # Dynamic congestion-aware control (sim/controllers/dynamic.py). The green length
   # is computed from the traffic, between min_green and max_green; yellow and all-red stay fixed
   # for safety. `dynamic` uses exact data, `dynamic_vanet` the roadside units' beacons.
   dynamic:
@@ -37,6 +37,31 @@ controllers:
     down_blocked_occ: 0.75    # downstream occupancy treated as "blocked"
     light_max_s: 15           # green up to this long is "short" (light traffic)
     moderate_max_s: 30        # up to this "medium"; longer "long" (heavy)
+
+  # Default mode: queue levelling (sim/controllers/leveling.py). The longest queue gets the green
+  # until it is down to the second longest; level roads repeat; the cars left are then freed.
+  level:
+    min_green: 8
+    max_green: 45
+    yellow_time: 3
+    all_red_time: 2
+    decision_interval: 1
+    startup_lost_s: 2.0
+    headway_s: 2.0
+    fairness_wait_s: 60       # a car on red waiting this long gets the next green
+    level_tolerance: 3        # facing roads within this many cars count as level and go together
+    tier_tolerance: 1         # queues this close are one level (most -> second -> third -> fourth)
+    free_flow: true           # nobody waiting: green goes ahead of the first arriving car
+    approach_m: 150           # free road: look this far ahead of the stop line
+    stopline_detector: true   # VANET runs: a stop-line detector also reports stopped cars without a radio
+    gap_dist_m: 30            # a car this close to the stop line is still being served
+    max_red_s: 60             # VANET sensing: a road that looks empty still gets a turn after this long
+    dynamic_clearance: true   # yellow from the road's speed, all-red until the junction is empty
+    yellow_reaction_s: 1.0    # t: driver reaction time
+    yellow_decel: 3.05        # a: comfortable braking (m/s2)
+    yellow_min_s: 3.0         # never shorter than this
+    all_red_min_s: 1.0
+    all_red_max_s: 4.0        # safety limit
 
   adaptive:
     decision_interval: 5
@@ -113,6 +138,10 @@ eco:
   select_interval_s: 5.0     # s between selection rounds
   select_min_dist_m: 150.0   # a car needs this much driving before it is judged
   select_min_excess_pct: 10.0  # only cars burning at least this much above the model are chosen
+  # Eco features, all off by default (Run control or --eco-commit / --eco-routing turn them on)
+  commit_green_s: 0          # dynamic/level: lock a green's end this many seconds ahead (8 = recommended test)
+  routing: false             # eco cars choose the route with the lowest expected HBEFA4 fuel
+  stop_probability: 0.7      # chance of stopping at a signal in the route cost (measured: 1.45 stops over 2 signals)
 
 # Accident work zone (scenario accident_zone, network grid2x2_zone; sim/controllers/zone.py)
 accident_zone:
