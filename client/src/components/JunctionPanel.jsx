@@ -1,6 +1,7 @@
 // Detail of one signalised junction: phase, signal and countdown per approach, queues (true and
 // as estimated over the VANET), the controller in use and emergency preemption.
 import { fmt } from '../lib/format.js';
+import DynamicDecision from './DynamicDecision.jsx';
 
 const DIRS = ['N', 'E', 'S', 'W'];
 const FROM = { N: 'North', S: 'South', E: 'East', W: 'West' };
@@ -11,6 +12,7 @@ const PHASE_TEXT = {
   EV_RECOVERY: 'Returning to normal control',
 };
 const CONTROLLER_TEXT = {
+  dynamic: 'Dynamic congestion-aware, exact measures', dynamic_vanet: 'Dynamic congestion-aware, measures over VANET',
   fixed: 'Fixed-time (30 s per direction)', adaptive: 'Adaptive, exact queues', adaptive_vanet: 'Adaptive, queues over VANET',
   adaptive_ev: 'Adaptive + ambulance preemption (exact)', adaptive_ev_vanet: 'Adaptive + preemption over VANET',
   adaptive_ev_vanet_tuned: 'Adaptive + preemption over VANET, GA-tuned',
@@ -75,6 +77,7 @@ export default function JunctionPanel({ ids, selected, onSelect, tlsState, ev, c
             </table>
           </div>
           {data.spat?.N?.preempted && <p className="small muted" style={{ margin: 0 }}>Timing is not predictable while an ambulance has priority.</p>}
+          <DynamicDecision info={data.dynamic} id={id} />
           {evHere.map((e) => (
             <div className="drive-alert" key={e.id} role="status">
               Ambulance {e.id} approaching from the {FROM[e.approach]?.toLowerCase() ?? '?'}: ETA {fmt(e.eta)} s, {fmt(e.dist, 0)} m
