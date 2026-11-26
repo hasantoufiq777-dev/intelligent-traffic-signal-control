@@ -3,12 +3,13 @@ import { z } from 'zod';
 
 export const OPTIONS = {
   scenarios: ['normal', 'congested', 'emergency', 'incident', 'navigation', 'ev_incident', 'ev_congested', 'accident_zone', 'city'],
-  controllers: ['fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
+  // dynamic_vanet is the default mode: congestion-aware phase choice and green length over the VANET
+  controllers: ['dynamic_vanet', 'dynamic', 'fixed', 'adaptive', 'adaptive_vanet', 'adaptive_ev', 'adaptive_ev_vanet', 'adaptive_ev_vanet_tuned'],
   nav: ['none', 'astar', 'aco', 'aco_tuned'],
   relay: ['on', 'off'],
   ev_routing: ['on', 'off'],
   networks: ['single', 'grid2x2', 'grid2x2_zone', 'grid2x2_city'],
-  defaults: { scenario: 'normal', controller: 'adaptive_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
+  defaults: { scenario: 'normal', controller: 'dynamic_vanet', nav: 'none', seed: 1, penetration: 0.5, loss: 0.0, relay: 'off',
     eco_fraction: 0.0, ev_routing: 'off', demand: 1.0 },
   // Traffic demand factor: every flow of the scenario multiplied by this (vehicle count)
   demand: { min: 0.25, max: 2.0, step: 0.25 },
