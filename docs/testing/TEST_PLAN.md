@@ -36,13 +36,14 @@ priorities: [test strategy](TEST_STRATEGY.md).
 | 17 | Live details | `tests/e2e/live-details.mjs` | 4 steps | `<url> <email> <password>`; starts a navigation run | real SUMO |
 | 18 | Ambulance on demand | `tests/e2e/ambulance.mjs` | 6 steps | `<url> <email> <password>`; starts a fixed-time grid run and sends an ambulance | real SUMO |
 | 19 | City, routes, driver views | `tests/e2e/city.mjs` | 9 steps | `<url> <email> <password> [screenshot folder]`; starts the `city` scenario, drives a truck | real SUMO |
+| 20 | **System test**: the deployed system as a whole | `tests/system/system.mjs` | 18 checks | `npm run test:system -- <url> <email> <password>` | a running deployment with real SUMO (Docker or dev) |
 
 `npm test` at the project root runs suites 1, 2 and 4.
 
 ## 3. Order of a full run
 
 1. Suites 1–4: no browser needed.
-2. Start a gateway with real SUMO and `LIVE_LOOP=true`; run 5, 8, 9, 10, 11, 12, 17, 18, 19.
+2. Start a gateway with real SUMO and `LIVE_LOOP=true` (or the Docker deployment); run 5, 8, 9, 10, 11, 12, 17, 18, 19, 20.
 3. Start a gateway with `USE_MOCK=true MOCK_MAX_STEPS=150 LIVE_LOOP=true` (runs finish within
    seconds); once two runs have finished, run 6 and 7.
 4. On the same mock gateway, with `AUTH_RATE_LIMIT`, `RATE_LIMIT_PER_MIN` and `SESSIONS_PER_USER`
@@ -55,6 +56,7 @@ priorities: [test strategy](TEST_STRATEGY.md).
 | Report | Content |
 |---|---|
 | [UNIT_TEST_REPORT](UNIT_TEST_REPORT.md) | suites 1 and 4 |
+| [SYSTEM_TEST_REPORT](SYSTEM_TEST_REPORT.md) | suite 20: the deployed system end to end |
 | [INTEGRATION_TEST_REPORT](INTEGRATION_TEST_REPORT.md) | suites 2 and 3 |
 | [E2E_TEST_REPORT](E2E_TEST_REPORT.md) | suites 5, 6, 7, 10 and the production browser check |
 | [SECURITY_TEST_REPORT](SECURITY_TEST_REPORT.md) | security tests across all suites, dependency audits |
