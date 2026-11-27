@@ -243,6 +243,20 @@ describe('gateway with mock simulation', () => {
     expect(mock.body.error).toMatch(/mock/);
   });
 
+  it('refuses the SUMO-GUI window on a computer without a screen (server, Docker, Codespaces)', async () => {
+    const headless = createGateway({ ...baseOverrides, USE_MOCK: 'false', SIM_GUI: 'true', SIM_GUI_AVAILABLE: 'false' });
+    try {
+      expect(headless.cfg.SIM_GUI).toBe(false); // runs never start in a window that cannot open
+      const admin = await adminSession(headless);
+      expect((await admin.get('/api/sumo/gui').expect(200)).body).toMatchObject({ available: false, display: false, enabled: false });
+      const res = await admin.post('/api/sumo/gui').send({ enabled: true }).expect(409);
+      expect(res.body.code).toBe('no_display');
+      await admin.post('/api/sumo/gui').send({ enabled: false }).expect(200); // switching off always works
+    } finally {
+      await headless.close();
+    }
+  });
+
   it('adds --gui to the simulation arguments only when the window is on', () => {
     const entry = { scenario: 'normal', controller: 'fixed', nav: 'none', seed: 1, penetration: 1, loss: 0, relay: 'off', eco_fraction: 0 };
     const real = { ...gw.cfg, USE_MOCK: false, SIM_GUI: false };

@@ -331,13 +331,18 @@ export function createGateway(overrides = {}) {
 
   // ---- SUMO-GUI window (opens on the computer running the gateway; ADMIN) -------
   app.get('/api/sumo/gui', requireAuth, (req, res) => {
-    res.json({ available: !cfg.USE_MOCK && req.user.role === 'ADMIN', enabled: live.gui, mock: cfg.USE_MOCK,
-      running: Boolean(live.proc) });
+    res.json({ available: !cfg.USE_MOCK && cfg.SIM_GUI_AVAILABLE && req.user.role === 'ADMIN', enabled: live.gui,
+      mock: cfg.USE_MOCK, display: cfg.SIM_GUI_AVAILABLE, running: Boolean(live.proc) });
   });
 
   app.post('/api/sumo/gui', admin, guarded(async (req, res) => {
     if (cfg.USE_MOCK) return res.status(409).json({ error: 'SUMO-GUI is not available with the mock simulation (USE_MOCK=true)' });
     if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Body must be {"enabled": true|false}' });
+    // A server, container or codespace has no screen: the window cannot open and every run would fail.
+    // Switching it off is always allowed.
+    if (req.body.enabled && !cfg.SIM_GUI_AVAILABLE) {
+      return res.status(409).json({ error: 'SUMO-GUI needs a screen; this server has none. The live map shows the same simulation.', code: 'no_display' });
+    }
     const out = await live.exclusive(() => live.setGui(req.body.enabled));
     auth.audit(req, 'gui_toggle', { detail: `enabled=${req.body.enabled}` });
     return res.json(out);
