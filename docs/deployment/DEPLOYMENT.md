@@ -279,3 +279,162 @@ All tests ran on Windows 11, because this machine's Ubuntu (WSL) has no password
 installing packages. The nginx file, the systemd unit and the install commands follow the standard
 documented behaviour of those tools, but they have not been run. Try them on a staging server
 before relying on them.
+
+## 13. Docker
+
+The whole system also runs as one container: the dashboard, the Node gateway and the Python + SUMO
+simulation. Files: [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml),
+[`.env.docker.example`](../../.env.docker.example), [`.dockerignore`](../../.dockerignore).
+
+```bash
+cp .env.docker.example .env        # fill in ADMIN_EMAIL and ADMIN_PASSWORD (10+ characters)
+docker compose up --build -d       # first build: a few minutes (downloads SUMO)
+# open http://localhost:4100 and sign in with the admin account
+docker compose logs -f             # gateway and simulation logs
+docker compose down                # stop; the database and results volumes are kept
+```
+
+**What is inside the image**
+
+| Part | Source |
+|---|---|
+| Dashboard | built in a `node:24` stage (`npm run build`), served by the gateway from `client/dist` |
+| Gateway | `server/`, production dependencies only, runs as `node src/index.js` |
+| Simulation | `sim/` on Python 3.12 with `sim/requirements.txt` |
+| SUMO | `eclipse-sumo==1.28.0` from PyPI (same version as development); `SUMO_HOME=/opt/sumo` |
+
+The container runs as an unprivileged user (`itsc`), listens on port 4000 and reports its health
+from `/api/health` (`docker ps` shows `healthy`). The live playlist starts by itself
+(`LIVE_LOOP=true`) with the default settings (congested, `level_vanet`).
+
+**Data that survives a rebuild** (named volumes)
+
+| Volume | Path in the container | Holds |
+|---|---|---|
+| `itsc-data` | `/app/server/data` | SQLite database: accounts, runs, audit log |
+| `itsc-results` | `/app/results` | experiment results and trip files |
+
+Backup of the database while it runs: `docker compose exec itsc node src/backup.js` (writes into
+`server/data/backups/` inside the volume).
+
+**Settings.** Everything in §4 can be set in `.env` or under `environment:` in
+`docker-compose.yml`. Two differ from the server install:
+
+- `COOKIE_SECURE=false` by default, because `http://localhost` has no HTTPS. On a public server,
+  put the container behind nginx with HTTPS (§7, proxy to `127.0.0.1:4000`), then set
+  `COOKIE_SECURE=true` and `TRUST_PROXY=1`, and publish the port only on localhost
+  (`"127.0.0.1:4000:4000"`).
+- `HOST_PORT` chooses the port on the host computer (default 4100, so `npm run dev` can keep 4000).
+
+**Limits.** SUMO-GUI cannot open inside the container (`SIM_GUI=false`); the web map shows the
+same simulation. The image is about 2 GB (SUMO and the Python science packages).
+
+### Which way to run it
+
+| Need | Use | Cost |
+|---|---|---|
+| Demo on your own screen (defence, testing) | `docker compose up -d` → http://localhost:4100 | free |
+| Others open it from their own devices while your PC is on | `docker compose --profile public up -d` (Cloudflare quick tunnel, below) | free, no account, no domain |
+| Online all the time | a server with `docker-compose.prod.yml` (§14) | free with student credit (Azure for Students needs no card) |
+
+**Public link from your PC.** The `tunnel` service (profile `public`) opens a Cloudflare quick tunnel
+and gives a random `https://<words>.trycloudflare.com` address:
+
+```bash
+docker compose --profile public up --build -d
+docker compose logs tunnel | grep trycloudflare     # the link to share
+docker compose --profile public down                # closes the link
+```
+
+The link is HTTPS (live map over WSS), changes every time the tunnel starts, and works only while
+the PC and the containers are running. Share it only with people who should see the system: they
+still need an account to sign in.
+
+**Verified (25 Nov 2026, Docker 29.9 on Windows 11):** image builds; container healthy; first
+admin created from `.env`; the live playlist runs the real SUMO simulation and cars appear on the
+map in the browser, both on http://localhost and through the public trycloudflare link (sign-in,
+live map over WSS).
+
+## 14. Server with Docker and automatic HTTPS
+
+[`docker-compose.prod.yml`](../../docker-compose.prod.yml) runs the system behind
+[Caddy](https://caddyserver.com), which gets a free Let's Encrypt certificate, renews it and
+redirects http to https ([`deploy/Caddyfile`](../../deploy/Caddyfile)). The gateway port is not
+published: only Caddy reaches it. Cookies are `Secure` and `TRUST_PROXY=1` is set.
+
+**Server.** Ubuntu 22.04 or 24.04, 2 vCPU and 4 GB RAM (SUMO uses the CPU). Free options for
+students: Azure for Students (credit, no card), or DigitalOcean credit from the GitHub Student Pack
+(card or PayPal to verify). Open ports 22, 80 and 443 in the provider's network settings.
+
+**Domain.** Your own domain (an `A` record to the server's IP), or none: `sslip.io` turns the IP
+into a name, e.g. `20-55-1-2.sslip.io` for `20.55.1.2`, and Caddy gets a certificate for it.
+
+```bash
+# on the server
+git clone <repo-url> ~/itsc && cd ~/itsc
+bash deploy/server-setup.sh          # Docker, firewall, swap, .env; prints your sslip.io name
+# log out and in again, then:
+nano .env                            # DOMAIN, ADMIN_EMAIL, ADMIN_PASSWORD
+docker compose -f docker-compose.prod.yml up --build -d
+# open https://<DOMAIN>, sign in, then remove ADMIN_PASSWORD from .env and run the line above again
+```
+
+| Task | Command (in `~/itsc`) |
+|---|---|
+| Update to the latest code | `git pull && docker compose -f docker-compose.prod.yml up --build -d` |
+| Logs | `docker compose -f docker-compose.prod.yml logs -f` |
+| Database backup | `docker compose -f docker-compose.prod.yml exec itsc node src/backup.js` |
+| Stop (data kept) | `docker compose -f docker-compose.prod.yml down` |
+
+The containers start again by themselves after a crash or a reboot. When the student credit ends,
+delete the server in the provider's portal so nothing is charged.
+
+**Verified (25 Nov 2026, on Windows 11 with `DOMAIN=localhost`, Caddy's local certificate):**
+https health check, http → https redirect (308), port 4000 closed from outside, sign-in sets a
+`Secure; HttpOnly; SameSite=Lax` cookie. **Not verified:** a real cloud server and a Let's Encrypt
+certificate, which need a public IP.
+
+## 15. GitHub Codespaces (cloud demo without your own server)
+
+A codespace is a cloud machine from GitHub. The repository's
+[`.devcontainer/`](../../.devcontainer/) runs the same Docker setup there and gives a public HTTPS
+link. The PC does not need to stay on, and no cloud account is needed beyond GitHub.
+
+**Start**
+
+1. On GitHub: open the repository → **Code** → **Codespaces** → **⋯ → New with options**: choose the
+   branch and the **4-core** machine → **Create codespace**.
+2. Wait. The first start builds the image (about 10 minutes). The terminal then prints:
+   ```
+   VANET Traffic is running
+     Link:      https://<codespace-name>-4100.app.github.dev
+     Sign in:   admin@itsc.local / <generated password>
+   ```
+3. Open the link on any device, or install the phone app from it.
+
+If the link shows as *private*: **PORTS** tab → right-click port 4100 → **Port Visibility → Public**.
+To print the link and login again: `bash .devcontainer/start.sh`.
+
+**What the set-up does**
+
+| File | When | What |
+|---|---|---|
+| `.devcontainer/devcontainer.json` | creation | Ubuntu with Docker and the GitHub CLI, 4 cores / 8 GB, port 4100 |
+| `.devcontainer/setup.sh` | once | writes `.env` (never committed): administrator with a generated password, `COOKIE_SECURE=false`, `TRUST_PROXY=1`, and `CORS_ORIGIN` = this codespace's public address |
+| `.devcontainer/start.sh` | every start | `docker compose up --build -d itsc`, waits for health, makes port 4100 public, prints link and login |
+
+`CORS_ORIGIN` is needed because the Codespaces proxy may pass a `Host` that is not the public address,
+and the gateway accepts sign-in and the live feed only from its own site or a listed origin (tested:
+403 without it, 200 with it).
+
+**Limits**
+
+- A codespace **stops when idle**: 30 minutes by default, at most 4 hours (GitHub → Settings →
+  Codespaces → *Default idle timeout*). Visitors using the app do not count as activity. Restart it
+  from GitHub → **Codespaces**; the same link and database come back.
+- It uses the account's monthly Codespaces hours (a 4-core machine counts double).
+- Not for 24/7 hosting: use a server (§14) for that.
+
+**Verified locally (28 Nov 2026):** `setup.sh` writes the expected `.env` and keeps an existing one;
+a gateway with the generated `CORS_ORIGIN` accepts sign-in from the Codespaces origin. **Not yet
+verified:** a real codespace (needs the files on GitHub).

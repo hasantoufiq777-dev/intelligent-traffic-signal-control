@@ -1,0 +1,21 @@
+{
+  // GitHub Codespaces: runs the whole system (dashboard, Node gateway, Python + SUMO) in Docker in
+  // GitHub's cloud and gives a public HTTPS link. Create it from GitHub: Code -> Codespaces -> Create.
+  // Guide: docs/deployment/DEPLOYMENT.md section 15.
+  "name": "VANET Traffic (Docker)",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  // SUMO and the image build need a 4-core machine
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "forwardPorts": [4100],
+  "portsAttributes": {
+    "4100": { "label": "VANET Traffic app", "onAutoForward": "notify" }
+  },
+  // Once, when the codespace is created: settings and admin login (.env, never committed)
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  // Every time the codespace starts or resumes: build if needed, start, make the link public
+  "postStartCommand": "bash .devcontainer/start.sh"
+}

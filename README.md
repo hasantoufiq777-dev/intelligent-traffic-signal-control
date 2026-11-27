@@ -187,6 +187,7 @@ and the [final acceptance report](docs/testing/FINAL_ACCEPTANCE_REPORT.md) gives
 
 Every REST route with its role, the error codes and the Socket.io events: [docs/architecture/API.md](docs/architecture/API.md).
 Production deployment (nginx, HTTPS, systemd, backups): [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md).
+Run everything in Docker: `cp .env.docker.example .env`, set the admin e-mail and password, then `docker compose up --build -d` and open http://localhost:4100. Free public link from your PC: `docker compose --profile public up -d`. Server with HTTPS: `docker-compose.prod.yml` ([DEPLOYMENT.md §13–14](docs/deployment/DEPLOYMENT.md#13-docker)). Cloud demo without a server: GitHub Codespaces ([§15](docs/deployment/DEPLOYMENT.md#15-github-codespaces-cloud-demo-without-your-own-server)).
 All documentation: [docs/README.md](docs/README.md).
 
 ## 8. Repository
