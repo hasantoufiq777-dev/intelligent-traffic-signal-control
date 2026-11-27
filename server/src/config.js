@@ -55,6 +55,9 @@ const EnvSchema = z.object({
   SIM_MAX_STEPS: z.coerce.number().int().positive().optional(),
   // Open the live run in the SUMO-GUI window too (only useful when the gateway runs on a desktop)
   SIM_GUI: bool.default(false),
+  // Whether this computer has a screen for the SUMO-GUI window. Default: Windows and macOS yes; Linux
+  // only with a display (DISPLAY / WAYLAND_DISPLAY), so servers, Docker and Codespaces have no window.
+  SIM_GUI_AVAILABLE: bool.optional(),
   MOCK_STEP_DELAY: z.coerce.number().min(0).default(0.5),
   MOCK_MAX_STEPS: z.coerce.number().int().positive().default(300),
   STATE_INTERVAL_MS: z.coerce.number().int().positive().default(1000),
@@ -84,6 +87,10 @@ export function loadConfig(overrides = {}) {
   const cfg = parsed.data;
   cfg.SUMMARY_PATH ??= path.join(cfg.PROJECT_ROOT, 'results', 'summary.json');
   cfg.COOKIE_SECURE ??= cfg.NODE_ENV === 'production';
+  // Without a screen sumo-gui exits at once and every run would fail: never start runs in the window
+  const env = { ...process.env, ...overrides };
+  cfg.SIM_GUI_AVAILABLE ??= process.platform !== 'linux' || Boolean(env.DISPLAY || env.WAYLAND_DISPLAY);
+  if (!cfg.SIM_GUI_AVAILABLE) cfg.SIM_GUI = false;
   cfg.ALLOWED_ORIGINS = cfg.CORS_ORIGIN.split(',').map((o) => o.trim().replace(/\/$/, '')).filter((o) => o && o !== '*');
   // A relative interpreter path (e.g. ../.venv/Scripts/python.exe) is relative to server/, where .env lives,
   // not to the project root the simulation runs in. A bare command name (python, python3) stays on PATH.
