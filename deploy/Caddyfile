@@ -1,0 +1,7 @@
+# Caddy in front of the gateway (used by docker-compose.prod.yml).
+# Caddy gets a Let's Encrypt certificate for {$DOMAIN} by itself and redirects http to https.
+# WebSockets (the live map) pass through reverse_proxy without extra settings.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy itsc:4000
+}

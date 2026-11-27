@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { IMPORTANT_EVENTS } from '../lib/events.js';
 import { ROLE_LABEL, useAuth } from '../hooks/useAuth.js';
+import { useInstallPrompt } from '../hooks/useInstallPrompt.js';
 import { useLive } from '../hooks/useLiveSocket.js';
 import Icon from './Icon.jsx';
 import { ConnectionBadge } from './NowPlaying.jsx';
@@ -53,6 +54,7 @@ export function ThemeButton() {
 
 function UserMenu() {
   const { user, logout } = useAuth();
+  const { canInstall, install } = useInstallPrompt(); // "Install app" where the browser offers it
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -76,6 +78,9 @@ function UserMenu() {
         <div className="menu-list" role="menu">
           <div className="small muted menu-info">{user.name}<br />{user.email}<br />{ROLE_LABEL[user.role]}</div>
           <Link role="menuitem" to="/account" onClick={() => setOpen(false)}>Account</Link>
+          {canInstall && (
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); install(); }}>Install app</button>
+          )}
           <button type="button" role="menuitem" onClick={logout}>Sign out</button>
         </div>
       )}

@@ -1,0 +1,23 @@
+{
+  "name": "VANET Traffic Live",
+  "short_name": "VANET Traffic",
+  "description": "Live VANET traffic signal simulation: traffic map, signals, eco-driving advice, emergency priority and navigation.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a1120",
+  "theme_color": "#0a1120",
+  "categories": ["navigation", "travel", "education"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Live traffic", "url": "/", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Eco driving", "url": "/eco", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Driving", "url": "/glosa", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,0 +1,48 @@
+# Run on this computer:
+#   docker compose up --build -d                    then open http://localhost:4100
+# Share it with a temporary public HTTPS link (free, no account, no domain):
+#   docker compose --profile public up --build -d
+#   docker compose logs tunnel | grep trycloudflare  (prints https://<random-words>.trycloudflare.com)
+# Logs:    docker compose logs -f
+# Stop:    docker compose --profile public down     (the database and results volumes are kept)
+#
+# Settings come from .env next to this file (copy .env.docker.example to .env first).
+# For a rented server with your own HTTPS address, use docker-compose.prod.yml instead.
+services:
+  itsc:
+    build: .
+    image: itsc-vanet:latest
+    container_name: itsc-vanet
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-4100}:4000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Plain http on localhost: session cookies must not require HTTPS.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+      SIM_STEP_DELAY: ${SIM_STEP_DELAY:-1.0}
+      # First administrator (created only when no admin exists yet)
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - itsc-data:/app/server/data
+      - itsc-results:/app/results
+
+  # Cloudflare quick tunnel: a public https://*.trycloudflare.com link to the dashboard while this
+  # computer is on. The link changes every time the tunnel starts. Only runs with --profile public.
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.7
+    container_name: itsc-tunnel
+    profiles: ["public"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://itsc:4000
+    depends_on:
+      itsc:
+        condition: service_healthy
+
+volumes:
+  itsc-data:
+  itsc-results:

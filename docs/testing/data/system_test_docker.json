@@ -1,0 +1,132 @@
+{
+  "url": "http://localhost:4100",
+  "at": "2026-11-27T16:38:52.252Z",
+  "results": [
+    {
+      "id": "S01",
+      "name": "health check answers and the real simulation is used",
+      "ok": true,
+      "note": "",
+      "ms": 34
+    },
+    {
+      "id": "S02",
+      "name": "the dashboard page is served",
+      "ok": true,
+      "note": "",
+      "ms": 13
+    },
+    {
+      "id": "S03",
+      "name": "security headers are set",
+      "ok": true,
+      "note": "",
+      "ms": 5
+    },
+    {
+      "id": "S04",
+      "name": "data is refused without signing in",
+      "ok": true,
+      "note": "",
+      "ms": 3
+    },
+    {
+      "id": "S05",
+      "name": "a wrong password is refused",
+      "ok": true,
+      "note": "",
+      "ms": 37
+    },
+    {
+      "id": "S06",
+      "name": "the administrator signs in",
+      "ok": true,
+      "note": "admin@itsc.local",
+      "ms": 53
+    },
+    {
+      "id": "S07",
+      "name": "a change without the CSRF token is refused",
+      "ok": true,
+      "note": "",
+      "ms": 3
+    },
+    {
+      "id": "S08",
+      "name": "the run options offer the queue-levelling controller",
+      "ok": true,
+      "note": "",
+      "ms": 5
+    },
+    {
+      "id": "S09",
+      "name": "the live feed connects for a signed-in user",
+      "ok": true,
+      "note": "",
+      "ms": 13
+    },
+    {
+      "id": "S10",
+      "name": "an administrator starts a simulation run",
+      "ok": true,
+      "note": "live-mwz7gk11-425a27",
+      "ms": 13
+    },
+    {
+      "id": "S11",
+      "name": "cars appear on the live map",
+      "ok": true,
+      "note": "1 cars at t=5 s",
+      "ms": 6074
+    },
+    {
+      "id": "S12",
+      "name": "cars move between updates",
+      "ok": true,
+      "note": "6 of 6 cars moved in 11 s",
+      "ms": 8019
+    },
+    {
+      "id": "S13",
+      "name": "the traffic lights change by themselves",
+      "ok": true,
+      "note": "4 junctions, up to 5 signal states",
+      "ms": 1
+    },
+    {
+      "id": "S14",
+      "name": "safety: no junction ever shows green to crossing roads",
+      "ok": true,
+      "note": "40 updates checked",
+      "ms": 27218
+    },
+    {
+      "id": "S15",
+      "name": "the live status reports the running run",
+      "ok": true,
+      "note": "",
+      "ms": 4
+    },
+    {
+      "id": "S16",
+      "name": "the administrator stops the run",
+      "ok": true,
+      "note": "",
+      "ms": 122
+    },
+    {
+      "id": "S17",
+      "name": "the run is kept in the history",
+      "ok": true,
+      "note": "status stopped",
+      "ms": 5
+    },
+    {
+      "id": "S18",
+      "name": "after signing out the session no longer works",
+      "ok": true,
+      "note": "",
+      "ms": 8
+    }
+  ]
+}

@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './hooks/useAuth.js';
+import { registerServiceWorker } from './hooks/useInstallPrompt.js';
 import './styles.css';
+
+// Installable app (PWA): only in the built dashboard, not on the dev server
+if (import.meta.env.PROD) registerServiceWorker();
 
 try {
   const theme = localStorage.getItem('itsc-theme') || 'dark';

@@ -79,3 +79,26 @@ The gateway is tested through its real HTTP and socket stack ([integration repor
   browser suites (every page, every role, every width, accessibility), which exercise them with
   real data.
 - The Python suite needs SUMO and takes about 7 minutes; it is run in full after every phase.
+
+## 5. Update, 27 November 2026: full re-run and new unit tests
+
+All unit suites were run again on the current code (Docker deployment and the dev gateway running at
+the same time, which is why the Python suite took longer).
+
+| Suite | Command | Result | Time |
+|---|---|---|---|
+| Python simulation | `npm run test:py` | **249 passed** (238 in the full run + 11 new, run separately), 1 warning | 25 min 16 s |
+| Gateway | `npm run test:server` | **96 passed**, 4 skipped (the real-SUMO tests, run with `npm run test:e2e`) | 20 s |
+| Dashboard | `npm run test:client` | **44 passed** (9 files) | 0.4 s |
+
+**New unit tests** for code that had none:
+
+| File | Tests | Covers |
+|---|---|---|
+| `sim/tests/test_sumo_connect.py` | 6 | starting SUMO and connecting TraCI (the "map not loading" fix): libsumo needs no port; SUMO gets a free port; TraCI connects to `127.0.0.1`, never `localhost`; each attempt has a 3 s limit and the default is restored; the open connection has no limit; retry messages go to stderr, not the JSON stream; a failed connection kills SUMO and reports the error |
+| `sim/tests/test_sensing_vanet.py` | 5 | the VANET sensing provider: queues, waiting times, ambulance alerts and speeds come from the roadside units; only fully blocked roads into *this* junction count as blocked; `update` steps the VANET emulation |
+| `server/test/simProcess.test.js` | 5 | the gateway's simulation process (a Node script stands in for Python): protocol lines become messages, other output is reported separately, empty lines ignored; exit codes; `send()` writes one JSON line and refuses after exit; `stop()` ends the process and marks it stopped; a program that cannot start reports exit −1 instead of crashing the gateway |
+| `client/src/lib/format.test.js` | 7 | number, speed, percentage, p-value and time formatting; missing values shown as a dash |
+| `client/src/hooks/usePersistentState.test.js` | 6 | page state kept between pages: initial value, restore from `sessionStorage` under `itsc-ui:`, broken saved text, no storage available, sign-out clears only this app's keys |
+
+The whole deployed system is tested separately: [system test report](SYSTEM_TEST_REPORT.md) (18/18).

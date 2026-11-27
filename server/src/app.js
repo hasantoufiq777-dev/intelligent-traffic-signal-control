@@ -398,6 +398,11 @@ export function createGateway(overrides = {}) {
   if (fs.existsSync(path.join(dist, 'index.html'))) {
     // Vite puts a content hash in every file name under assets/, so those never change: cache for a year
     app.use('/assets', express.static(path.join(dist, 'assets'), { immutable: true, maxAge: '365d', index: false, fallthrough: false }));
+    // Installable app: the service worker and manifest must always be checked for updates
+    app.get(['/sw.js', '/manifest.webmanifest'], (req, res, next) => {
+      res.set('Cache-Control', 'no-cache');
+      res.sendFile(path.join(dist, req.path.slice(1)), (err) => err && next());
+    });
     app.use(express.static(dist, { maxAge: '1h', index: false }));
     app.get(/^\/(?!api\/|socket\.io\/).*/, (_req, res) => {
       res.set('Cache-Control', 'no-cache');
