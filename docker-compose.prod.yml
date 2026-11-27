@@ -1,0 +1,52 @@
+# Server deployment: the system behind Caddy, which gets and renews a free HTTPS certificate.
+#
+#   cp .env.docker.example .env      # set DOMAIN, ADMIN_EMAIL, ADMIN_PASSWORD
+#   docker compose -f docker-compose.prod.yml up --build -d
+#   open https://<DOMAIN>
+#
+# No domain? Use the server's public IP with sslip.io, e.g. DOMAIN=20-55-1-2.sslip.io for 20.55.1.2.
+# The server's firewall must allow ports 80 and 443. Full guide: docs/deployment/DEPLOYMENT.md §14.
+services:
+  itsc:
+    build: .
+    image: itsc-vanet:latest
+    container_name: itsc-vanet
+    restart: unless-stopped
+    # No published port: only Caddy (on the internal network) reaches the gateway
+    expose:
+      - "4000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      COOKIE_SECURE: "true"    # cookies only over HTTPS
+      TRUST_PROXY: "1"         # one proxy (Caddy) in front: client addresses from X-Forwarded-For
+      SIM_STEP_DELAY: ${SIM_STEP_DELAY:-1.0}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - itsc-data:/app/server/data
+      - itsc-results:/app/results
+
+  caddy:
+    image: caddy:2.8.4
+    container_name: itsc-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env (your domain, or <ip-with-dashes>.sslip.io)}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data        # certificates
+      - caddy-config:/config
+    depends_on:
+      itsc:
+        condition: service_healthy
+
+volumes:
+  itsc-data:
+  itsc-results:
+  caddy-data:
+  caddy-config:
