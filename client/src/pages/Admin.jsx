@@ -253,6 +253,7 @@ export default function Admin() {
               {num('penetration', { min: 0, max: 1, step: 0.1 })}
               {num('loss', { min: 0, max: 1, step: 0.05 })}
               {num('eco_fraction', { min: 0, max: 1, step: 0.1 })}
+              {sel('eco_select', options.eco_select || ['data', 'random'])}
               {num('demand', { min: 0.25, max: 2, step: 0.25, title: 'Traffic demand: every flow of the scenario multiplied by this (1 = as defined)' })}
             </div>
             <div className="row">
