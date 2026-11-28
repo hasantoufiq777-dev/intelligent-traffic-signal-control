@@ -145,6 +145,7 @@ def run_simulation(
     output_dir: Optional[Path] = None,
     step_delay: float = 0.0,
     eco_fraction: float = 0.0,
+    eco_select: str = "random",
     ev_routing: bool = False,
     driver: bool = False,
     driver_commands: Optional[Any] = None,
@@ -480,6 +481,7 @@ def run_simulation(
                 penetration=penetration,
                 seed=seed,
                 track_live_emissions=live,
+                eco_select=eco_select,
             )
 
         # Live map data: road geometry once, then per-vehicle rows every emitted second
@@ -897,6 +899,8 @@ def run_simulation(
     def _eco_group(vid: str, vtype: str) -> Optional[str]:
         if vtype == "emergency":
             return None
+        if eco_mgr is not None:  # the cars that really were eco cars (also when chosen from data)
+            return "eco" if vid in eco_mgr.ever_eco else "non"
         return "eco" if is_eco_vehicle(vid, vtype, float(eco_fraction or 0.0), penetration, seed) else "non"
 
     def _city_group(vid: str, vtype: str) -> Optional[str]:
@@ -962,6 +966,7 @@ def run_simulation(
 
     # Eco-driving and emission fields (eco-specific ones stay null when eco-driving is off)
     result_payload["eco_fraction"] = float(eco_fraction or 0.0)
+    result_payload["eco_select"] = eco_select
     for key in ("co2_g_per_km_eco", "co2_g_per_km_non", "fuel_l_per_100km_eco", "fuel_l_per_100km_non",
                 "stops_per_vehicle_eco", "stops_per_vehicle_non", "travel_time_eco", "travel_time_non",
                 "eco_advised_vehicles", "eco_advice_share_slow", "eco_advice_share_stop", "spat_pdr"):

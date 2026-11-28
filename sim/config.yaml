@@ -108,6 +108,11 @@ eco:
   max_uncertainty_s: 5.0    # s; no slow-down advice when the next green start is known less precisely
   queue_lookahead_m: 60.0   # no advice when a vehicle within this distance ahead ...
   queue_speed: 3.0          # ... is slower than this (m/s): the queue, not the signal, sets the arrival time
+  # Data-driven eco-car choice (--eco-select data, sim/eco_selection.py): cars compared with the SUMO
+  # fuel-curve model (sim/data/fuel_curves.json); the most wasteful become eco cars, up to eco_fraction
+  select_interval_s: 5.0     # s between selection rounds
+  select_min_dist_m: 150.0   # a car needs this much driving before it is judged
+  select_min_excess_pct: 10.0  # only cars burning at least this much above the model are chosen
 
 # Accident work zone (scenario accident_zone, network grid2x2_zone; sim/controllers/zone.py)
 accident_zone:
