@@ -56,6 +56,7 @@ export const LAYERS = [
   { id: 'vehicles', label: 'Vehicles', on: true },
   { id: 'queues', label: 'Queue counts', on: true },
   { id: 'timers', label: 'Signal countdowns', on: true },
+  { id: 'priority', label: 'Signal priority (which road goes next)', on: true },
   { id: 'congestion', label: 'Congestion (road speed)', on: true },
   { id: 'incidents', label: 'Accidents and closures', on: true },
   { id: 'routes', label: 'Ambulance routes', on: true },
@@ -86,6 +87,25 @@ function offsetPts(points, off) {
 }
 
 /** Direction an edge arrives from at its end junction (SUMO coordinates: y grows north). */
+const GROUP_SHORT = { NS: 'N–S', EW: 'E–W' };
+const IN_GROUP = { N: 'NS', S: 'NS', E: 'EW', W: 'EW' };
+
+/** Roads of a junction ranked by the dynamic controller's priority score: approach -> rank (1 = highest). */
+function priorityRanks(dyn) {
+  const roads = dyn?.roads || {};
+  const order = Object.keys(roads).sort((a, b) => (roads[b].score ?? 0) - (roads[a].score ?? 0));
+  return Object.fromEntries(order.map((d, i) => [d, i + 1]));
+}
+
+/** One line under a junction: who has green, for how long, or what comes next. */
+function junctionCaption(dyn) {
+  if (!dyn) return null;
+  if (!dyn.serving) return `${dyn.transition === 'ALL_RED' ? 'All red' : 'Yellow'}${dyn.next ? ` → ${GROUP_SHORT[dyn.next]} next` : ''}`;
+  const g = GROUP_SHORT[dyn.serving];
+  if (dyn.remaining_s > 0) return `${g} green · ${dyn.remaining_s} s left`;
+  return `${g} green · held (no one waiting on red)`;
+}
+
 function approachOf(shape) {
   const [x1, y1] = shape[shape.length - 2];
   const [x2, y2] = shape[shape.length - 1];
@@ -218,6 +238,8 @@ function buildGeometry(network) {
       pos: pt(x2 - ux * 3 + rx * across, y2 - uy * 3 + ry * across),
       badge: pt(x2 - ux * 14 + rx * side, y2 - uy * 14 + ry * side),
       timer: pt(x2 - ux * 3 + rx * side, y2 - uy * 3 + ry * side),
+      // Priority rank and score of this road (dynamic signals), further back along the road
+      prio: pt(x2 - ux * 52 + rx * side, y2 - uy * 52 + ry * side),
     });
   }
 
@@ -685,8 +707,21 @@ function TrafficMapInner({
               const q = st?.queues?.[h.approach];
               const sp = st?.spat?.[h.approach];
               const secs = sp && sp.min_s != null && sp.min_s === sp.max_s ? Math.ceil(sp.min_s) : null;
+              const dyn = st?.dynamic;
+              const road = dyn?.roads?.[h.approach];
+              const rank = road ? priorityRanks(dyn)[h.approach] : null;
+              const served = road && dyn.serving === IN_GROUP[h.approach];
               return (
                 <g key={h.id}>
+                  {layers.priority && road && (
+                    <g transform={`translate(${h.prio[0]},${h.prio[1]})`} className={`prio-pill${served ? ' served' : ''}${road.down_status === 'blocked' || road.down_status === 'closed' ? ' blocked' : ''}`}>
+                      <rect x={-17} y={-7.5} width={34} height={15} rx={7.5} />
+                      <text y={3.4} textAnchor="middle" className="map-label prio">#{rank} · {Number(road.score ?? 0).toFixed(1)}</text>
+                      <title>{`${h.tls}, road from the ${APPROACH_WORD[h.approach]}: priority #${rank} of ${Object.keys(dyn.roads).length}, score ${road.score} `
+                        + `(${road.waiting} waiting, average wait ${road.mean_wait_s} s, ${road.flow_vpm} arriving per minute, road ahead ${road.down_status}). `
+                        + `${served ? 'Has the green now.' : 'Waiting for green.'}`}</title>
+                    </g>
+                  )}
                   <circle cx={h.pos[0]} cy={h.pos[1]} r={5.2} fill={SIG_FILL[s] || 'var(--surface-2)'} stroke="#0b0d12" strokeWidth={1.4}>
                     <title>{`${h.tls}, from the ${APPROACH_WORD[h.approach]}: ${SIG_WORD[s] || 'unknown'}`}</title>
                   </circle>
@@ -760,6 +795,25 @@ function TrafficMapInner({
         </fieldset>
       )}
 
+      {layers.priority && geo.junctions.some((j) => tlsState?.[j.id]?.dynamic) && (
+        <div className="signal-decisions" aria-live="polite" aria-label="Signal decisions">
+          <div className="small muted">Signal decisions (dynamic control: the road with the higher score gets the next green)</div>
+          <ul>
+            {geo.junctions.filter((j) => tlsState?.[j.id]?.dynamic).map((j) => {
+              const dyn = tlsState[j.id].dynamic;
+              const ev = tlsState[j.id].phase === 'EV_GREEN';
+              return (
+                <li key={j.id}>
+                  <strong>{j.id}</strong>{' '}
+                  <span className={`chip${dyn.serving ? ' good' : ''}`}>{ev ? 'Ambulance priority' : junctionCaption(dyn)}</span>{' '}
+                  <span className="small">{dyn.reason}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <details className="map-legend-box" open={typeof window === 'undefined' || window.innerWidth > 700}>
         <summary>Legend</summary>
         <div className="map-legend" aria-label="Map legend">
@@ -782,6 +836,12 @@ function TrafficMapInner({
           <span><CarIcon kind="driven" />Driven by a viewer</span>
           <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.6" fill="var(--sig-green)" stroke="#0b0d12" strokeWidth="1.2" /></svg>Signal (green / yellow / red) with seconds left</span>
           <span><svg width="20" height="14"><rect x="1" y="1" width="18" height="12" rx="6" fill="var(--surface-1)" stroke="var(--border-strong)" /><text x="10" y="10.5" textAnchor="middle" fontSize="9" fill="var(--text-primary)">5</text></svg>Vehicles waiting</span>
+          {Object.values(tlsState || {}).some((s) => s?.dynamic) && (
+            <>
+              <span><svg width="36" height="16" className="prio-pill served"><rect x="1" y="1" width="34" height="14" rx="7" /><text x="18" y="11" textAnchor="middle" fontSize="8" className="map-label prio">#1 · 9.5</text></svg>Road with the green: its priority rank and score</span>
+              <span><svg width="36" height="16" className="prio-pill"><rect x="1" y="1" width="34" height="14" rx="7" /><text x="18" y="11" textAnchor="middle" fontSize="8" className="map-label prio">#3 · 2.0</text></svg>Waiting road: higher score gets the next green (queue, wait, arrivals, room ahead)</span>
+            </>
+          )}
           <span><svg width="22" height="10"><rect x="1" y="2" width="20" height="6" fill="var(--sig-yellow)" fillOpacity="0.5" /></svg>Congested road</span>
           <span><svg width="14" height="14"><path d="M7 1 L13 13 H1 Z" fill="var(--sig-red)" /><path d="M7 5 V9 M7 10.5 V11.5" stroke="#fff" strokeWidth="1.4" /></svg>Accident / road closed</span>
           <span><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" fill="var(--surface-1)" stroke="var(--rsu)" strokeWidth="1.2" /><path d="M4.5 7.5 A5 5 0 0 1 11.5 7.5 M6 9.3 A2.8 2.8 0 0 1 10 9.3" stroke="var(--rsu)" strokeWidth="1.2" fill="none" /></svg>Roadside unit (RSU)</span>
