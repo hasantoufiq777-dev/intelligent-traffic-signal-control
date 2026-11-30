@@ -17,7 +17,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 
 from sim.navigation.aco import AcoRouter
-from sim.navigation.astar import astar_search
+from sim.navigation.astar import astar_search  # noqa: F401  (kept for callers importing it from here)
+from sim.navigation.planners import make_planner
+from sim.vehicles import is_driven_type
 from sim.navigation.graph import EdgeGraph, SpeedSmoother
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,7 @@ class VehicleNavigator:
         self.heuristic = heuristic
         self.seed = int(seed)
         self.rng = random.Random(self.seed + 777)
+        self._vclass_cache: Dict[str, Optional[str]] = {}
         # Edge speeds are smoothed over about one signal cycle (time constant in s, 0 = off). A queue
         # waiting at a red light makes the raw speed drop near 0 for a few seconds; unsmoothed, every
         # red light looks like a jam and navigating cars detour around it.
@@ -74,6 +77,9 @@ class VehicleNavigator:
             config=aco_config,
             seed=self.seed,
         )
+        # Route-search strategy for this mode (None = no navigation); ACO picks with self.rng
+        self.planner = make_planner(self.mode, self.graph, aco_router=self.aco_router, rng=self.rng,
+                                    heuristic=self.heuristic)
 
         # Vehicle tracking state
         self.last_reroute_time: Dict[str, float] = {}
@@ -107,10 +113,20 @@ class VehicleNavigator:
         """Smoothed edge speeds (see SpeedSmoother); keep_raw edges use the raw value."""
         return self._smoother.update(sim_time, speed_map, keep_raw=keep_raw)
 
+    def _vclass(self, vid: str) -> Optional[str]:
+        """The vehicle's SUMO class, so routes use only roads and turns it may use (cached)."""
+        if vid not in self._vclass_cache:
+            try:
+                self._vclass_cache[vid] = str(self.sumo_api.vehicle.getVehicleClass(vid))
+            except Exception:
+                self._vclass_cache[vid] = None
+        return self._vclass_cache[vid]
+
     def _is_emergency(self, vid: str) -> bool:
         """Ambulances (own router) and the dashboard driver's car (the viewer drives) are not navigated."""
         try:
-            return str(self.sumo_api.vehicle.getTypeID(vid)) in ("emergency", "driven")
+            vt = str(self.sumo_api.vehicle.getTypeID(vid))
+            return vt == "emergency" or is_driven_type(vt)
         except Exception:
             return False
 
@@ -274,41 +290,11 @@ class VehicleNavigator:
             new_cost: float = float("inf")
             expansions: int = 0
 
-            if self.mode == "astar":
-                new_path, new_cost, expansions = astar_search(
-                    graph=self.graph,
-                    start_edge=curr_road,
-                    goal_edge=goal_edge,
-                    speed_map=speed_map,
-                    closed_edges=closed_edges,
-                    heuristic=self.heuristic,
-                )
-                decision_routes = [(new_path, new_cost, 1.0)] if new_path else []
-                chosen_idx = 0
-            elif self.mode in ("aco", "aco_tuned"):
-                candidates = self.aco_router.find_routes(
-                    start_edge=curr_road,
-                    goal_edge=goal_edge,
-                    speed_map=speed_map,
-                    closed_edges=closed_edges,
-                    k=self.aco_router.elite_k,
-                )
-                decision_routes = candidates
-                chosen_idx = 0
-                if candidates:
-                    # Probabilistic selection among top K alternatives
-                    r = self.rng.random()
-                    cum = 0.0
-                    selected_cand = candidates[0]
-                    for i_cand, (cand_path, cand_cost, cand_prob) in enumerate(candidates):
-                        cum += cand_prob
-                        if cum >= r:
-                            selected_cand = (cand_path, cand_cost, cand_prob)
-                            chosen_idx = i_cand
-                            break
-                    new_path = selected_cand[0]
-                    new_cost = selected_cand[1]
-                    expansions = self.aco_router.n_ants * self.aco_router.n_iterations
+            # Strategy: the planner of this navigation mode (A*, ACO; sim/navigation/planners.py)
+            if self.planner is not None:
+                res = self.planner.plan(curr_road, goal_edge, speed_map, closed_edges, self._vclass(vid))
+                new_path, new_cost, expansions = res.path, res.cost, res.expansions
+                decision_routes, chosen_idx = res.alternatives, res.chosen
 
             t_elapsed_ms = (time.perf_counter() - t_start) * 1000.0
             self.total_search_ms += t_elapsed_ms

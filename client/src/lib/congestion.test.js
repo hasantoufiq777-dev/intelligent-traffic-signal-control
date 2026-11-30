@@ -5,14 +5,14 @@ import { congestion } from '../components/TrafficMap.jsx';
 describe('road congestion colouring', () => {
   it('needs a queue as well as a low speed on roads that end at a signal', () => {
     expect(congestion(1, 13.89, 1)).toBeNull(); // one car waiting at red is not congestion
-    expect(congestion(1, 13.89, 4)).toBe('slow');
-    expect(congestion(1, 13.89, 8)).toBe('heavy');
-    expect(congestion(8, 13.89, 4)).toBe('slow');
+    expect(congestion(1, 13.89, 4)).toBeNull(); // the old 'slow' level is gone
+    expect(congestion(1, 13.89, 8)).toBe('congested');
+    expect(congestion(8, 13.89, 8)).toBeNull(); // queue but traffic still moving (over 35 % of the limit)
     expect(congestion(12, 13.89, 10)).toBeNull(); // moving freely
   });
   it('marks an exit road only at a standstill, and nothing without data', () => {
     expect(congestion(5, 13.89, null)).toBeNull();
-    expect(congestion(1, 13.89, null)).toBe('heavy');
+    expect(congestion(1, 13.89, null)).toBe('congested');
     expect(congestion(null, 13.89, 5)).toBeNull();
     expect(congestion(3, null, 5)).toBeNull();
   });

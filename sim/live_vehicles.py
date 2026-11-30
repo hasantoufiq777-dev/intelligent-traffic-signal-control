@@ -16,12 +16,20 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from sim.car_following import LOOKAHEAD_M, follow_advice
 from sim.vanet.network import resolve_lane_direction
 from sim.vanet.nodes import build_edge_info, distance_along_route, is_vehicle_equipped
+from sim.vehicles import CATALOG, VehicleTypeFactory, is_driven_type, type_category
 
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
-                  "advice", "adv_speed", "green_in", "road", "to"]
+                  "advice", "adv_speed", "green_in", "road", "to",
+                  # vehicle category (sim/vehicles.py), lane index, speed limit for this vehicle here (m/s)
+                  "kind", "lane", "limit",
+                  # car following (sim/car_following.py): acceleration (m/s2), the vehicle ahead in the lane
+                  # and the gap to it (m), the advice for following it, its target speed (m/s), time to collision (s)
+                  "acc", "leader", "gap", "follow", "follow_speed", "ttc"]
 FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
+LANE_CLASSES = ("passenger", "motorcycle", "bus", "truck", "emergency")  # lane permissions shown on the map
 PETROL_MG_PER_ML = 745.0
 DRIVER_VTYPE = "driven"  # the car a dashboard viewer drives (sim/driver.py)
 MAX_FINISHED = 2000  # finished trips kept for the driver's trip comparison
@@ -35,13 +43,24 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
     net = sumolib.net.readNet(str(net_path))
     tls = set(tls_ids)
     junctions = [
-        {"id": n.getID(), "x": round(n.getCoord()[0], 1), "y": round(n.getCoord()[1], 1), "tls": n.getID() in tls}
+        {"id": n.getID(), "x": round(n.getCoord()[0], 1), "y": round(n.getCoord()[1], 1), "tls": n.getID() in tls,
+         # the junction's area as SUMO computed it (drawn as is on non-grid maps and in the 3D view)
+         "shape": [[round(p[0], 1), round(p[1], 1)] for p in (n.getShape() or [])]}
         for n in net.getNodes()
     ]
     edges = []
     for e in net.getEdges():
         if e.getID().startswith(":"):
             continue
+        lane_info = []
+        for ln in e.getLanes():
+            allowed = [vc for vc in LANE_CLASSES if ln.allows(vc)]
+            lane_info.append({
+                "w": round(ln.getWidth(), 2),
+                # vehicle classes allowed on this lane; null = every class (no restriction)
+                "allow": None if len(allowed) == len(LANE_CLASSES) else allowed,
+                "shape": [[round(p[0], 1), round(p[1], 1)] for p in ln.getShape()],
+            })
         edges.append({
             "id": e.getID(),
             "from": e.getFromNode().getID(),
@@ -50,10 +69,14 @@ def build_network_message(net_path: Union[str, Path], tls_ids: List[str], run_id
             "speed": round(e.getSpeed(), 2),  # speed limit (m/s), for the congestion colouring
             "length": round(e.getLength(), 1),
             "shape": [[round(p[0], 1), round(p[1], 1)] for p in e.getShape()],
+            "type": e.getType() or "grid",  # road type: grid, arterial, bus_arterial, residential
+            "lane_info": lane_info,
         })
     (xmin, ymin), (xmax, ymax) = net.getBBoxXY()
     return {"type": "network", "run_id": run_id, "junctions": junctions, "edges": edges,
-            "bounds": [round(xmin, 1), round(ymin, 1), round(xmax, 1), round(ymax, 1)]}
+            "bounds": [round(xmin, 1), round(ymin, 1), round(xmax, 1), round(ymax, 1)],
+            # what each vehicle category is (size, speeds, class), so map and driver view match SUMO
+            "vehicle_types": VehicleTypeFactory().summary(CATALOG.keys())}
 
 
 class LiveVehicleTracker:
@@ -82,6 +105,7 @@ class LiveVehicleTracker:
         self.od: Dict[str, Tuple[str, str]] = {}  # origin and destination edge
         self.finished: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         self._dir_cache: Dict[Tuple[str, str], str] = {}
+        self._lane_limit: Dict[str, float] = {}
 
     def _type(self, vid: str) -> str:
         if vid not in self.vtype:
@@ -161,13 +185,25 @@ class LiveVehicleTracker:
                 idx = int(api.vehicle.getRouteIndex(vid))
                 road = str(api.vehicle.getRoadID(vid))
                 lane_pos = float(api.vehicle.getLanePosition(vid))
+                lane_idx = int(api.vehicle.getLaneIndex(vid))
+                lane_id = str(api.vehicle.getLaneID(vid))
+                if lane_id not in self._lane_limit:
+                    self._lane_limit[lane_id] = float(api.lane.getMaxSpeed(lane_id))
+                limit = self._lane_limit[lane_id]  # posted speed limit of the lane
             except Exception:
                 continue
+            try:
+                acc = float(api.vehicle.getAcceleration(vid))
+                lead = api.vehicle.getLeader(vid, LOOKAHEAD_M)
+                near = bool(lead and lead[0]) and float(lead[1]) <= LOOKAHEAD_M  # SUMO may return one further away
+                leader, gap = (str(lead[0]), max(0.0, float(lead[1]))) if near else (None, None)
+            except Exception:
+                acc, leader, gap = 0.0, None, None
             vtype = self._type(vid)
             flags = 0
             if vtype == "emergency":
                 flags |= FLAG_EMERGENCY
-            if vtype == DRIVER_VTYPE:
+            if is_driven_type(vtype):
                 flags |= FLAG_DRIVER
             if is_vehicle_equipped(vid, vtype=vtype, penetration=self.penetration, seed=self.seed):
                 flags |= FLAG_EQUIPPED
@@ -194,5 +230,31 @@ class LiveVehicleTracker:
                 round(self.fuel_mg.get(vid, 0.0) / PETROL_MG_PER_ML, 1),
                 advice.get("advice"), advice.get("speed"), advice.get("green_in"),
                 road, route[-1] if route else None,
+                type_category(vtype), lane_idx, round(limit, 2),
+                round(acc, 2), leader, None if gap is None else round(gap, 1),
             ])
+        add_follow_advice(rows)
         return {"type": "vehicles", "run_id": run_id, "t": int(t), "fields": VEHICLE_FIELDS, "rows": rows}
+
+
+def add_follow_advice(rows: List[List[Any]]) -> None:
+    """Append (follow, follow_speed, ttc) to each row (fields as VEHICLE_FIELDS up to "gap").
+
+    The leader's speed and acceleration come from its own row. Both vehicles equipped = cooperative
+    (the leader's acceleration arrives by V2V beacon); otherwise the follower only measures its speed.
+    """
+    ix = {k: VEHICLE_FIELDS.index(k) for k in ("id", "speed", "flags", "limit", "acc", "leader", "gap")}
+    by_id = {r[ix["id"]]: r for r in rows}
+    for r in rows:
+        lid = r[ix["leader"]]
+        if not lid or r[ix["gap"]] is None or (lid not in by_id and not str(lid).startswith("incblk_")):
+            r.extend([None, None, None])
+            continue
+        lead = by_id.get(lid)
+        if lead is None:  # the stopped vehicle of an incident (not shown on the map)
+            l_speed, l_acc, coop = 0.0, 0.0, False
+        else:
+            l_speed, l_acc = lead[ix["speed"]], lead[ix["acc"]]
+            coop = bool(r[ix["flags"]] & FLAG_EQUIPPED and lead[ix["flags"]] & FLAG_EQUIPPED)
+        adv = follow_advice(r[ix["speed"]], r[ix["limit"]], l_speed, l_acc, r[ix["gap"]], cooperative=coop)
+        r.extend([adv["state"], adv["speed"], adv["ttc"]])

@@ -34,8 +34,12 @@ PETROL_DENSITY_G_PER_L = 745.0
 
 
 def is_eco_vehicle(vid: str, vtype: str, eco_fraction: float, penetration: float, seed: int) -> bool:
-    """Deterministic eco-car selection among equipped, non-emergency vehicles."""
-    if eco_fraction <= 0.0 or vtype in ("emergency", "incident_blocker", "driven") or vid.startswith("incblk_"):
+    """Deterministic eco-car selection among equipped, non-emergency vehicles. A vehicle of the city's
+    eco-car category is always an eco car."""
+    if vtype == "eco_car":
+        return True
+    if (eco_fraction <= 0.0 or vtype in ("emergency", "incident_blocker") or str(vtype).startswith("driven")
+            or vid.startswith("incblk_")):
         return False
     if not is_vehicle_equipped(vid, vtype=vtype, penetration=penetration, seed=seed):
         return False
@@ -120,8 +124,18 @@ class EcoDrivingManager:
         penetration: float = 1.0,
         seed: int = 1,
         track_live_emissions: bool = False,
+        eco_select: str = "random",
     ) -> None:
         cfg = dict(config or {})
+        # How eco cars are chosen: "random" (seeded share of connected cars) or "data" (the cars that
+        # burn the most fuel above the SUMO fuel-curve model, sim/eco_selection.py)
+        self.eco_select = eco_select if eco_select in ("random", "data") else "random"
+        self.selector = None
+        if self.eco_select == "data":
+            from sim.eco_selection import EcoSelector
+
+            self.selector = EcoSelector(cfg)
+            track_live_emissions = True  # the selection needs every car's fuel, distance and stops
         self.sumo_api = sumo_api
         self.vanet_net = vanet_net
         self.tls_ids = list(tls_ids)
@@ -144,6 +158,9 @@ class EcoDrivingManager:
         self.edge_info = build_edge_info(sumo_api)
         self.vtype: Dict[str, str] = {}
         self.eco: Set[str] = set()
+        self.ever_eco: Set[str] = set()  # every car that was an eco car during its trip
+        self.chosen_at: Dict[str, Dict[str, float]] = {}  # data mode: the car's totals when it was chosen
+        self.select_effect: List[Tuple[Optional[float], Optional[float]]] = []  # finished: (before %, since %)
         self.controlled: Set[str] = set()  # cars whose speed we currently set
         self.advice: Dict[str, Dict[str, Any]] = {}  # latest advice per eco car (for the UI)
         self.advised_vehicles: Set[str] = set()  # eco cars that got slow/stop advice at least once
@@ -193,12 +210,20 @@ class EcoDrivingManager:
                 self.vanet_net.forget_vehicle(vid)
             self._finish_live(vid)
         for vid in current - self._active:  # new
-            if is_eco_vehicle(vid, self._type(vid), self.eco_fraction, self.penetration, self.seed):
+            vtype = self._type(vid)
+            if self.eco_select == "data":
+                if vtype == "eco_car":  # the city's eco-car category is always an eco car
+                    self.eco.add(vid)
+                    self.ever_eco.add(vid)
+            elif is_eco_vehicle(vid, vtype, self.eco_fraction, self.penetration, self.seed):
                 self.eco.add(vid)
+                self.ever_eco.add(vid)
         self._active = current
 
         if self.track_live:
             self._track_live(ids)
+        if self.selector is not None and self.selector.due(sim_time):
+            self._select_by_data(sim_time, ids)
         if not self.eco or self.vanet_net is None:
             return
 
@@ -312,10 +337,14 @@ class EcoDrivingManager:
             except Exception:
                 continue
             acc = self._live_acc.setdefault(vid, {"co2_mg": 0.0, "fuel_mg": 0.0, "dist_m": 0.0, "stops": 0.0,
-                                                  "moving": 1.0})
+                                                  "moving": 1.0, "moving_s": 0.0, "idle_s": 0.0})
             acc["co2_mg"] += co2  # mg/s x 1 s step
             acc["fuel_mg"] += fuel
             acc["dist_m"] = dist
+            if speed > 1.0:
+                acc["moving_s"] += 1.0
+            elif speed < 0.1:
+                acc["idle_s"] += 1.0
             if speed < 0.1 and acc["moving"]:
                 acc["stops"] += 1
                 acc["moving"] = 0.0
@@ -323,6 +352,16 @@ class EcoDrivingManager:
                 acc["moving"] = 1.0
 
     def _finish_live(self, vid: str) -> None:
+        acc = self._live_acc.get(vid)
+        snap = self.chosen_at.pop(vid, None)
+        if acc and snap:
+            from sim.eco_selection import category_of, compare_car
+
+            cat = category_of(self._type(vid))
+            delta = {k: acc.get(k, 0.0) - snap.get(k, 0.0) for k in ("fuel_mg", "co2_mg", "dist_m", "moving_s", "stops", "idle_s")}
+            b, a = compare_car(cat, snap), compare_car(cat, delta) if delta["dist_m"] >= 50 else None
+            if b and a:
+                self.select_effect.append((b["excess_pct"], a["excess_pct"]))
         acc = self._live_acc.pop(vid, None)
         if not acc or self._type(vid) == "emergency":
             return
@@ -332,7 +371,101 @@ class EcoDrivingManager:
         g["n"] += 1
 
     def _was_eco(self, vid: str) -> bool:
-        return is_eco_vehicle(vid, self._type(vid), self.eco_fraction, self.penetration, self.seed)
+        return vid in self.ever_eco
+
+    # ------------------------------------------------------------------ data-driven selection
+    def _eligible(self, vid: str) -> bool:
+        vtype = self._type(vid)
+        return not (vtype in ("emergency", "incident_blocker") or str(vtype).startswith("driven")
+                    or vid.startswith("incblk_"))
+
+    def _equipped(self, vid: str) -> bool:
+        return is_vehicle_equipped(vid, vtype=self._type(vid), penetration=self.penetration, seed=self.seed)
+
+    def compare_all(self, ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Each eligible car's measured fuel, CO2 and stops against the model (sim/eco_selection.py)."""
+        from sim.eco_selection import category_of, compare_car
+
+        out: Dict[str, Dict[str, Any]] = {}
+        for vid in ids:
+            acc = self._live_acc.get(vid)
+            if acc is None or not self._eligible(vid):
+                continue
+            c = compare_car(category_of(self._type(vid)), acc)
+            if c is not None:
+                c["category"] = category_of(self._type(vid))
+                out[vid] = c
+        return out
+
+    def _select_by_data(self, sim_time: float, ids: List[str]) -> None:
+        connected = [v for v in ids if self._eligible(v) and self._equipped(v)]
+        budget = int(round(self.eco_fraction * len(connected)))
+        comps = self.compare_all(connected)
+        for vid in self.selector.choose(sim_time, comps, self.eco & set(connected), budget):
+            self.eco.add(vid)
+            self.ever_eco.add(vid)
+            self.chosen_at[vid] = dict(self._live_acc.get(vid, {}))
+
+    def comparison_block(self, limit: int = 15) -> Dict[str, Any]:
+        """Cars on the road against the model, for the dashboard: the most wasteful first, eco cars kept."""
+        ids = list(self._active)
+        comps = self.compare_all(ids)
+        sel = self.selector
+        rows = []
+        for vid, c in comps.items():
+            eco = vid in self.eco
+            if eco:
+                status = "eco"
+            elif not self._equipped(vid):
+                status = "no_radio"
+            elif sel is not None and c["dist_m"] < sel.min_dist_m:
+                status = "too_little_data"
+            elif sel is not None and (c["excess_pct"] or 0) < sel.min_excess_pct:
+                status = "efficient"
+            else:
+                status = "candidate"
+            reason = (sel.reasons.get(vid) if sel is not None else None) if eco else None
+            since = None
+            snap = self.chosen_at.get(vid)
+            acc = self._live_acc.get(vid)
+            if eco and snap and acc:
+                from sim.eco_selection import compare_car as _cmp
+
+                delta = {k: acc.get(k, 0.0) - snap.get(k, 0.0) for k in ("fuel_mg", "co2_mg", "dist_m", "moving_s", "stops", "idle_s")}
+                s2 = _cmp(c["category"], delta) if delta["dist_m"] >= 50 else None
+                since = s2["excess_pct"] if s2 else None
+                c = dict(c, before_pct=_cmp(c["category"], snap)["excess_pct"] if _cmp(c["category"], snap) else None)
+            if eco and reason is None:
+                reason = "eco-car type" if self._type(vid) == "eco_car" else "chosen at random (eco fraction)"
+            rows.append({"id": vid, **{k: v for k, v in c.items() if k != "excess_mg_per_m"},
+                         "waste_mg_m": round(c["excess_mg_per_m"], 1), "status": status, "reason": reason,
+                         "since_pct": since})
+        # Judged cars first (most fuel above the model first); cars that only just started come last
+        rows.sort(key=lambda r: (r["status"] == "too_little_data", -r["waste_mg_m"]))
+        shown = rows[:limit]
+        shown += [r for r in rows[limit:] if r["status"] == "eco"][: max(0, limit // 2)]
+
+        def mean(key: str, group: List[Dict[str, Any]]) -> Optional[float]:
+            vals = [r[key] for r in group if r.get(key) is not None]
+            return round(sum(vals) / len(vals), 1) if vals else None
+
+        eco_rows = [r for r in rows if r["status"] == "eco"]
+        other = [r for r in rows if r["status"] != "eco"]
+        # Eco cars chosen from data, finished or on the road: fuel above the model before and since
+        before = [b for b in self.select_effect if b[0] is not None and b[1] is not None]
+        before += [(r.get("before_pct"), r.get("since_pct")) for r in eco_rows
+                   if r.get("before_pct") is not None and r.get("since_pct") is not None]
+        return {
+            "before_pct": round(sum(b[0] for b in before) / len(before), 1) if before else None,
+            "since_pct": round(sum(b[1] for b in before) / len(before), 1) if before else None,
+            "n_before_since": len(before),
+            "rows": shown,
+            "n_cars": len(rows),
+            "excess_pct_eco": mean("excess_pct", eco_rows),
+            "excess_pct_other": mean("excess_pct", other),
+            "min_dist_m": sel.min_dist_m if sel is not None else None,
+            "min_excess_pct": sel.min_excess_pct if sel is not None else None,
+        }
 
     # ------------------------------------------------------------------ outputs
     @staticmethod
@@ -352,6 +485,9 @@ class EcoDrivingManager:
         delivered = getattr(self.vanet_net, "spat_delivered", 0) if self.vanet_net is not None else 0
         return {
             "eco_fraction": self.eco_fraction,
+            "eco_select": self.eco_select,
+            "eco_chosen_total": len(self.ever_eco),
+            "comparison": self.comparison_block() if self.track_live else None,
             "eco_active": len(self.eco),
             "advised_now": len(self.controlled),
             "co2_g_per_km_eco": eco_co2,
@@ -369,6 +505,11 @@ class EcoDrivingManager:
         total = sum(self.advice_counts.values())
         return {
             "eco_advised_vehicles": len(self.advised_vehicles),
+            # Data-chosen eco cars: fuel above the SUMO model before they were chosen, and since
+            "eco_select_before_pct": (round(sum(b for b, _ in self.select_effect) / len(self.select_effect), 1)
+                                      if self.select_effect else None),
+            "eco_select_since_pct": (round(sum(a for _, a in self.select_effect) / len(self.select_effect), 1)
+                                     if self.select_effect else None),
             "eco_advice_share_slow": round(self.advice_counts.get("slow", 0) / total, 3) if total else None,
             "eco_advice_share_stop": round(self.advice_counts.get("stop", 0) / total, 3) if total else None,
             "spat_pdr": round(delivered / sent, 3) if sent else None,

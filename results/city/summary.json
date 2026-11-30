@@ -1,0 +1,225 @@
+{
+ "scenario": "city",
+ "network": "grid2x2_city",
+ "seeds": 5,
+ "steps": 1200,
+ "penetration": 0.5,
+ "configs": {
+  "fixed": {
+   "avg_waiting_time": {
+    "mean": 27.256,
+    "sd": 2.241
+   },
+   "avg_travel_time": {
+    "mean": 118.632,
+    "sd": 3.709
+   },
+   "avg_time_loss": {
+    "mean": 43.74,
+    "sd": 2.979
+   },
+   "throughput_veh_per_hr": {
+    "mean": 1216.2,
+    "sd": 55.868
+   },
+   "max_queue": {
+    "mean": 10.8,
+    "sd": 1.095
+   },
+   "collisions": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "co2_g_per_km": {
+    "mean": 292.156,
+    "sd": 15.079
+   },
+   "fuel_l_per_100km": {
+    "mean": 12.68,
+    "sd": 0.649
+   },
+   "stops_per_vehicle": {
+    "mean": 1.657,
+    "sd": 0.107
+   },
+   "reroute_count": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "nav_avg_travel_time": {
+    "mean": 117.23,
+    "sd": 2.286
+   }
+  },
+  "adaptive": {
+   "avg_waiting_time": {
+    "mean": 19.786,
+    "sd": 2.845
+   },
+   "avg_travel_time": {
+    "mean": 110.84,
+    "sd": 4.943
+   },
+   "avg_time_loss": {
+    "mean": 36.304,
+    "sd": 3.909
+   },
+   "throughput_veh_per_hr": {
+    "mean": 1230.6,
+    "sd": 60.575
+   },
+   "max_queue": {
+    "mean": 10.0,
+    "sd": 1.225
+   },
+   "collisions": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "co2_g_per_km": {
+    "mean": 289.904,
+    "sd": 12.944
+   },
+   "fuel_l_per_100km": {
+    "mean": 12.58,
+    "sd": 0.557
+   },
+   "stops_per_vehicle": {
+    "mean": 1.927,
+    "sd": 0.199
+   },
+   "reroute_count": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "nav_avg_travel_time": {
+    "mean": 111.25,
+    "sd": 3.867
+   }
+  },
+  "adaptive_vanet": {
+   "avg_waiting_time": {
+    "mean": 22.4,
+    "sd": 2.071
+   },
+   "avg_travel_time": {
+    "mean": 113.032,
+    "sd": 3.605
+   },
+   "avg_time_loss": {
+    "mean": 38.692,
+    "sd": 2.681
+   },
+   "throughput_veh_per_hr": {
+    "mean": 1232.4,
+    "sd": 54.473
+   },
+   "max_queue": {
+    "mean": 9.6,
+    "sd": 1.342
+   },
+   "collisions": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "co2_g_per_km": {
+    "mean": 288.612,
+    "sd": 11.894
+   },
+   "fuel_l_per_100km": {
+    "mean": 12.525,
+    "sd": 0.512
+   },
+   "stops_per_vehicle": {
+    "mean": 1.872,
+    "sd": 0.109
+   },
+   "reroute_count": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "nav_avg_travel_time": {
+    "mean": 111.764,
+    "sd": 3.27
+   }
+  },
+  "adaptive_vanet + A*": {
+   "avg_waiting_time": {
+    "mean": 21.544,
+    "sd": 1.954
+   },
+   "avg_travel_time": {
+    "mean": 111.672,
+    "sd": 3.339
+   },
+   "avg_time_loss": {
+    "mean": 37.254,
+    "sd": 2.66
+   },
+   "throughput_veh_per_hr": {
+    "mean": 1224.6,
+    "sd": 53.724
+   },
+   "max_queue": {
+    "mean": 9.6,
+    "sd": 1.673
+   },
+   "collisions": {
+    "mean": 0,
+    "sd": 0.0
+   },
+   "co2_g_per_km": {
+    "mean": 286.702,
+    "sd": 12.954
+   },
+   "fuel_l_per_100km": {
+    "mean": 12.443,
+    "sd": 0.558
+   },
+   "stops_per_vehicle": {
+    "mean": 1.778,
+    "sd": 0.143
+   },
+   "reroute_count": {
+    "mean": 17.8,
+    "sd": 6.834
+   },
+   "nav_avg_travel_time": {
+    "mean": 110.812,
+    "sd": 5.128
+   }
+  }
+ },
+ "road_class_use": {
+  "truck": {
+   "trips": 28,
+   "main": 21,
+   "secondary": 7,
+   "collector": 7
+  },
+  "car": {
+   "trips": 276,
+   "main": 233,
+   "secondary": 176,
+   "collector": 60
+  },
+  "eco_car": {
+   "trips": 59,
+   "secondary": 34,
+   "main": 51,
+   "collector": 13
+  },
+  "motorcycle": {
+   "trips": 36,
+   "secondary": 21,
+   "main": 30,
+   "collector": 9
+  },
+  "bus": {
+   "trips": 10,
+   "main": 8,
+   "secondary": 2,
+   "collector": 2
+  }
+ }
+}

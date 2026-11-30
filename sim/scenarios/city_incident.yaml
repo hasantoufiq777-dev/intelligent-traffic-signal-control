@@ -1,0 +1,54 @@
+name: city_incident
+# City network with a crash in the middle lane of the main road, detected over the VANET.
+# Non-uniform four-junction urban network: a 3-lane main road (J0-J1), 2-lane secondary and collector
+# roads, 1-lane local sub-roads (no trucks or buses) with stop signs, bends and irregular spacing.
+# Mixed vehicles. Built by sim/sumo/generate_city_net.py. Exits: W, E (main road), S0, S1, N2, N3
+# (secondary roads), W2, E3 (collector roads).
+network: grid2x2_city
+simulation:
+  duration: 1200
+  step_length: 1.0
+
+# Signal timing for these wider junctions: a 10-12 m bus or truck that turned left needs about 7 s to
+# clear a junction from standstill, so the all-red after yellow (3 s) is 4 s here (2 s on the grid).
+signals:
+  all_red_time: 4.0
+
+traffic:
+  seed: 1
+  # Share of each vehicle category (sim/vehicles.py). Eco cars and ambulances always have a radio.
+  vehicle_mix: {car: 0.55, eco_car: 0.15, motorcycle: 0.10, bus: 0.05, truck: 0.15}
+  od_flows:
+    # Main corridor (3 lanes each way)
+    - {from: W, to: E, rate: 260}
+    - {from: E, to: W, rate: 240}
+    # Across town: several routes (main road, secondary roads, local sub-roads)
+    - {from: W, to: N3, rate: 90}
+    - {from: E, to: S0, rate: 80}
+    - {from: S0, to: N3, rate: 90}
+    - {from: N2, to: S1, rate: 90}
+    - {from: S1, to: N2, rate: 70}
+    - {from: N3, to: S0, rate: 70}
+    - {from: W2, to: E, rate: 70}
+    - {from: E3, to: W, rate: 70}
+    - {from: W2, to: S1, rate: 50}
+    - {from: E3, to: S0, rate: 50}
+    - {from: S0, to: E3, rate: 50}
+    - {from: N3, to: W2, rate: 50}
+
+emergency:
+  enabled: false
+  vehicles: []
+
+incident:
+  enabled: true
+  # A crash blocks the middle lane of the main road between J0 and J1 (traffic squeezes past in the
+  # other two lanes). A full closure is not used: trucks and buses have no legal detour there (no left
+  # turns at the signals), and stuck vehicles are never teleported in this project.
+  type: stop
+  edge: J0J1
+  lane: 1
+  position_frac: 0.5
+  start_time: 150.0
+  duration: 300.0
+  local_detour: false

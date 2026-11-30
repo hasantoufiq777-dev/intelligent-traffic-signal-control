@@ -14,12 +14,20 @@ import math
 import random
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    from sim.car_following import follow_advice
+except ImportError:  # run as a script from sim/ (mock_sim.py)
+    from car_following import follow_advice  # type: ignore
+
 VEHICLE_FIELDS = ["id", "x", "y", "angle", "speed", "flags", "tls", "approach", "dist", "co2_g", "fuel_ml",
-                  "advice", "adv_speed", "green_in"]
+                  "advice", "adv_speed", "green_in",
+                  # car following (sim/car_following.py)
+                  "acc", "leader", "gap", "follow", "follow_speed", "ttc"]
 FLAG_ECO, FLAG_EMERGENCY, FLAG_NAV, FLAG_ADVISED, FLAG_EQUIPPED, FLAG_DRIVER = 1, 2, 4, 8, 16, 32
 LANE_OFFSET = 3.2
 STOP_LINE = 11.0  # metres before the junction centre
 V_FREE = 12.5
+CAR_LEN = 5.0  # gap = distance between the cars' fronts minus this
 
 GRID_NODES = {"J0": (250, 250), "J1": (500, 250), "J2": (250, 500), "J3": (500, 500),
               "bottom0": (250, 0), "bottom1": (500, 0), "top0": (250, 750), "top1": (500, 750),
@@ -125,7 +133,7 @@ class MockTraffic:
         alive = []
         # Leaders first on each edge, so followers can keep a 7 m gap (simple car-following)
         self.cars.sort(key=lambda c: -c["s"])
-        leader_s: Dict[Tuple[str, str], float] = {}
+        leader_s: Dict[Tuple[str, str], Tuple[float, Dict[str, Any]]] = {}
         for c in self.cars:
             a, b = c["route"][c["seg"]], c["route"][c["seg"] + 1]
             length = math.hypot(self.nodes[b][0] - self.nodes[a][0], self.nodes[b][1] - self.nodes[a][1])
@@ -139,6 +147,10 @@ class MockTraffic:
                     target = 0.0
                 elif c["mode"] == "ease" and c["target"] is not None:
                     target = min(V_FREE, c["target"])
+                elif c["mode"] == "follow" and (a, b) in leader_s:
+                    ls, lc = leader_s[(a, b)]
+                    target = follow_advice(c["speed"], V_FREE, lc["speed"], lc.get("acc"), ls - c["s"] - CAR_LEN,
+                                           cooperative=bool(lc["flags"] & FLAG_EQUIPPED))["speed"]
             c["advice"] = c["adv_speed"] = c["green_in"] = None
             c["flags"] &= ~FLAG_ADVISED
             if dist is not None and sig and (c["flags"] & FLAG_ECO or c.get("drv")) and dist <= 300:
@@ -160,12 +172,16 @@ class MockTraffic:
             move = min(target, c["speed"] + 2.5)
             if dist is not None and sig.get("signal") != "G" and not ev and 0 <= dist < move + 1:
                 move = max(0.0, dist)  # stop at the line
+            c["leader"] = c["gap"] = None
             if (a, b) in leader_s:
-                move = max(0.0, min(move, leader_s[(a, b)] - 7.0 - c["s"]))
+                ls, lc = leader_s[(a, b)]
+                move = max(0.0, min(move, ls - 7.0 - c["s"]))
+                c["leader"], c["gap"] = lc["id"], round(max(0.0, ls - c["s"] - CAR_LEN), 1)
+            c["acc"] = round(move - c["speed"], 2)  # 1 s steps
             c["speed"] = move
             c["s"] += move
             c["odo"] = c.get("odo", 0.0) + move
-            leader_s[(a, b)] = c["s"]
+            leader_s[(a, b)] = (c["s"], c)
             c["co2"] += 2.6 if move > 0.5 else 0.9
             if c.get("drv"):
                 self._driver_tick(c, move)
@@ -185,8 +201,17 @@ class MockTraffic:
             return "S" if y2 > y1 else "N"
         return "W" if x2 > x1 else "E"
 
+    def _follow_fields(self, c: Dict[str, Any], by_id: Dict[str, Dict[str, Any]]) -> List[Any]:
+        lead = by_id.get(c.get("leader") or "")
+        if lead is None or c.get("gap") is None:
+            return [None, None, None]
+        adv = follow_advice(c["speed"], V_FREE, lead["speed"], lead.get("acc"), c["gap"],
+                            cooperative=bool(c["flags"] & lead["flags"] & FLAG_EQUIPPED))
+        return [adv["state"], adv["speed"], adv["ttc"]]
+
     def vehicles_message(self, run_id: str, t: int) -> Dict[str, Any]:
         rows = []
+        by_id = {c["id"]: c for c in self.cars}
         for c in self.cars:
             a, b = c["route"][c["seg"]], c["route"][c["seg"] + 1]
             length = math.hypot(self.nodes[b][0] - self.nodes[a][0], self.nodes[b][1] - self.nodes[a][1]) or 1.0
@@ -197,7 +222,8 @@ class MockTraffic:
             dist = round(max(0.0, length - STOP_LINE - c["s"]), 1) if tls else None
             rows.append([c["id"], x, y, angle, round(c["speed"], 1), c["flags"], tls,
                          self._approach(a, b) if tls else None, dist, round(c["co2"], 1),
-                         round(c["co2"] / 2.31, 1), c["advice"], c["adv_speed"], c["green_in"]])
+                         round(c["co2"] / 2.31, 1), c["advice"], c["adv_speed"], c["green_in"],
+                         c.get("acc", 0.0), c.get("leader"), c.get("gap")] + self._follow_fields(c, by_id))
         return {"type": "vehicles", "run_id": run_id, "t": t, "fields": VEHICLE_FIELDS, "rows": rows}
 
     # ------------------------------------------------------------------ one-driver mode
@@ -257,7 +283,7 @@ class MockTraffic:
             self.events.append({"kind": "driver_start", "t": t,
                                 "detail": f"A viewer is driving {vid} from {cmd.get('from')} to {cmd.get('to')}"})
             self._notice(t, "waiting", "Your car is entering the road")
-        elif kind == "drive" and drv is not None and cmd.get("mode") in ("go", "ease", "stop"):
+        elif kind == "drive" and drv is not None and cmd.get("mode") in ("go", "ease", "stop", "follow"):
             drv["car"]["mode"] = cmd["mode"]
             try:
                 drv["car"]["target"] = max(2.0, float(cmd.get("speed"))) if cmd["mode"] == "ease" else None
@@ -329,7 +355,25 @@ class MockTraffic:
                        "junction": b}
                 amb["text"] = (f"Ambulance {amb['dist_m']} m from {b}, crossing your route. "
                                "Its light turns green for it: wait for it to pass.")
+        by_id = {o["id"]: o for o in self.cars}
+
+        def side(o: Optional[Dict[str, Any]], gap: Optional[float]) -> Optional[Dict[str, Any]]:
+            if o is None or gap is None:
+                return None
+            return {"id": o["id"], "gap_m": gap, "speed_kmh": round(o["speed"] * 3.6, 1), "acc": o.get("acc", 0.0),
+                    "kind": "ambulance" if o["flags"] & FLAG_EMERGENCY else "car", "v2v": bool(o["flags"] & FLAG_EQUIPPED)}
+
+        ahead = side(by_id.get(c.get("leader") or ""), c.get("gap"))
+        back = next((o for o in self.cars if o.get("leader") == c["id"]), None)
+        behind = side(back, back.get("gap") if back else None)
+        if behind is not None and back is not None:
+            adv = follow_advice(back["speed"], V_FREE, c["speed"], c.get("acc"), back["gap"], cooperative=behind["v2v"])
+            behind["follow"], behind["follow_speed_kmh"] = adv["state"], round(adv["speed"] * 3.6, 1)
+        fol = (follow_advice(c["speed"], V_FREE, ahead["speed_kmh"] / 3.6, ahead["acc"], ahead["gap_m"], cooperative=ahead["v2v"])
+               if ahead else follow_advice(c["speed"], V_FREE))
+        fol["speed_kmh"] = round(fol["speed"] * 3.6, 1)
         return {"type": "driver", "run_id": run_id, "t": t, "vid": c["id"], "status": "driving",
+                "acc": c.get("acc", 0.0), "ahead": ahead, "behind": behind, "follow": fol,
                 "from": d["from"], "to": d["to"], "mode": c["mode"],
                 "target_kmh": round(c["target"] * 3.6, 1) if c["target"] is not None else None,
                 "speed_kmh": round(c["speed"] * 3.6, 1), "limit_kmh": round(V_FREE * 3.6, 1), "holding": False,

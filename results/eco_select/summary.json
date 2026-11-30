@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "scenario": "normal",
+    "controller": "fixed",
+    "network": "grid2x2",
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "penetration": 1.0,
+    "max_steps": 1000,
+    "generated_at": "2026-11-20T01:53:24"
+  },
+  "configs": {
+    "none": {
+      "co2_g_per_km": {
+        "mean": 254.086,
+        "sd": 2.501
+      },
+      "fuel_l_per_100km": {
+        "mean": 11.056,
+        "sd": 0.109
+      },
+      "stops_per_vehicle": {
+        "mean": 1.448,
+        "sd": 0.054
+      },
+      "avg_waiting_time": {
+        "mean": 19.56,
+        "sd": 1.151
+      },
+      "avg_travel_time": {
+        "mean": 100.314,
+        "sd": 1.176
+      },
+      "collisions": {
+        "mean": 0.0,
+        "sd": 0.0
+      }
+    },
+    "random@0.3": {
+      "co2_g_per_km": {
+        "mean": 252.936,
+        "sd": 3.22,
+        "vs_none_pct": -0.45
+      },
+      "fuel_l_per_100km": {
+        "mean": 11.006,
+        "sd": 0.14,
+        "vs_none_pct": -0.45
+      },
+      "stops_per_vehicle": {
+        "mean": 1.286,
+        "sd": 0.08,
+        "vs_none_pct": -11.19
+      },
+      "avg_waiting_time": {
+        "mean": 17.648,
+        "sd": 1.521,
+        "vs_none_pct": -9.78
+      },
+      "avg_travel_time": {
+        "mean": 100.204,
+        "sd": 1.079,
+        "vs_none_pct": -0.11
+      },
+      "eco_advised_vehicles": {
+        "mean": 69.2,
+        "sd": 8.044
+      },
+      "collisions": {
+        "mean": 0.0,
+        "sd": 0.0
+      }
+    },
+    "data@0.3": {
+      "co2_g_per_km": {
+        "mean": 251.56,
+        "sd": 3.149,
+        "vs_none_pct": -0.99
+      },
+      "fuel_l_per_100km": {
+        "mean": 10.947,
+        "sd": 0.137,
+        "vs_none_pct": -0.99
+      },
+      "stops_per_vehicle": {
+        "mean": 1.274,
+        "sd": 0.094,
+        "vs_none_pct": -12.02
+      },
+      "avg_waiting_time": {
+        "mean": 18.114,
+        "sd": 1.419,
+        "vs_none_pct": -7.39
+      },
+      "avg_travel_time": {
+        "mean": 100.46,
+        "sd": 1.376,
+        "vs_none_pct": 0.15
+      },
+      "eco_advised_vehicles": {
+        "mean": 64.0,
+        "sd": 6.124
+      },
+      "collisions": {
+        "mean": 0.0,
+        "sd": 0.0
+      }
+    },
+    "random@0.6": {
+      "co2_g_per_km": {
+        "mean": 251.372,
+        "sd": 4.396,
+        "vs_none_pct": -1.07
+      },
+      "fuel_l_per_100km": {
+        "mean": 10.938,
+        "sd": 0.191,
+        "vs_none_pct": -1.07
+      },
+      "stops_per_vehicle": {
+        "mean": 1.116,
+        "sd": 0.129,
+        "vs_none_pct": -22.93
+      },
+      "avg_waiting_time": {
+        "mean": 15.832,
+        "sd": 1.614,
+        "vs_none_pct": -19.06
+      },
+      "avg_travel_time": {
+        "mean": 100.146,
+        "sd": 1.164,
+        "vs_none_pct": -0.17
+      },
+      "eco_advised_vehicles": {
+        "mean": 141.4,
+        "sd": 9.762
+      },
+      "collisions": {
+        "mean": 0.0,
+        "sd": 0.0
+      }
+    },
+    "data@0.6": {
+      "co2_g_per_km": {
+        "mean": 247.988,
+        "sd": 3.522,
+        "vs_none_pct": -2.4
+      },
+      "fuel_l_per_100km": {
+        "mean": 10.791,
+        "sd": 0.153,
+        "vs_none_pct": -2.4
+      },
+      "stops_per_vehicle": {
+        "mean": 1.125,
+        "sd": 0.104,
+        "vs_none_pct": -22.31
+      },
+      "avg_waiting_time": {
+        "mean": 16.98,
+        "sd": 1.452,
+        "vs_none_pct": -13.19
+      },
+      "avg_travel_time": {
+        "mean": 100.09,
+        "sd": 1.094,
+        "vs_none_pct": -0.22
+      },
+      "eco_advised_vehicles": {
+        "mean": 115.6,
+        "sd": 5.683
+      },
+      "collisions": {
+        "mean": 0.0,
+        "sd": 0.0
+      }
+    }
+  }
+}

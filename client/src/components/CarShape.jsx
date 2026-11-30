@@ -1,8 +1,8 @@
 // Top-down vehicle drawings for the traffic map. Local frame: the front bumper is at y = 0 and the body
 // runs backwards to y = len (SUMO's position is the front bumper); x is across, centred on 0.
-// Paint colour and body style are picked from the vehicle id, so a car keeps its look for the whole
-// run. They are only for telling cars apart; what a car can do (radio, eco, navigation) is shown by
-// the roof dot, and ambulances and the driven car have their own fixed look.
+// Shapes follow the vehicle category (car, motorcycle, bus, truck, ambulance). A car's paint and body
+// style are picked from its id, so it keeps its look for the whole run; they only tell cars apart.
+// Every eco vehicle has one fixed colour (--eco). A blue roof dot marks a vehicle with a VANET radio.
 
 const PAINT = [
   '#f2f2ef', // white
@@ -115,37 +115,94 @@ function Ambulance({ len, w }) {
   );
 }
 
-/** Roof dot showing what the car can do: radio (connected / navigating) or eco driving. */
-const ROOF_DOT = { equipped: 'var(--series-1)', nav: 'var(--series-1)', eco: 'var(--series-3)' };
-
-export function CarBody({ id, kind, len, w }) {
-  if (kind === 'emergency') return <Ambulance len={len} w={w} />;
-  if (kind === 'driven') {
-    return (
-      <>
-        <rect x={-w / 2 - 0.6} y={-0.6} width={w + 1.2} height={len + 1.2} rx={1.6} fill="none"
-          stroke="var(--driver)" strokeWidth={0.7} />
-        <Body style="sedan" paint="var(--driver)" len={len} w={w} />
-      </>
-    );
-  }
-  const look = carLook(id);
-  const dot = ROOF_DOT[kind];
+function Motorcycle({ len, w, paint }) {
+  const hw = w / 2;
   return (
     <>
-      <Body style={look.style} paint={look.paint} len={len} w={w} />
-      {dot && <circle cx={0} cy={len * 0.55} r={0.6} fill={dot} stroke="#ffffff" strokeWidth={0.25} />}
+      <ellipse cx={0} cy={len / 2} rx={hw} ry={len / 2} fill={paint} stroke={OUTLINE} strokeWidth={0.35} />
+      {/* handlebar and rider's helmet */}
+      <path d={`M${-hw - 0.5} ${len * 0.22} H${hw + 0.5}`} stroke={OUTLINE} strokeWidth={0.45} strokeLinecap="round" />
+      <circle cx={0} cy={len * 0.45} r={hw * 0.75} fill={GLASS} />
+    </>
+  );
+}
+
+function Bus({ len, w, paint }) {
+  const hw = w / 2;
+  const windows = [];
+  for (let y = 2.4; y < len - 1.2; y += 1.6) {
+    windows.push(<rect key={y} x={-hw + 0.25} y={y} width={0.45} height={1.1} fill={GLASS} />,
+      <rect key={`r${y}`} x={hw - 0.7} y={y} width={0.45} height={1.1} fill={GLASS} />);
+  }
+  return (
+    <>
+      <rect x={-hw} y={0} width={w} height={len} rx={0.6} fill={paint} stroke={OUTLINE} strokeWidth={0.45} />
+      <path d={glass(0.5, 1.6, hw - 0.3, hw - 0.3)} fill={GLASS} />
+      {windows}
+      {/* roof hatches */}
+      <rect x={-0.9} y={len * 0.35} width={1.8} height={1.2} fill="rgba(0,0,0,0.18)" />
+      <rect x={-0.9} y={len * 0.65} width={1.8} height={1.2} fill="rgba(0,0,0,0.18)" />
+    </>
+  );
+}
+
+function Truck({ len, w, paint }) {
+  const hw = w / 2;
+  const cab = Math.min(2.6, len * 0.26);
+  return (
+    <>
+      {/* cab */}
+      <rect x={-hw} y={0} width={w} height={cab} rx={0.5} fill={paint} stroke={OUTLINE} strokeWidth={0.45} />
+      <path d={glass(0.35, 1.1, hw - 0.3, hw - 0.3)} fill={GLASS} />
+      {/* cargo box */}
+      <rect x={-hw} y={cab + 0.35} width={w} height={len - cab - 0.35} rx={0.25} fill="#d7d9dc" stroke={OUTLINE}
+        strokeWidth={0.45} />
+      <path d={`M${-hw + 0.4} ${cab + 1.2} H${hw - 0.4} M${-hw + 0.4} ${len - 0.9} H${hw - 0.4}`} stroke="rgba(0,0,0,0.22)" strokeWidth={0.3} />
+    </>
+  );
+}
+
+/** Roof dot: the vehicle has a VANET radio (connected). Vehicles without a radio have no dot. */
+const RADIO = new Set(['equipped', 'nav', 'eco', 'driven', 'emergency']);
+
+/**
+ * One vehicle, drawn pointing up from its front bumper.
+ * kind: what it can do (from its flags: driven, emergency, eco, nav, equipped, plain);
+ * category: what it is (car, eco_car, motorcycle, bus, truck, emergency).
+ * Every eco vehicle has the same body colour (--eco); other cars a stable paint picked from the id.
+ */
+export function CarBody({ id, kind, category = 'car', len, w }) {
+  if (kind === 'emergency' || category === 'emergency') return <Ambulance len={len} w={w} />;
+  const look = carLook(id);
+  const eco = category === 'eco_car' || kind === 'eco';
+  const paint = kind === 'driven' ? 'var(--driver)' : eco ? 'var(--eco)' : category === 'bus' ? '#f2b418' : look.paint;
+  let body;
+  if (category === 'motorcycle') body = <Motorcycle len={len} w={w} paint={paint} />;
+  else if (category === 'bus') body = <Bus len={len} w={w} paint={paint} />;
+  else if (category === 'truck') body = <Truck len={len} w={w} paint={paint} />;
+  else body = <Body style={kind === 'driven' ? 'sedan' : eco ? 'hatchback' : look.style} paint={paint} len={len} w={w} />;
+  return (
+    <>
+      {kind === 'driven' && (
+        <rect x={-w / 2 - 0.6} y={-0.6} width={w + 1.2} height={len + 1.2} rx={1.6} fill="none"
+          stroke="var(--driver)" strokeWidth={0.7} />
+      )}
+      {body}
+      {RADIO.has(kind) && kind !== 'driven' && (
+        <circle cx={0} cy={len * 0.55} r={Math.min(0.6, w / 4)} fill="var(--series-1)" stroke="#ffffff" strokeWidth={0.25} />
+      )}
     </>
   );
 }
 
 /** Small legend icon: a car drawn pointing up. */
-export function CarIcon({ kind, id = 'legend', style, paint, len = 6.5, w = 4.2, size = 22 }) {
+export function CarIcon({ kind, category, id = 'legend', style, paint, len = 6.5, w = 4.2, size = 22 }) {
   const pad = 0.8;
   return (
     <svg width={size * (w + 2 * pad) / (len + 2 * pad)} height={size}
       viewBox={`${-w / 2 - pad} ${-pad} ${w + 2 * pad} ${len + 2 * pad}`} aria-hidden="true">
-      {style ? <Body style={style} paint={paint} len={len} w={w} /> : <CarBody id={id} kind={kind} len={len} w={w} />}
+      {style ? <Body style={style} paint={paint} len={len} w={w} />
+        : <CarBody id={id} kind={kind} category={category} len={len} w={w} />}
     </svg>
   );
 }

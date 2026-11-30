@@ -104,18 +104,20 @@ connections are not affected). When a session ends, its sockets are disconnected
 | `now_playing` | `{running, lifecycle, current: {run_id, entry, source, started_at, status, started_by}, next, loop, viewers, mock, gui, driver, playback: {paused, speed}}`; `playback` is what the simulation confirmed (its `playback` message), not what was requested |
 | `viewers` | `{count}`, at most every 5 s when it changes |
 | `network` | Road geometry of the current run (junctions, edge shapes, bounds) |
-| `vehicles` | Map frame `{run_id, t, rows: [[id, x, y, angle, flags]], sent_at}`, at most 1/s, volatile, sent 150 ms after the state |
-| `vehicle` | Full row of the followed car (next light, distance, fuel, CO2, advice), every map frame, only to its followers |
+| `vehicles` | Map frame `{run_id, t, fields: ['id','x','y','angle','flags','kind'], rows, sent_at}`, at most 1/s, volatile, sent 150 ms after the state. `kind` is the vehicle category (`eco_car`, `motorcycle`, `bus`, `truck`, `emergency`), `null` for an ordinary car |
+| `vehicle` | Full row of the followed vehicle (speed, next light, distance, fuel, CO2, advice, `kind`, `lane`, `limit` = posted speed limit in m/s), every map frame, only to its followers |
 | `driver` | The driven car's state from the simulation (speed, mode, next light, advice, ambulance warning, fuel, CO2), every simulated second, to everyone; the final one (`finished`/`released`/`error`) carries the trip report |
 | `driver_lock` | The seat `{enabled, available, busy, vid, since, idle_ms, max_ms}` when it changes (also in `now_playing.driver` and `init.driver`) |
 | `driver_seat` | To the driver only: `{mine: false, reason, message}` when their drive ends (released, idle, left, admin, time_limit, run_ended, finished, error) |
 
 Viewers can send `follow` (a vehicle id) and `unfollow`. This is a subscription to one car's details, not control of it.
 
+**Route explorer** (any signed-in viewer, read-only): `routes {from, to, vclass?}` with an acknowledgement. `vclass` is one of `passenger` (default), `motorcycle`, `bus`, `truck`, `emergency`. The gateway forwards it to the simulation, which answers with its A* (the same costs as navigation, on the current traffic map): `{ok, origin, destination, vclass, routes: [{path, distance_m, time_free_s, time_now_s, signals, congestion, fastest, shortest}], chosen, shorter_not_faster, astar: {h_start_s, straight_m, v_max, g_goal_s, expansions, expansions_distance, signal_wait_s}}`. Errors `{ok: false, code}`: `invalid`, `not_running`, `rate_limited` (one open search per viewer, at most one every 500 ms), `timeout` (5 s).
+
 One-driver mode (`src/driver.js`), all with an acknowledgement callback `{ok, error?}`:
-- `driver:claim {from, to}`: take the seat with a car from one road to another (`from`/`to` are edge ids of the current
+- `driver:claim {from, to, kind?}`: take the seat with a vehicle (`kind`: `car` default, `eco_car`, `motorcycle`, `bus`, `truck` where the network has them) from one road to another (`from`/`to` are edge ids of the current
   network). Refused when driving is off, no run is live, or someone else drives. Answer: `{ok, key, idle_ms, max_ms}`.
-- `driver:cmd {action: go|ease|stop, speed_kmh?}`: only from the seat holder; rate limited (`retry_ms` when refused).
+- `driver:cmd {action: go|ease|stop, speed_kmh?}`: only from the seat holder; rate limited (`retry_ms` when refused). `ease` holds at most `speed_kmh` (5–90); the simulation never lets it exceed the posted limit. The dashboard's accelerate, brake, slow down and desired-speed controls all send `ease` (or `go` at the limit). The `driver` message adds `kind`, `allowed_kmh` and `eco_speed` (the estimated fuel-efficient speed: `target_kmh`, `action`, `reasons`, `current`, `recommended`, `curve`, `horizon_m`).
 - `driver:release`: hand the car back. `driver:resume <key>`: reclaim the seat after a reconnect within `DRIVER_RESUME_MS`.
 
 The gateway passes commands to Python as JSON lines on stdin (`--driver`). SQLite table `driver_trips` keeps each drive

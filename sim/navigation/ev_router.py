@@ -118,7 +118,7 @@ class EmergencyRouter:
         cur_cost = self._route_cost(remaining[1:], speed_map, closed)
         path, new_cost, _exp = astar_search(
             graph=self.graph, start_edge=road, goal_edge=route[-1], speed_map=speed_map,
-            closed_edges=closed or None, junction_delay_s=self.junction_delay_s,
+            closed_edges=closed or None, junction_delay_s=self.junction_delay_s, vclass="emergency",
         )
         if not path or new_cost == float("inf") or path == remaining:
             return

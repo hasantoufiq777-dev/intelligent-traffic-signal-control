@@ -27,6 +27,14 @@ class EdgeNode:
     end_coord: Tuple[float, float]
     successors: List[str] = field(default_factory=list)
     signalized_end: bool = False  # the edge ends at a traffic-light junction
+    # Per vehicle class: the successors that class may turn into (a lane it may use connects to a lane
+    # of the next edge it may use). Absent class = no restriction known: all successors.
+    succ_by_class: Dict[str, List[str]] = field(default_factory=dict)
+    allowed_classes: Optional[Set[str]] = None  # classes allowed on at least one lane (None = all)
+
+
+# Vehicle classes whose lane permissions the router respects (sim/vehicles.py categories)
+ROUTING_CLASSES = ("passenger", "motorcycle", "bus", "truck", "emergency")
 
 
 class EdgeGraph:
@@ -68,13 +76,19 @@ class EdgeGraph:
 
             # Get legal outgoing edges from sumolib
             outgoing_edges: List[str] = []
+            succ_by_class: Dict[str, List[str]] = {vc: [] for vc in ROUTING_CLASSES}
             try:
-                for out_edge in edge.getOutgoing():
+                for out_edge, conns in edge.getOutgoing().items():
                     out_id = out_edge.getID()
-                    if not out_id.startswith(":") and out_id not in outgoing_edges:
-                        outgoing_edges.append(out_id)
+                    if out_id.startswith(":") or out_id in outgoing_edges:
+                        continue
+                    outgoing_edges.append(out_id)
+                    for vc in ROUTING_CLASSES:
+                        if any(c.getFromLane().allows(vc) and c.getToLane().allows(vc) for c in conns):
+                            succ_by_class[vc].append(out_id)
             except Exception:
-                pass
+                succ_by_class = {}
+            allowed = {vc for vc in ROUTING_CLASSES if any(ln.allows(vc) for ln in edge.getLanes())}
 
             graph.edges[eid] = EdgeNode(
                 edge_id=eid,
@@ -84,6 +98,8 @@ class EdgeGraph:
                 end_coord=end_coord,
                 successors=outgoing_edges,
                 signalized_end=(edge.getToNode().getType() == "traffic_light"),
+                succ_by_class=succ_by_class,
+                allowed_classes=allowed,
             )
 
         graph.max_network_speed = max_speed
@@ -95,12 +111,24 @@ class EdgeGraph:
         )
         return graph
 
-    def get_successors(self, edge_id: str) -> List[str]:
-        """Return list of legally reachable successor edge IDs from edge_id."""
+    def get_successors(self, edge_id: str, vclass: Optional[str] = None) -> List[str]:
+        """Return the successor edges reachable from edge_id; with a vehicle class, only the turns
+        that class may make (lane permissions). Order is the same as without a class."""
         node = self.edges.get(edge_id)
         if not node:
             return []
+        if vclass is not None and vclass in node.succ_by_class:
+            return node.succ_by_class[vclass]
         return node.successors
+
+    def allows(self, edge_id: str, vclass: Optional[str]) -> bool:
+        """Whether a vehicle class may drive on edge_id (any lane); unknown class = yes."""
+        node = self.edges.get(edge_id)
+        if node is None:
+            return False
+        if vclass is None or node.allowed_classes is None or vclass not in ROUTING_CLASSES:
+            return True
+        return vclass in node.allowed_classes
 
     def get_edge_cost(
         self,

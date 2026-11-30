@@ -95,14 +95,15 @@ export function navGroups({ isAdmin, canControl }) {
       { to: '/navigation', icon: 'route', label: 'Navigation' },
       { to: '/incidents', icon: 'alert', label: 'Incidents' },
       { to: '/work-zone', icon: 'cone', label: 'Work zone' },
-      { to: '/glosa', icon: 'leaf', label: 'Eco-driving' },
+      { to: '/glosa', icon: 'leaf', label: 'Driving' },
       { to: '/events', icon: 'bell', label: 'Events' },
     ] },
+    // hidden: not in the sidebar, but the page still opens from a link (and keeps its title)
     { title: 'Research', items: [
-      { to: '/demo', icon: 'flag', label: 'Guided demo' },
-      { to: '/results', icon: 'chart', label: 'Results' },
+      { to: '/demo', icon: 'flag', label: 'Guided demo', hidden: true },
+      { to: '/results', icon: 'chart', label: 'Results', hidden: true },
       { to: '/ga', icon: 'dna', label: 'GA optimisation' },
-      { to: '/runs', icon: 'list', label: 'Run history' },
+      { to: '/runs', icon: 'list', label: 'Run history', hidden: true },
       { to: '/docs', icon: 'book', label: 'Documentation' },
     ] },
     canControl && { title: 'Control', items: [{ to: '/admin', icon: 'play', label: 'Run control' }] },
@@ -158,7 +159,7 @@ export default function AppShell({ children }) {
           {groups.map((g) => (
             <div className="nav-group" key={g.title}>
               <div className="nav-title">{g.title}</div>
-              {g.items.map((i) => (
+              {g.items.filter((i) => !i.hidden).map((i) => (
                 <NavLink key={i.to} to={i.to} end={i.end} className="nav-item" title={collapsed ? i.label : undefined}>
                   <Icon name={i.icon} /><span className="nav-label">{i.label}</span>
                 </NavLink>
